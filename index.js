@@ -294,4 +294,11 @@ client.on('presenceUpdate', (oldPresence, newPresence) => {
     }
 });
 
+// Silinen Mesaj Logu
+client.on('messageDelete', message => {
+    if (!message.guild || (message.author && message.author.bot)) return;
+    const content = message.content ? message.content : "[İçerik yok veya sadece görsel]";
+    sendLog(message.guild, 'logGenel', `🗑️ **${message.author ? message.author.tag : 'Bilinmeyen Kullanıcı'}** adlı kişinin \`${message.channel.name}\` kanalındaki mesajı silindi.\n**İçerik:** ${content}`);
+});
+
 client.login(process.env.TOKEN);
