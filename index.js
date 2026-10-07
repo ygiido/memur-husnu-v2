@@ -1,3 +1,6 @@
+const http = require('http');
+http.createServer((req, res) => res.end('Bot aktif!')).listen(process.env.PORT || 3000);
+
 const { Client, GatewayIntentBits, Partials, PermissionsBitField, ActivityType } = require('discord.js');
 const fs = require('fs');
 require('dotenv').config();
