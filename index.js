@@ -232,3 +232,60 @@ client.on('messageCreate', async message => {
 
     // 2. CAPS LOCK ENGEL SİSTEMİ
     const lettersOnly = message.content.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ]/g, "");
+    if (lettersOnly.length > 5) {
+        const upperCount = lettersOnly.replace(/[^A-ZĞÜŞİÖÇ]/g, "").length;
+        if ((upperCount / lettersOnly.length) >= 0.75) {
+            await message.delete().catch(() => {});
+            message.channel.send(`${message.member}, lütfen büyük harf kullanımına dikkat et!`).then(m => setTimeout(() => m.delete(), 4000));
+            sendLog(message.guild, 'logCeza', `⚠️ **${message.author.tag}** caps lock kullanımı nedeniyle uyarıldı.`);
+        }
+    }
+
+    // 3. FLOOD VE SPAM ENGEL SİSTEMİ (3 Saniyede 4 Mesaj)
+    const now = Date.now();
+    if (!spamMap.has(message.author.id)) spamMap.set(message.author.id, []);
+    
+    const userMsgs = spamMap.get(message.author.id);
+    userMsgs.push(now);
+
+    const recentMsgs = userMsgs.filter(timestamp => now - timestamp < 3000);
+    spamMap.set(message.author.id, recentMsgs);
+
+    if (recentMsgs.length >= 4) {
+        spamMap.delete(message.author.id); 
+        await message.channel.bulkDelete(4).catch(() => {}); 
+        await applyJail(message.member, message.guild, "Spam / Flood Yapmak");
+    }
+});
+
+// --- GENEL LOGLAR VE BİLDİRİMLER ---
+client.on('guildMemberAdd', member => sendLog(member.guild, 'logGenel', `📥 **${member.user.tag}** sunucuya katıldı.`));
+client.on('guildMemberRemove', member => sendLog(member.guild, 'logGenel', `📤 **${member.user.tag}** sunucudan ayrıldı.`));
+
+client.on('voiceStateUpdate', (oldState, newState) => {
+    if (!oldState.channelId && newState.channelId) {
+        sendLog(newState.guild, 'logSes', `🔊 **${newState.member.user.tag}**, \`${newState.channel.name}\` ses kanalına katıldı.`);
+    } else if (oldState.channelId && !newState.channelId) {
+        sendLog(oldState.guild, 'logSes', `🔇 **${oldState.member.user.tag}**, \`${oldState.channel.name}\` ses kanalından ayrıldı.`);
+    }
+});
+
+client.on('messageDelete', message => {
+    if (!message.guild || (message.author && message.author.bot)) return;
+    const content = message.content ? message.content : "[İçerik yok veya sadece görsel]";
+    sendLog(message.guild, 'logGenel', `🗑️ **${message.author ? message.author.tag : 'Bilinmeyen Kullanıcı'}** adlı kişinin \`${message.channel.name}\` kanalındaki mesajı silindi.\n**İçerik:** ${content}`);
+});
+
+client.on('presenceUpdate', (oldPresence, newPresence) => {
+    if (!newPresence || !newPresence.activities) return;
+    const activity = newPresence.activities.find(act => act.type === ActivityType.Streaming);
+    if (activity && (!oldPresence || !oldPresence.activities.find(act => act.name === activity.name))) {
+        if (activity.url && activity.url.includes("kick.com")) {
+            sendLog(newPresence.guild, 'logSes', `🎥 **${newPresence.member.user.tag}** Kick'te yayına başladı!\nLink: ${activity.url}`);
+        } else {
+            sendLog(newPresence.guild, 'logSes', `🎥 **${newPresence.member.user.tag}** yayına başladı: ${activity.name}\nLink: ${activity.url || "Belirtilmedi"}`);
+        }
+    }
+});
+
+client.login(process.env.TOKEN);
