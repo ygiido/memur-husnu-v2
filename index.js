@@ -1,9 +1,10 @@
-const http = require('http');
-http.createServer((req, res) => res.end('Bot aktif!')).listen(process.env.PORT || 3000);
-
 const { Client, GatewayIntentBits, Partials, PermissionsBitField, ActivityType } = require('discord.js');
 const fs = require('fs');
+const http = require('http');
 require('dotenv').config();
+
+// Render'ın botu uyanık tutması için gereken web sunucusu
+http.createServer((req, res) => res.end('Bot aktif!')).listen(process.env.PORT || 3000);
 
 const client = new Client({
     intents: [
@@ -23,7 +24,7 @@ if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
 const getDB = () => JSON.parse(fs.readFileSync(dbPath, 'utf8'));
 const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
 
-// Spam Algılama Haritası (Hafızada tutulur)
+// Spam Algılama Haritası
 const spamMap = new Map();
 
 // --- LOG GÖNDERME YARDIMCISI ---
@@ -46,9 +47,8 @@ async function applyJail(member, guild, reason) {
     userData.jailCount += 1;
     userData.sicilli = true;
 
-    // Süreler: 1. Ceza 15dk, 2. 30dk, 3. 60dk(1saat), 4. 180dk(3saat)
     const durations = [15, 30, 60, 180];
-    let durationMins = durations[userData.jailCount - 1] || 180; // Eğer 4'ten fazlaysa 3 saat verir
+    let durationMins = durations[userData.jailCount - 1] || 180; 
     let expireTime = Date.now() + (durationMins * 60 * 1000);
     userData.jailExpire = expireTime;
 
@@ -63,7 +63,7 @@ async function applyJail(member, guild, reason) {
     sendLog(guild, 'logCeza', `🚨 **${member.user.tag}** jaile atıldı!\n**Sebep:** ${reason}\n**Süre:** ${durationMins} dakika\n**Kaçıncı İhlali:** ${userData.jailCount}`);
 }
 
-// --- OTOMATİK JAİL ÇIKIŞI KONTROLÜ (Her Dakika Çalışır) ---
+// --- OTOMATİK JAİL ÇIKIŞI KONTROLÜ ---
 setInterval(() => {
     const db = getDB();
     const now = Date.now();
@@ -76,7 +76,6 @@ setInterval(() => {
         for (const userId in db[guild.id].users) {
             let user = db[guild.id].users[userId];
             if (user.jailExpire && now >= user.jailExpire) {
-                // Süre dolmuş, Jail'den çıkar ama Sicili Kirli kalsın
                 user.jailExpire = null;
                 updated = true;
                 if (jailRoleId) {
@@ -96,20 +95,24 @@ setInterval(() => {
 client.once('ready', async () => {
     console.log(`🤖 Sistem aktif! ${client.user.tag} giriş yaptı.`);
     
-    // Slash Komutlarını Tanımlama
+    // 🧹 ESKİ REPLİT HAYALETLERİNİ TEMİZLEME KODU
+    await client.application.commands.set([]);
+    console.log("🧹 Eski global komutlar tamamen silindi!");
+    
+    // Yeni Komutlarımız
     const commands = [
         {
             name: 'ayar',
             description: 'Botun temel sistemlerini ayarlar (Sadece Yöneticiler).',
             options: [
-                { name: 'yetkili-rol', type: 8, description: 'Botu yönetecek rol' },
-                { name: 'muaf-rol', type: 8, description: 'Engellerden muaf rol' },
-                { name: 'jail-rol', type: 8, description: 'Hapis rolü' },
-                { name: 'sicil-rol', type: 8, description: 'Kalıcı sicili kirli rolü' },
-                { name: 'log-ceza', type: 7, description: 'Ceza/Uyarı kanalı' },
-                { name: 'log-genel', type: 7, description: 'Genel kayıt kanalı' },
-                { name: 'log-ses', type: 7, description: 'Ses ve yayın kanalı' },
-                { name: 'link-engel', type: 5, description: 'Link engeli aktif mi? (True/False)' }
+                { name: 'yetkili-rol', type: 8, description: 'Botu yönetecek yetkili rolü (@rol)' },
+                { name: 'muaf-rol', type: 8, description: 'Engellerden muaf tutulacak rol (@rol)' },
+                { name: 'jail-rol', type: 8, description: 'Hapse atılanlara verilecek ceza rolü (@rol)' },
+                { name: 'sicil-rol', type: 8, description: 'Sicili kirli olanlara verilecek kalıcı rol (@rol)' },
+                { name: 'log-ceza', type: 7, description: 'Uyarı ve ceza kayıtlarının kanalı (#kanal)' },
+                { name: 'log-genel', type: 7, description: 'Genel sunucu kayıtlarının kanalı (#kanal)' },
+                { name: 'log-ses', type: 7, description: 'Ses ve yayın kayıtlarının kanalı (#kanal)' },
+                { name: 'link-engel', type: 5, description: 'Link engeli aktif edilsin mi? (True/False)' }
             ]
         },
         {
@@ -142,7 +145,6 @@ client.on('interactionCreate', async interaction => {
     const isYetkili = db[guildId]?.yetkiliRol && interaction.member.roles.cache.has(db[guildId].yetkiliRol);
     const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-    // Ayar komutu sadece yöneticilere
     if (interaction.commandName === 'ayar') {
         if (!isAdmin) return interaction.reply({ content: '❌ Bunu sadece sunucu yöneticileri yapabilir.', ephemeral: true });
         
@@ -160,7 +162,6 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: '✅ Sunucu ayarları başarıyla kaydedildi!', ephemeral: true });
     }
 
-    // Yetkili komutları (Yaz, Sil, Af)
     if (interaction.commandName === 'yaz' || interaction.commandName === 'sil' || interaction.commandName === 'af') {
         if (!isAdmin && !isYetkili) return interaction.reply({ content: '❌ Bu komutu kullanmaya yetkiniz yok.', ephemeral: true });
 
@@ -182,7 +183,6 @@ client.on('interactionCreate', async interaction => {
             if (!db[guildId]) return interaction.reply({ content: 'Veritabanı bulunamadı.', ephemeral: true });
             
             if (user) {
-                // Tek kişiyi affet
                 if (db[guildId].users && db[guildId].users[user.id]) {
                     delete db[guildId].users[user.id];
                     saveDB(db);
@@ -195,7 +195,6 @@ client.on('interactionCreate', async interaction => {
                     return interaction.reply({ content: `${user.tag} başarıyla affedildi.`, ephemeral: true });
                 }
             } else {
-                // Herkesi affet
                 db[guildId].users = {};
                 saveDB(db);
                 sendLog(interaction.guild, 'logCeza', `🕊️ Sunucudaki **TÜM** cezalar ve siciller affedildi.`);
@@ -217,88 +216,19 @@ client.on('messageCreate', async message => {
     const isYetkili = db[guildId].yetkiliRol && message.member.roles.cache.has(db[guildId].yetkiliRol);
     const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-    // Yetkililer, muaflar veya adminler bu sistemlere takılmaz
     if (isAdmin || isYetkili || isMuaf) return;
 
     // 1. LİNK ENGEL SİSTEMİ
     if (db[guildId].linkEngel) {
-        // Discord'un kendi GIF veya eklentilerine izin ver
         const isDiscordMedia = /(tenor\.com|giphy\.com|discordapp\.com\/attachments|discord\.com\/channels)/i.test(message.content);
         const hasLink = /(https?:\/\/[^\s]+)/g.test(message.content);
         
         if (hasLink && !isDiscordMedia) {
             await message.delete().catch(() => {});
             await applyJail(message.member, message.guild, "Yasaklı Link Paylaşımı");
-            return; // Jail attıktan sonra diğer kontrollere geçme
+            return; 
         }
     }
 
     // 2. CAPS LOCK ENGEL SİSTEMİ
     const lettersOnly = message.content.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ]/g, "");
-    if (lettersOnly.length > 5) {
-        const upperCount = lettersOnly.replace(/[^A-ZĞÜŞİÖÇ]/g, "").length;
-        if ((upperCount / lettersOnly.length) >= 0.75) {
-            await message.delete().catch(() => {});
-            message.channel.send(`${message.member}, lütfen büyük harf kullanımına dikkat et!`).then(m => setTimeout(() => m.delete(), 4000));
-            sendLog(message.guild, 'logCeza', `⚠️ **${message.author.tag}** caps lock kullanımı nedeniyle uyarıldı.`);
-            // Caps için jail yok, sadece uyarı. O yüzden "return" demiyoruz, flood kontrolüne geçebilir.
-        }
-    }
-
-    // 3. FLOOD VE SPAM ENGEL SİSTEMİ (3 Saniyede 4 Mesaj)
-    const now = Date.now();
-    if (!spamMap.has(message.author.id)) spamMap.set(message.author.id, []);
-    
-    const userMsgs = spamMap.get(message.author.id);
-    userMsgs.push(now);
-
-    // Sadece son 3 saniyedeki mesajları tut
-    const recentMsgs = userMsgs.filter(timestamp => now - timestamp < 3000);
-    spamMap.set(message.author.id, recentMsgs);
-
-    if (recentMsgs.length >= 4) {
-        // Spam yakalandı
-        spamMap.delete(message.author.id); // Hafızayı sıfırla
-        await message.channel.bulkDelete(4).catch(() => {}); // Attığı son mesajları sil
-        await applyJail(message.member, message.guild, "Spam / Flood Yapmak");
-    }
-});
-
-// --- GENEL LOGLAR (Ses, Sunucuya Giriş Çıkış vb.) ---
-
-// Üye Katılma/Ayrılma
-client.on('guildMemberAdd', member => sendLog(member.guild, 'logGenel', `📥 **${member.user.tag}** sunucuya katıldı.`));
-client.on('guildMemberRemove', member => sendLog(member.guild, 'logGenel', `📤 **${member.user.tag}** sunucudan ayrıldı.`));
-
-// Ses Kanalı Logları
-client.on('voiceStateUpdate', (oldState, newState) => {
-    if (!oldState.channelId && newState.channelId) {
-        sendLog(newState.guild, 'logSes', `🔊 **${newState.member.user.tag}**, \`${newState.channel.name}\` ses kanalına katıldı.`);
-    } else if (oldState.channelId && !newState.channelId) {
-        sendLog(oldState.guild, 'logSes', `🔇 **${oldState.member.user.tag}**, \`${oldState.channel.name}\` ses kanalından ayrıldı.`);
-    }
-});
-
-// Kick/Twitch Yayın Bildirimi Logları
-client.on('presenceUpdate', (oldPresence, newPresence) => {
-    if (!newPresence || !newPresence.activities) return;
-    
-    const activity = newPresence.activities.find(act => act.type === ActivityType.Streaming);
-    if (activity && (!oldPresence || !oldPresence.activities.find(act => act.name === activity.name))) {
-        // Eğer yayın adında veya linkinde Kick kelimesi geçiyorsa
-        if (activity.url && activity.url.includes("kick.com")) {
-            sendLog(newPresence.guild, 'logSes', `🎥 **${newPresence.member.user.tag}** Kick'te yayına başladı!\nLink: ${activity.url}`);
-        } else {
-            sendLog(newPresence.guild, 'logSes', `🎥 **${newPresence.member.user.tag}** yayına başladı: ${activity.name}\nLink: ${activity.url || "Belirtilmedi"}`);
-        }
-    }
-});
-
-// Silinen Mesaj Logu
-client.on('messageDelete', message => {
-    if (!message.guild || (message.author && message.author.bot)) return;
-    const content = message.content ? message.content : "[İçerik yok veya sadece görsel]";
-    sendLog(message.guild, 'logGenel', `🗑️ **${message.author ? message.author.tag : 'Bilinmeyen Kullanıcı'}** adlı kişinin \`${message.channel.name}\` kanalındaki mesajı silindi.\n**İçerik:** ${content}`);
-});
-
-client.login(process.env.TOKEN);
