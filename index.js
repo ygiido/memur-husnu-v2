@@ -3,7 +3,6 @@ const fs = require('fs');
 const http = require('http');
 require('dotenv').config();
 
-// Render'ın botu uyanık tutması için gereken web sunucusu
 http.createServer((req, res) => res.end('Bot aktif!')).listen(process.env.PORT || 3000);
 
 const client = new Client({
@@ -18,16 +17,13 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User]
 });
 
-// Veritabanı Fonksiyonları
 const dbPath = './database.json';
 if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
 const getDB = () => JSON.parse(fs.readFileSync(dbPath, 'utf8'));
 const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
 
-// Spam Algılama Haritası
 const spamMap = new Map();
 
-// --- LOG GÖNDERME YARDIMCISI ---
 async function sendLog(guild, logType, messageContent) {
     const db = getDB();
     if (!db[guild.id] || !db[guild.id][logType]) return;
@@ -36,7 +32,6 @@ async function sendLog(guild, logType, messageContent) {
     if (channel) channel.send(messageContent).catch(() => {});
 }
 
-// --- JAIL (HAPİS) FONKSİYONU ---
 async function applyJail(member, guild, reason) {
     const db = getDB();
     if (!db[guild.id]) db[guild.id] = {};
@@ -63,7 +58,6 @@ async function applyJail(member, guild, reason) {
     sendLog(guild, 'logCeza', `🚨 **${member.user.tag}** jaile atıldı!\n**Sebep:** ${reason}\n**Süre:** ${durationMins} dakika\n**Kaçıncı İhlali:** ${userData.jailCount}`);
 }
 
-// --- OTOMATİK JAİL ÇIKIŞI KONTROLÜ ---
 setInterval(() => {
     const db = getDB();
     const now = Date.now();
@@ -91,15 +85,9 @@ setInterval(() => {
     if (updated) saveDB(db);
 }, 60000);
 
-// --- BOT HAZIR OLDUĞUNDA ---
 client.once('ready', async () => {
     console.log(`🤖 Sistem aktif! ${client.user.tag} giriş yaptı.`);
     
-    // 🧹 ESKİ REPLİT HAYALETLERİNİ TEMİZLEME KODU
-    await client.application.commands.set([]);
-    console.log("🧹 Eski global komutlar tamamen silindi!");
-    
-    // Yeni Komutlarımız
     const commands = [
         {
             name: 'ayar',
@@ -111,7 +99,9 @@ client.once('ready', async () => {
                 { name: 'sicil-rol', type: 8, description: 'Sicili kirli olanlara verilecek kalıcı rol (@rol)' },
                 { name: 'log-ceza', type: 7, description: 'Uyarı ve ceza kayıtlarının kanalı (#kanal)' },
                 { name: 'log-genel', type: 7, description: 'Genel sunucu kayıtlarının kanalı (#kanal)' },
-                { name: 'log-ses', type: 7, description: 'Ses ve yayın kayıtlarının kanalı (#kanal)' },
+                { name: 'log-ses', type: 7, description: 'Ses loglarının atılacağı kanal (#kanal)' },
+                { name: 'kick-kanal', type: 7, description: 'Kick duyurularının atılacağı kanal (#kanal)' },
+                { name: 'kick-kisi', type: 6, description: 'Sadece bu kişinin Kick yayınları duyurulur (@kullanıcı)' },
                 { name: 'link-engel', type: 5, description: 'Link engeli aktif edilsin mi? (True/False)' }
             ]
         },
@@ -137,7 +127,6 @@ client.once('ready', async () => {
     }
 });
 
-// --- KOMUT KULLANIMI (SLASH COMMANDS) ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const db = getDB();
@@ -149,7 +138,7 @@ client.on('interactionCreate', async interaction => {
         if (!isAdmin) return interaction.reply({ content: '❌ Bunu sadece sunucu yöneticileri yapabilir.', ephemeral: true });
         
         if (!db[guildId]) db[guildId] = { users: {} };
-        const opts = ['yetkili-rol', 'muaf-rol', 'jail-rol', 'sicil-rol', 'log-ceza', 'log-genel', 'log-ses'];
+        const opts = ['yetkili-rol', 'muaf-rol', 'jail-rol', 'sicil-rol', 'log-ceza', 'log-genel', 'log-ses', 'kick-kanal', 'kick-kisi'];
         opts.forEach(opt => {
             const val = interaction.options.get(opt);
             if (val) db[guildId][opt.replace(/-([a-z])/g, g => g[1].toUpperCase())] = val.value;
@@ -204,7 +193,6 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- MESAJ DENETİMİ (Link, Caps, Flood) ---
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
@@ -218,7 +206,6 @@ client.on('messageCreate', async message => {
 
     if (isAdmin || isYetkili || isMuaf) return;
 
-    // 1. LİNK ENGEL SİSTEMİ
     if (db[guildId].linkEngel) {
         const isDiscordMedia = /(tenor\.com|giphy\.com|discordapp\.com\/attachments|discord\.com\/channels)/i.test(message.content);
         const hasLink = /(https?:\/\/[^\s]+)/g.test(message.content);
@@ -230,7 +217,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 2. CAPS LOCK ENGEL SİSTEMİ
     const lettersOnly = message.content.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ]/g, "");
     if (lettersOnly.length > 5) {
         const upperCount = lettersOnly.replace(/[^A-ZĞÜŞİÖÇ]/g, "").length;
@@ -241,7 +227,6 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // 3. FLOOD VE SPAM ENGEL SİSTEMİ (3 Saniyede 4 Mesaj)
     const now = Date.now();
     if (!spamMap.has(message.author.id)) spamMap.set(message.author.id, []);
     
@@ -258,7 +243,6 @@ client.on('messageCreate', async message => {
     }
 });
 
-// --- GENEL LOGLAR VE BİLDİRİMLER ---
 client.on('guildMemberAdd', member => sendLog(member.guild, 'logGenel', `📥 **${member.user.tag}** sunucuya katıldı.`));
 client.on('guildMemberRemove', member => sendLog(member.guild, 'logGenel', `📤 **${member.user.tag}** sunucudan ayrıldı.`));
 
@@ -276,14 +260,24 @@ client.on('messageDelete', message => {
     sendLog(message.guild, 'logGenel', `🗑️ **${message.author ? message.author.tag : 'Bilinmeyen Kullanıcı'}** adlı kişinin \`${message.channel.name}\` kanalındaki mesajı silindi.\n**İçerik:** ${content}`);
 });
 
+// GÜNCELLENMİŞ KICK YAYIN DUYURUSU
 client.on('presenceUpdate', (oldPresence, newPresence) => {
-    if (!newPresence || !newPresence.activities) return;
+    if (!newPresence || !newPresence.activities || !newPresence.guild) return;
+
+    const db = getDB();
+    const guildId = newPresence.guild.id;
+    
+    // Veritabanında kick-kisi ve kick-kanal ayarlanmamışsa işlemi durdur
+    if (!db[guildId] || !db[guildId].kickKisi || !db[guildId].kickKanal) return;
+
+    // Sadece belirlenen kişiyi kontrol et
+    if (newPresence.userId !== db[guildId].kickKisi) return;
+
     const activity = newPresence.activities.find(act => act.type === ActivityType.Streaming);
+    
     if (activity && (!oldPresence || !oldPresence.activities.find(act => act.name === activity.name))) {
         if (activity.url && activity.url.includes("kick.com")) {
-            sendLog(newPresence.guild, 'logSes', `🎥 **${newPresence.member.user.tag}** Kick'te yayına başladı!\nLink: ${activity.url}`);
-        } else {
-            sendLog(newPresence.guild, 'logSes', `🎥 **${newPresence.member.user.tag}** yayına başladı: ${activity.name}\nLink: ${activity.url || "Belirtilmedi"}`);
+            sendLog(newPresence.guild, 'kickKanal', `🎥 Hey! **${newPresence.member.user.tag}** Kick'te yayına başladı! Herkesi bekliyoruz!\n🔗 Link: ${activity.url}`);
         }
     }
 });
