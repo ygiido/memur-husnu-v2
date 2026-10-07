@@ -167,7 +167,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: `${miktar} adet mesaj silindi.`, ephemeral: true });
         }
 
-        if (interaction.commandName === 'af') {
+if (interaction.commandName === 'af') {
             const user = interaction.options.getUser('kullanici');
             if (!db[guildId]) return interaction.reply({ content: 'Veritabanı bulunamadı.', ephemeral: true });
             
@@ -182,6 +182,9 @@ client.on('interactionCreate', async interaction => {
                     }
                     sendLog(interaction.guild, 'logCeza', `🕊️ **${user.tag}** adlı kullanıcının tüm cezaları ve sicili affedildi.`);
                     return interaction.reply({ content: `${user.tag} başarıyla affedildi.`, ephemeral: true });
+                } else {
+                    // EKLENEN KISIM: Kullanıcının zaten cezası yoksa bot artık susmayacak.
+                    return interaction.reply({ content: `❌ **${user.tag}** adlı kullanıcının zaten bir cezası veya sicili bulunmuyor.`, ephemeral: true });
                 }
             } else {
                 db[guildId].users = {};
