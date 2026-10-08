@@ -11,7 +11,9 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildInvites,
+        GatewayIntentBits.GuildEmojisAndStickers
     ],
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User]
 });
@@ -23,86 +25,20 @@ const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4))
 
 const spamMap = new Map();
 
-// --- ZENGİNLEŞTİRİLMİŞ OTO-CEVAP SİSTEMİ ---
 const otoCevaplar = [
-    { 
-        tetikleyiciler: ["sa", "s.a", "selam", "selamun aleyküm", "sea", "selamın aleyküm"], 
-        cevaplar: ["Aleykümselam vatandaş, hoş geldin.", "Aleykümselam, devriye an itibarıyla huzurlu, buyur.", "Aleykümselam! Kimlikleri görelim... Şaka şaka geç geç.", "Aleykümselam, asayiş berkemal."], 
-        etiketle: true, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["günaydın", "gunaydin", "hayırlı sabahlar", "sabah şerifleriniz hayrolsun"], 
-        cevaplar: ["Günaydın! Mesai başladı, asayiş berkemal.", "Günaydın vatandaş, sabah sabah vukuat yoktur inşallah?", "Sana da günaydın! Çaylar demlendi mi karakolda?"], 
-        etiketle: true, 
-        tamKelime: false 
-    },
-    { 
-        tetikleyiciler: ["iyi geceler", "iyi akşamlar", "iyi aksamlar", "hayırlı geceler", "iyi uykular"], 
-        cevaplar: ["İyi geceler. Mahalle bizde, sen rahat uyu.", "İyi akşamlar. Gecenin bu saatinde şüpheli hareketler yapmayalım.", "Sana da iyi geceler vatandaş. Nöbete devam."], 
-        etiketle: false, 
-        tamKelime: false 
-    },
-    { 
-        tetikleyiciler: ["hg", "hoş geldin", "hoşgeldin"], 
-        cevaplar: ["Hoş bulduk. Karakol durumları nasıl?", "Sağ ol vatandaş, devriyedeyiz.", "Hoş bulduk, telsiz anonsu var mı?"], 
-        etiketle: true, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["memur bey", "hüsnü", "memur hüsnü", "komiserim", "polis bey"], 
-        cevaplar: ["Buyur vatandaş, bir şikayet mi var?", "Görev başındayım, dinliyorum.", "Amirime bildirmelik bir durum mu var?", "Efendim? Telsizden anons geçiyordum dinliyorum."], 
-        etiketle: true, 
-        tamKelime: false 
-    },
-    { 
-        tetikleyiciler: ["bb", "görüşürüz", "gorusuruz", "ben kaçar", "çıkıyorum", "allaha emanet", "baybay"], 
-        cevaplar: ["Dikkatli git, sağa sola takılma.", "Allah'a emanet ol.", "Görüşürüz, suça bulaşma yeter.", "Hadi selametle, şüpheli paket görürsen dokunma."], 
-        etiketle: false, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["nasılsın", "naber", "nasilsin", "ne haber", "napıyorsun", "nabıyon"], 
-        cevaplar: ["Devletin memuru nasıl olsun, 7/24 nöbetteyiz şükür. Sen nasılsın?", "Çok şükür iyiyiz, asayişi sağlıyoruz. Senden naber?", "Uykusuz ama görev aşkıyla dolu! Seni sormalı?"], 
-        etiketle: true, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["teşekkürler", "sağ ol", "sağol", "eyvallah", "teşekkür ederim", "eyv", "tesekkurler"], 
-        cevaplar: ["Ne demek vatandaş, görevimiz.", "Rica ederim, asayiş için buradayız.", "Eyvallah, devletin memuruna teşekkür edilmez, görev yapılır.", "Sen sağ ol vatandaş."], 
-        etiketle: true, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["yardım", "imdat", "yetiş", "yardım edin", "koşun"], 
-        cevaplar: ["Olay yeri neresi? Ekipleri yönlendiriyorum!", "Sakin ol vatandaş, Memur Hüsnü burada. Ne oldu?", "Telsizden anons geçtim, destek ekip yolda."], 
-        etiketle: true, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["lan", "amk", "aq", "sg", "sus", "kes", "aptal", "mal"], 
-        cevaplar: ["Hop! Memurun yanında düzgün konuşalım vatandaş.", "Kelimelerimize dikkat edelim, karakolda ifade vermek istemezsin.", "Saygılı olalım! Yoksa 5326 sayılı Kabahatler Kanunundan işlem yaparım.", "Ağzımızı toplayalım, devriye geziyorum burada."], 
-        etiketle: true, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["bot", "robot", "yapay zeka"], 
-        cevaplar: ["Ne botu vatandaş? Kanlı canlı devlet memuruyuz burada.", "Bot falan ayıp oluyor, 657'ye tabiyiz biz.", "Telsiz çekmiyor galiba, anlamadım? Ne botu?"], 
-        etiketle: true, 
-        tamKelime: true 
-    },
-    { 
-        tetikleyiciler: ["çay", "kahve", "sigara", "çorba"], 
-        cevaplar: ["Karakolda çay demlendi, buyur gel.", "Valla bi bardak kaçak çay olsa hayır demezdim, nöbet yordu.", "Memur adamın mazotu çaydır, doldur usta oradan!"], 
-        etiketle: false, 
-        tamKelime: false 
-    },
-    { 
-        tetikleyiciler: ["aynen", "haklısın", "doğru", "katılıyorum"], 
-        cevaplar: ["Tabii doğru, devletin memuru yalan söylemez.", "Aynen öyle vatandaş.", "Tutanaklara da böyle geçiyorum o zaman."], 
-        etiketle: false, 
-        tamKelime: true 
-    }
+    { tetikleyiciler: ["sa", "s.a", "selam", "selamun aleyküm", "sea", "selamın aleyküm"], cevaplar: ["Aleykümselam vatandaş, hoş geldin.", "Aleykümselam, devriye an itibarıyla huzurlu, buyur.", "Aleykümselam! Kimlikleri görelim... Şaka şaka geç geç.", "Aleykümselam, asayiş berkemal."], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["günaydın", "gunaydin", "hayırlı sabahlar", "sabah şerifleriniz hayrolsun"], cevaplar: ["Günaydın! Mesai başladı, asayiş berkemal.", "Günaydın vatandaş, sabah sabah vukuat yoktur inşallah?", "Sana da günaydın! Çaylar demlendi mi karakolda?"], etiketle: true, tamKelime: false },
+    { tetikleyiciler: ["iyi geceler", "iyi akşamlar", "iyi aksamlar", "hayırlı geceler", "iyi uykular"], cevaplar: ["İyi geceler. Mahalle bizde, sen rahat uyu.", "İyi akşamlar. Gecenin bu saatinde şüpheli hareketler yapmayalım.", "Sana da iyi geceler vatandaş. Nöbete devam."], etiketle: false, tamKelime: false },
+    { tetikleyiciler: ["hg", "hoş geldin", "hoşgeldin"], cevaplar: ["Hoş bulduk. Karakol durumları nasıl?", "Sağ ol vatandaş, devriyedeyiz.", "Hoş bulduk, telsiz anonsu var mı?"], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["memur bey", "hüsnü", "memur hüsnü", "komiserim", "polis bey"], cevaplar: ["Buyur vatandaş, bir şikayet mi var?", "Görev başındayım, dinliyorum.", "Amirime bildirmelik bir durum mu var?", "Efendim? Telsizden anons geçiyordum dinliyorum."], etiketle: true, tamKelime: false },
+    { tetikleyiciler: ["bb", "görüşürüz", "gorusuruz", "ben kaçar", "çıkıyorum", "allaha emanet", "baybay"], cevaplar: ["Dikkatli git, sağa sola takılma.", "Allah'a emanet ol.", "Görüşürüz, suça bulaşma yeter.", "Hadi selametle, şüpheli paket görürsen dokunma."], etiketle: false, tamKelime: true },
+    { tetikleyiciler: ["nasılsın", "naber", "nasilsin", "ne haber", "napıyorsun", "nabıyon"], cevaplar: ["Devletin memuru nasıl olsun, 7/24 nöbetteyiz şükür. Sen nasılsın?", "Çok şükür iyiyiz, asayişi sağlıyoruz. Senden naber?", "Uykusuz ama görev aşkıyla dolu! Seni sormalı?"], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["teşekkürler", "sağ ol", "sağol", "eyvallah", "teşekkür ederim", "eyv", "tesekkurler"], cevaplar: ["Ne demek vatandaş, görevimiz.", "Rica ederim, asayiş için buradayız.", "Eyvallah, devletin memuruna teşekkür edilmez, görev yapılır.", "Sen sağ ol vatandaş."], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["yardım", "imdat", "yetiş", "yardım edin", "koşun"], cevaplar: ["Olay yeri neresi? Ekipleri yönlendiriyorum!", "Sakin ol vatandaş, Memur Hüsnü burada. Ne oldu?", "Telsizden anons geçtim, destek ekip yolda."], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["lan", "amk", "aq", "sg", "sus", "kes", "aptal", "mal"], cevaplar: ["Hop! Memurun yanında düzgün konuşalım vatandaş.", "Kelimelerimize dikkat edelim, karakolda ifade vermek istemezsin.", "Saygılı olalım! Yoksa 5326 sayılı Kabahatler Kanunundan işlem yaparım.", "Ağzımızı toplayalım, devriye geziyorum burada."], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["bot", "robot", "yapay zeka"], cevaplar: ["Ne botu vatandaş? Kanlı canlı devlet memuruyuz burada.", "Bot falan ayıp oluyor, 657'ye tabiyiz biz.", "Telsiz çekmiyor galiba, anlamadım? Ne botu?"], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["çay", "kahve", "sigara", "çorba"], cevaplar: ["Karakolda çay demlendi, buyur gel.", "Valla bi bardak kaçak çay olsa hayır demezdim, nöbet yordu.", "Memur adamın mazotu çaydır, doldur usta oradan!"], etiketle: false, tamKelime: false },
+    { tetikleyiciler: ["aynen", "haklısın", "doğru", "katılıyorum"], cevaplar: ["Tabii doğru, devletin memuru yalan söylemez.", "Aynen öyle vatandaş.", "Tutanaklara da böyle geçiyorum o zaman."], etiketle: false, tamKelime: true }
 ];
 
 async function sendLog(guild, logType, options) {
@@ -193,7 +129,8 @@ client.once('ready', async () => {
                 { name: 'log-ceza', type: 7, description: 'Uyarı ve ceza kayıtlarının kanalı (#kanal)' },
                 { name: 'log-genel', type: 7, description: 'Genel sunucu kayıtlarının kanalı (#kanal)' },
                 { name: 'log-ses', type: 7, description: 'Ses loglarının atılacağı kanal (#kanal)' },
-                { name: 'link-engel', type: 5, description: 'Link engeli aktif edilsin mi? (True/False)' }
+                { name: 'link-engel', type: 5, description: 'Link engeli aktif edilsin mi? (True/False)' },
+                { name: 'oto-cevap', type: 5, description: 'Oto-cevap sistemi aktif edilsin mi? (True/False)' }
             ]
         },
         { name: 'info', description: 'Sunucu istatistiklerini ve bot ayarlarını gösterir.' },
@@ -249,8 +186,13 @@ client.on('interactionCreate', async interaction => {
             const val = interaction.options.get(opt);
             if (val) db[guildId][opt.replace(/-([a-z])/g, g => g[1].toUpperCase())] = val.value;
         });
+        
         const linkEngel = interaction.options.getBoolean('link-engel');
         if (linkEngel !== null) db[guildId].linkEngel = linkEngel;
+        
+        const otoCevap = interaction.options.getBoolean('oto-cevap');
+        if (otoCevap !== null) db[guildId].otoCevap = otoCevap;
+        
         saveDB(db);
         return interaction.reply({ content: '✅ Sunucu ayarları başarıyla kaydedildi!', ephemeral: true });
     }
@@ -275,7 +217,7 @@ client.on('interactionCreate', async interaction => {
                     { name: '📌 İstatistikler', value: `👥 Üye: **${interaction.guild.memberCount}**\n🎤 Seste: **${membersInVoice}**`, inline: false },
                     { name: '⚙️ Roller', value: `👑 Yetkili: ${getRole(guildDb.yetkiliRol)}\n🛡️ Muaf: ${getRole(guildDb.muafRol)}\n🚔 Jail: ${getRole(guildDb.jailRol)}\n📜 Sicil: ${getRole(guildDb.sicilRol)}`, inline: false },
                     { name: '📂 Kanallar', value: `🔨 Ceza: ${getChannel(guildDb.logCeza)}\n📋 Genel: ${getChannel(guildDb.logGenel)}\n🎙️ Ses: ${getChannel(guildDb.logSes)}`, inline: false },
-                    { name: '🛡️ Güvenlik', value: `🔗 Link Engeli: **${guildDb.linkEngel ? '✅ Aktif' : '❌ Kapalı'}**`, inline: false }
+                    { name: '🛡️ Güvenlik & Sistem', value: `🔗 Link Engeli: **${guildDb.linkEngel ? '✅ Aktif' : '❌ Kapalı'}**\n💬 Oto-Cevap: **${guildDb.otoCevap !== false ? '✅ Aktif' : '❌ Kapalı'}**`, inline: false }
                 ).setTimestamp();
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
@@ -380,28 +322,30 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
-    const lowerContent = message.content.toLocaleLowerCase('tr-TR');
-    for (const ayar of otoCevaplar) {
-        let eslesti = false;
-        for (const tetikleyici of ayar.tetikleyiciler) {
-            if (ayar.tamKelime) {
-                const regex = new RegExp(`(?:^|\\s|[.,!?:])${tetikleyici}(?:$|\\s|[.,!?:])`, 'i');
-                if (regex.test(lowerContent)) { eslesti = true; break; }
-            } else {
-                if (lowerContent.includes(tetikleyici)) { eslesti = true; break; }
-            }
-        }
-        if (eslesti) {
-            const rastgeleCevap = ayar.cevaplar[Math.floor(Math.random() * ayar.cevaplar.length)];
-            if (ayar.etiketle) await message.reply(rastgeleCevap).catch(() => {});
-            else await message.channel.send(rastgeleCevap).catch(() => {});
-            break;
-        }
-    }
-
     const db = getDB();
     const guildId = message.guild.id;
     if (!db[guildId]) return;
+
+    if (db[guildId].otoCevap !== false) {
+        const lowerContent = message.content.toLocaleLowerCase('tr-TR');
+        for (const ayar of otoCevaplar) {
+            let eslesti = false;
+            for (const tetikleyici of ayar.tetikleyiciler) {
+                if (ayar.tamKelime) {
+                    const regex = new RegExp(`(?:^|\\s|[.,!?:])${tetikleyici}(?:$|\\s|[.,!?:])`, 'i');
+                    if (regex.test(lowerContent)) { eslesti = true; break; }
+                } else {
+                    if (lowerContent.includes(tetikleyici)) { eslesti = true; break; }
+                }
+            }
+            if (eslesti) {
+                const rastgeleCevap = ayar.cevaplar[Math.floor(Math.random() * ayar.cevaplar.length)];
+                if (ayar.etiketle) await message.reply(rastgeleCevap).catch(() => {});
+                else await message.channel.send(rastgeleCevap).catch(() => {});
+                break;
+            }
+        }
+    }
 
     const isMuaf = db[guildId].muafRol && message.member.roles.cache.has(db[guildId].muafRol);
     const isYetkili = db[guildId].yetkiliRol && message.member.roles.cache.has(db[guildId].yetkiliRol);
@@ -443,6 +387,35 @@ client.on('messageCreate', async message => {
     }
 });
 
+// --- YENİ NESİL KAPSAMLI LOG SİSTEMİ ---
+
+// Kanallar
+client.on('channelCreate', channel => {
+    sendLog(channel.guild, 'logGenel', { title: '📁 Kanal Oluşturuldu', desc: `<#${channel.id}> (\`${channel.name}\`) adlı kanal oluşturuldu.`, color: 0x57f287 });
+});
+client.on('channelDelete', channel => {
+    sendLog(channel.guild, 'logGenel', { title: '🗑️ Kanal Silindi', desc: `**${channel.name}** adlı kanal silindi.`, color: 0xed4245 });
+});
+
+// Roller
+client.on('roleCreate', role => {
+    sendLog(role.guild, 'logGenel', { title: '🏷️ Rol Oluşturuldu', desc: `<@&${role.id}> (\`${role.name}\`) adlı rol oluşturuldu.`, color: 0x57f287 });
+});
+client.on('roleDelete', role => {
+    sendLog(role.guild, 'logGenel', { title: '🗑️ Rol Silindi', desc: `**${role.name}** adlı rol silindi.`, color: 0xed4245 });
+});
+
+// Emojiler
+client.on('emojiCreate', emoji => {
+    sendLog(emoji.guild, 'logGenel', { title: '😀 Emoji Eklendi', desc: `**${emoji.name}** emojisi eklendi. ${emoji}`, color: 0x57f287 });
+});
+
+// Davet Linkleri
+client.on('inviteCreate', invite => {
+    sendLog(invite.guild, 'logGenel', { title: '🔗 Davet Linki Oluşturuldu', desc: `**Oluşturan:** <@${invite.inviterId}>\n**Link:** ${invite.url}\n**Kanal:** <#${invite.channelId}>`, color: 0x57f287 });
+});
+
+// Üye Hareketleri & Rol Güncellemeleri
 client.on('guildMemberAdd', member => {
     sendLog(member.guild, 'logGenel', { title: '📥 Üye Katıldı', desc: `<@${member.id}> sunucuya giriş yaptı.`, color: 0x57f287, thumbnail: member.user.displayAvatarURL() });
 });
@@ -451,10 +424,40 @@ client.on('guildMemberRemove', member => {
     sendLog(member.guild, 'logGenel', { title: '📤 Üye Ayrıldı', desc: `**${member.user.tag}** sunucudan ayrıldı.`, color: 0xed4245, thumbnail: member.user.displayAvatarURL() });
 });
 
+client.on('guildMemberUpdate', (oldMember, newMember) => {
+    // Takma Ad Takibi
+    if (oldMember.nickname !== newMember.nickname) {
+        sendLog(newMember.guild, 'logGenel', {
+            title: '👤 Takma Ad Değiştirildi',
+            desc: `**Kullanıcı:** <@${newMember.id}>\n**Eski İsim:** ${oldMember.nickname || oldMember.user.username}\n**Yeni İsim:** ${newMember.nickname || newMember.user.username}`,
+            color: 0x3498db,
+            thumbnail: newMember.user.displayAvatarURL()
+        });
+    }
+
+    // Rol Takibi
+    const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
+    const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
+
+    if (addedRoles.size > 0) {
+        sendLog(newMember.guild, 'logGenel', { title: '🏷️ Rol Verildi', desc: `**Kullanıcı:** <@${newMember.id}>\n**Verilen Rol(ler):** ${addedRoles.map(r => `<@&${r.id}>`).join(', ')}`, color: 0x57f287 });
+    }
+    if (removedRoles.size > 0) {
+        sendLog(newMember.guild, 'logGenel', { title: '🗑️ Rol Alındı', desc: `**Kullanıcı:** <@${newMember.id}>\n**Alınan Rol(ler):** ${removedRoles.map(r => `<@&${r.id}>`).join(', ')}`, color: 0xed4245 });
+    }
+});
+
+// Mesaj Hareketleri
 client.on('messageDelete', message => {
     if (!message.guild || (message.author && message.author.bot)) return;
     const content = message.content ? message.content : "[İçerik yok veya sadece görsel]";
     sendLog(message.guild, 'logGenel', { title: '🗑️ Mesaj Silindi', desc: `**Kullanıcı:** <@${message.author ? message.author.id : 'Bilinmiyor'}>\n**Kanal:** <#${message.channel.id}>\n\n**İçerik:**\n${content}`, color: 0xed4245 });
+});
+
+client.on('messageDeleteBulk', messages => {
+    const guild = messages.first().guild;
+    const channel = messages.first().channel;
+    sendLog(guild, 'logGenel', { title: '🧹 Toplu Mesaj Silindi', desc: `<#${channel.id}> kanalında **${messages.size}** adet mesaj topluca silindi.`, color: 0xed4245 });
 });
 
 client.on('messageUpdate', (oldMessage, newMessage) => {
@@ -467,19 +470,11 @@ client.on('messageUpdate', (oldMessage, newMessage) => {
     });
 });
 
-client.on('guildMemberUpdate', (oldMember, newMember) => {
-    if (oldMember.nickname !== newMember.nickname) {
-        sendLog(newMember.guild, 'logGenel', {
-            title: '👤 Takma Ad Değiştirildi',
-            desc: `**Kullanıcı:** <@${newMember.id}>\n**Eski İsim:** ${oldMember.nickname || oldMember.user.username}\n**Yeni İsim:** ${newMember.nickname || newMember.user.username}`,
-            color: 0x3498db,
-            thumbnail: newMember.user.displayAvatarURL()
-        });
-    }
-});
-
+// Kapsamlı Ses Takibi
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member.user.bot) return;
+    
+    // Giriş - Çıkış - Değişim
     if (!oldState.channelId && newState.channelId) {
         sendLog(newState.guild, 'logSes', { title: '🔊 Sese Katıldı', desc: `<@${newState.member.id}>, <#${newState.channel.id}> kanalına giriş yaptı.`, color: 0x57f287 });
     } else if (oldState.channelId && !newState.channelId) {
@@ -487,6 +482,18 @@ client.on('voiceStateUpdate', (oldState, newState) => {
     } else if (oldState.channelId !== newState.channelId) {
         sendLog(newState.guild, 'logSes', { title: '🔀 Ses Kanalı Değiştirdi', desc: `<@${newState.member.id}>, <#${oldState.channel.id}> kanalından çıkıp <#${newState.channel.id}> kanalına geçti.`, color: 0xfee75c });
     }
+
+    // Susturulma & Mikrofon
+    if (!oldState.serverMute && newState.serverMute) sendLog(newState.guild, 'logSes', { title: '🔇 Sunucuda Susturuldu', desc: `<@${newState.member.id}> yetkili tarafından seste susturuldu.`, color: 0xed4245 });
+    if (oldState.serverMute && !newState.serverMute) sendLog(newState.guild, 'logSes', { title: '🔊 Sunucu Susturması Kaldırıldı', desc: `<@${newState.member.id}> kullanıcısının ses engeli kaldırıldı.`, color: 0x57f287 });
+    if (!oldState.selfMute && newState.selfMute) sendLog(newState.guild, 'logSes', { title: '🎙️ Mikrofonunu Kapattı', desc: `<@${newState.member.id}> mikrofonunu kapattı.`, color: 0xfee75c });
+    if (oldState.selfMute && !newState.selfMute) sendLog(newState.guild, 'logSes', { title: '🎙️ Mikrofonunu Açtı', desc: `<@${newState.member.id}> mikrofonunu açtı.`, color: 0x57f287 });
+
+    // Yayın & Kamera
+    if (!oldState.streaming && newState.streaming) sendLog(newState.guild, 'logSes', { title: '📺 Ekran Yayını Açtı', desc: `<@${newState.member.id}> seste ekran yayını açtı.`, color: 0x3498db });
+    if (oldState.streaming && !newState.streaming) sendLog(newState.guild, 'logSes', { title: '📺 Ekran Yayınını Kapattı', desc: `<@${newState.member.id}> seste ekran yayınını kapattı.`, color: 0xed4245 });
+    if (!oldState.selfVideo && newState.selfVideo) sendLog(newState.guild, 'logSes', { title: '📷 Kamera Açtı', desc: `<@${newState.member.id}> seste kamerasını açtı.`, color: 0x3498db });
+    if (oldState.selfVideo && !newState.selfVideo) sendLog(newState.guild, 'logSes', { title: '📷 Kamerayı Kapattı', desc: `<@${newState.member.id}> seste kamerasını kapattı.`, color: 0xed4245 });
 });
 
 client.login(process.env.TOKEN);
