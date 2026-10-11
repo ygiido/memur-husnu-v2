@@ -391,9 +391,9 @@ client.on('messageCreate', async message => {
             
             await message.reply(response);
             return; 
-        } catch (error) {
-            console.error("Yapay Zeka Hatası:", error);
-            await message.reply("Sistemlerde şu an bir arıza var vatandaş, e-devlet çökmüş olabilir. Daha sonra tekrar dene.");
+       } catch (error) {
+            console.log("HATA YAKALANDI: ", error.message);
+            await message.reply(`Sistemlerde bir arıza var vatandaş. (Hata Raporu: **${error.message}**)`);
             return;
         }
     }
