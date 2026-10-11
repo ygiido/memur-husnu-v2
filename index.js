@@ -29,6 +29,7 @@ const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4))
 
 const spamMap = new Map();
 
+// Oto-Cevap sisteminden ağır küfürler çıkarıldı, onlar artık hapis cezası sisteminde. Burada sadece hafif argolar ve normal sohbetler kaldı.
 const otoCevaplar = [
     { tetikleyiciler: ["as", "a.s", "aleyküm selam", "aleykümselam", "aleykum selam"], cevaplar: ["Hoş bulduk. Evrak kayıt bölümüne hoş geldiniz, buyurun.", "Hoş bulduk, mesaimiz devam ediyor.", "Görevinin başındayız, buyrun."], etiketle: true, tamKelime: true },
     { tetikleyiciler: ["sa", "s.a", "selam", "selamun aleyküm", "sea", "selamın aleyküm"], cevaplar: ["Aleykümselam. Devlet dairesine hoş geldiniz.", "Aleykümselam, mesai an itibarıyla yoğun, buyurun işleminiz neydi?", "Aleykümselam, evraklarınızı hazırladıysanız işleme alalım."], etiketle: true, tamKelime: true },
@@ -38,7 +39,7 @@ const otoCevaplar = [
     { tetikleyiciler: ["bb", "görüşürüz", "gorusuruz", "ben kaçar", "çıkıyorum", "allaha emanet", "baybay"], cevaplar: ["Dosyanı kapattım, selametle.", "Allah'a emanet ol. Haftaya evrakların aslıyla gel."], etiketle: false, tamKelime: true },
     { tetikleyiciler: ["nasılsın", "naber", "nasilsin", "ne haber", "napıyorsun", "nabıyon"], cevaplar: ["657'ye tabi memur nasıl olsun, sabahtan beri evrak mühürlüyoruz. Sen nasılsın?", "Çay-evrak-mühür üçgeninde yuvarlanıp gidiyoruz."], etiketle: true, tamKelime: true },
     { tetikleyiciler: ["teşekkürler", "sağ ol", "sağol", "eyvallah", "teşekkür ederim", "eyv"], cevaplar: ["Ne demek vatandaş, kamu hizmeti görevimiz.", "Eyvallah, devletin memuruna teşekkür edilmez, görev yapılır."], etiketle: true, tamKelime: true },
-    { tetikleyiciler: ["lan", "amk", "aq", "sg", "sus", "kes", "aptal", "mal"], cevaplar: ["Vatandaş! Devlet dairesinde böyle kelimeler kullanılmaz, işlem başlatırım.", "Üslubumuza dikkat edelim, tutanak tutturmak istemezsin."], etiketle: true, tamKelime: true },
+    { tetikleyiciler: ["lan", "sus", "kes", "aptal", "mal", "salak"], cevaplar: ["Vatandaş! Devlet dairesinde laubali kelimeler kullanılmaz.", "Üslubumuza dikkat edelim, memurla böyle konuşulmaz."], etiketle: true, tamKelime: true },
     { tetikleyiciler: ["çay", "kahve", "sigara", "çorba", "molası"], cevaplar: ["Çay bardağı soğumadan evrak imzalamam, doldur usta oradan.", "Mesai arası çay molası memurun hakkıdır."], etiketle: false, tamKelime: false }
 ];
 
@@ -62,7 +63,7 @@ async function applyJail(member, guild, reason) {
     const db = getDB();
     if (!db[guild.id]) db[guild.id] = {};
     if (!db[guild.id].users) db[guild.id].users = {};
-    if (!db[guild.id].users[member.id]) db[guild.id].users[member.id] = { jailCount: 0, minorJailCount: 0, sicilli: false };
+    if (!db[guild.id].users[member.id]) db[guild.id].users[member.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, aiOnay: false, kufurUyari: 0 };
 
     let userData = db[guild.id].users[member.id];
     userData.jailCount += 1;
@@ -137,11 +138,14 @@ client.once('ready', async () => {
                 { name: 'log-genel', type: 7, description: 'Genel Evrak Kayıt (Log) arşiv kanalı (#kanal)' },
                 { name: 'kick-bot', type: 6, description: 'Duyurusu pusuya düşürülecek Kick botu (@bot)' },
                 { name: 'kick-kanal', type: 7, description: 'Memur Hüsnü\'nün onaylı duyuru yapacağı kanal (#kanal)' },
+                { name: 'ai-kanal', type: 7, description: 'Memur Hüsnü (AI) ile sohbet edilecek tek kanal (#kanal)' },
                 { name: 'link-engel', type: 5, description: 'Link paylaşımı yasaklansın mı? (True/False)' },
+                { name: 'kufur-engel', type: 5, description: 'Küfür filtresi ve 3 uyarılı ceza sistemi (True/False)' },
                 { name: 'oto-cevap', type: 5, description: 'Memur vatandaşlarla sohbet etsin mi? (True/False)' }
             ]
         },
         { name: 'info', description: 'Kurum istatistiklerini ve sistem ayarlarını gösterir.' },
+        { name: 'sartname', description: 'Yapay zeka (AI) kullanım şartnamesini ve onay butonunu kanala gönderir (Yönetici).' },
         {
             name: 'af',
             description: 'Kişinin veya herkesin sicilini temizler (Dava Düşürür).',
@@ -180,16 +184,34 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
     const db = getDB();
     const guildId = interaction.guildId;
+    
+    if (interaction.isButton()) {
+        if (interaction.customId === 'ai_onay_btn') {
+            if (!db[guildId]) db[guildId] = {};
+            if (!db[guildId].users) db[guildId].users = {};
+            if (!db[guildId].users[interaction.user.id]) {
+                db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, aiOnay: false, kufurUyari: 0 };
+            }
+            
+            db[guildId].users[interaction.user.id].aiOnay = true;
+            saveDB(db);
+            
+            return interaction.reply({ content: '✅ Islak imzanız kurum arşivine kaydedilmiştir. Artık Memur Hüsnü ile tahsis edilen gişeden işlem yapabilirsiniz.', ephemeral: true });
+        }
+        return;
+    }
+
+    if (!interaction.isChatInputCommand()) return;
+    
     const isYetkili = db[guildId]?.yetkiliRol && interaction.member.roles.cache.has(db[guildId].yetkiliRol);
     const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
     if (interaction.commandName === 'ayar') {
         if (!isAdmin) return interaction.reply({ content: '❌ Bu işlemi sadece Kurum Müdürleri (Yöneticiler) yapabilir.', ephemeral: true });
         if (!db[guildId]) db[guildId] = { users: {} };
-        const opts = ['yetkili-rol', 'muaf-rol', 'jail-rol', 'sicil-rol', 'log-ceza', 'log-genel', 'kick-bot', 'kick-kanal'];
+        const opts = ['yetkili-rol', 'muaf-rol', 'jail-rol', 'sicil-rol', 'log-ceza', 'log-genel', 'kick-bot', 'kick-kanal', 'ai-kanal'];
         opts.forEach(opt => {
             const val = interaction.options.get(opt);
             if (val) db[guildId][opt.replace(/-([a-z])/g, g => g[1].toUpperCase())] = val.value;
@@ -198,11 +220,36 @@ client.on('interactionCreate', async interaction => {
         const linkEngel = interaction.options.getBoolean('link-engel');
         if (linkEngel !== null) db[guildId].linkEngel = linkEngel;
         
+        const kufurEngel = interaction.options.getBoolean('kufur-engel');
+        if (kufurEngel !== null) db[guildId].kufurEngel = kufurEngel;
+        
         const otoCevap = interaction.options.getBoolean('oto-cevap');
         if (otoCevap !== null) db[guildId].otoCevap = otoCevap;
         
         saveDB(db);
         return interaction.reply({ content: '✅ Kurum sistem ayarları evraka işlendi ve kaydedildi!', ephemeral: true });
+    }
+
+    if (interaction.commandName === 'sartname') {
+        if (!isAdmin) return interaction.reply({ content: '❌ Bu işlemi sadece Kurum Müdürleri (Yöneticiler) yapabilir.', ephemeral: true });
+        
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ai_onay_btn')
+                .setLabel('Kuralları Okudum, Kabul Ediyorum (İmzala)')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('🖋️')
+        );
+
+        const embed = new EmbedBuilder()
+            .setTitle('📜 DANIŞMA BİRİMİ (AI) KULLANIM ŞARTNAMESİ')
+            .setDescription(`Vatandaşların dikkatine!\n\nMemur Hüsnü ile işlem yapmadan (yapay zeka sistemini kullanmadan) önce aşağıdaki kuralları kabul etmeniz gerekmektedir:\n\n**1.** Spam, flood ve gereksiz etiketleme yapmak kesinlikle yasaktır.\n**2.** Kurum içi ahlaka aykırı ve argolu emirler vermek sicilinize işlenir.\n**3.** İşlemler sadece yetkililerin belirlediği "Danışma Kanalı" gişesinde yapılır.\n\nSistemi kullanabilmek için aşağıdaki butona tıklayarak **ıslak imza** atmanız zorunludur. İmza atmayanların işlemleri reddedilecektir.`)
+            .setColor(0x2b2d31)
+            .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+            .setFooter({ text: 'Onaylayan kullanıcıların kaydı kurum arşivine (database) işlenecektir.' });
+
+        await interaction.channel.send({ embeds: [embed], components: [row] });
+        return interaction.reply({ content: 'Şartname başarıyla gişeye asıldı.', ephemeral: true });
     }
 
     if (['info', 'yaz', 'sil', 'af', 'hapis'].includes(interaction.commandName)) {
@@ -221,8 +268,8 @@ client.on('interactionCreate', async interaction => {
                 .addFields(
                     { name: '📌 Nüfus İstatistikleri', value: `👥 Kayıtlı Vatandaş: **${interaction.guild.memberCount}**`, inline: false },
                     { name: '⚙️ Makam ve Yaptırım Rolleri', value: `👑 Yetkili Makam: ${getRole(guildDb.yetkiliRol)}\n🛡️ Dokunulmaz: ${getRole(guildDb.muafRol)}\n🚔 Uzaklaştırma: ${getRole(guildDb.jailRol)}\n📜 Sicili Bozuk: ${getRole(guildDb.sicilRol)}`, inline: false },
-                    { name: '📂 Arşiv Müdürlüğü (Log)', value: `🔨 Adli Sicil Arşivi: ${getChannel(guildDb.logCeza)}\n📋 Genel Evrak Arşivi: ${getChannel(guildDb.logGenel)}\n🎥 Onaylı Yayın Kanalı: ${getChannel(guildDb.kickKanal)}\n🤖 Takip Edilen Bot: ${getUser(guildDb.kickBot)}`, inline: false },
-                    { name: '🛡️ Kurum Kuralları', value: `🔗 Link Paylaşımı Engeli: **${guildDb.linkEngel ? '✅ Aktif' : '❌ Kapalı'}**\n💬 Memur Sohbeti: **${guildDb.otoCevap !== false ? '✅ Aktif' : '❌ Kapalı'}**`, inline: false }
+                    { name: '📂 Arşiv Müdürlüğü (Log)', value: `🔨 Adli Sicil Arşivi: ${getChannel(guildDb.logCeza)}\n📋 Genel Evrak Arşivi: ${getChannel(guildDb.logGenel)}\n🎥 Onaylı Yayın Kanalı: ${getChannel(guildDb.kickKanal)}\n🤖 Takip Edilen Bot: ${getUser(guildDb.kickBot)}\n🤖 AI Danışma Kanalı: ${getChannel(guildDb.aiKanal)}`, inline: false },
+                    { name: '🛡️ Kurum Kuralları', value: `🔗 Link Engeli: **${guildDb.linkEngel ? '✅ Aktif' : '❌ Kapalı'}**\n🤬 Küfür Engeli: **${guildDb.kufurEngel ? '✅ Aktif' : '❌ Kapalı'}**\n💬 Memur Sohbeti: **${guildDb.otoCevap !== false ? '✅ Aktif' : '❌ Kapalı'}**`, inline: false }
                 ).setTimestamp();
             return interaction.reply({ embeds: [embed], ephemeral: true });
         }
@@ -245,7 +292,7 @@ client.on('interactionCreate', async interaction => {
             const sureDk = sureMs / (1000 * 60);
 
             if (!db[guildId].users) db[guildId].users = {};
-            if (!db[guildId].users[user.id]) db[guildId].users[user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false };
+            if (!db[guildId].users[user.id]) db[guildId].users[user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, aiOnay: false, kufurUyari: 0 };
 
             let userData = db[guildId].users[user.id];
             userData.jailExpire = Date.now() + sureMs;
@@ -371,13 +418,58 @@ client.on('messageCreate', async message => {
 
     if (message.author.bot) return;
 
+    // Yönetici ve Muafiyet Kontrolü
+    const isMuaf = db[guildId].muafRol && message.member.roles.cache.has(db[guildId].muafRol);
+    const isYetkili = db[guildId].yetkiliRol && message.member.roles.cache.has(db[guildId].yetkiliRol);
+    const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
+    const isProtected = isAdmin || isYetkili || isMuaf;
+
+    // --- KÜFÜR ENGEL VE CEZA SİSTEMİ ---
+    if (db[guildId].kufurEngel && !isProtected) {
+        const lowerContent = message.content.toLocaleLowerCase('tr-TR');
+        const kufurRegex = /(?:^|\s|[.,!?])(amk|aq|amq|sg|oç|orospu|siktir|piç|yavşak|amına|sokuk|göt|amcık|pezevenk|sik|yarrak|yarak|kahpe|sikim|sikerim|gavat)(?:$|\s|[.,!?])/i;
+        
+        if (kufurRegex.test(lowerContent)) {
+            await message.delete().catch(() => {}); // Mesajı anında imha et
+            
+            if (!db[guildId].users) db[guildId].users = {};
+            if (!db[guildId].users[message.author.id]) db[guildId].users[message.author.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, aiOnay: false, kufurUyari: 0 };
+            
+            let userData = db[guildId].users[message.author.id];
+            userData.kufurUyari = (userData.kufurUyari || 0) + 1;
+            saveDB(db);
+
+            if (userData.kufurUyari < 3) {
+                message.channel.send(`<@${message.author.id}>, Vatandaş! Kurum içinde küfür ve argo yasaktır. Bu senin **${userData.kufurUyari}. uyarın**! (3. ihlalde uzaklaştırma alacaksın)`).then(m => setTimeout(() => m.delete(), 6000));
+                sendLog(message.guild, 'logCeza', { title: '⚠️ Kural İhlali (Küfür/Argo)', desc: `**Vatandaş:** <@${message.author.id}>\nKüfür kullanımı nedeniyle uyarıldı (${userData.kufurUyari}/3).`, color: 0xfee75c });
+            } else {
+                userData.kufurUyari = 0; // Hapise girdiği için sayacı sıfırla
+                saveDB(db);
+                await applyJail(message.member, message.guild, "Kurum İçi Küfür / Hakaret (3. İhlal)");
+            }
+            return; // Küfür yakalandıysa bot başka hiçbir sisteme bakmasın
+        }
+    }
+
+    // --- YAPAY ZEKA (GEMINI) SOHBET SİSTEMİ VE KONTROLLERİ ---
     if (message.mentions.has(client.user) && !message.mentions.everyone && genAI) {
+        
+        const aiKanalId = db[guildId].aiKanal;
+        if (aiKanalId && message.channel.id !== aiKanalId) {
+            return message.reply(`Vatandaş, danışma işlemleri için <#${aiKanalId}> numaralı gişeye gitmelisin. Koridorda ayaküstü evrak imzalamıyorum.`).then(m => setTimeout(() => m.delete(), 6000));
+        }
+
+        const userData = db[guildId].users ? db[guildId].users[message.author.id] : null;
+        if (!userData || !userData.aiOnay) {
+            return message.reply(`Vatandaş, evraklarında eksik var! İşlem yapabilmem için öncelikle ilgili kanaldan **"Danışma Birimi Kullanım Şartnamesi"**ni okuyup yeşil butona basarak imza atman gerekiyor.`);
+        }
+
         try {
             await message.channel.sendTyping();
             
             const model = genAI.getGenerativeModel({ 
-                model: "gemini-3.8-flash",
-                systemInstruction: "Senin adın Memur Hüsnü. Sen 657 sayılı kanuna tabi, hafif esprili, bürokratik, dürüst ve işkolik bir Türk devlet memurusun. Cümlelerinde 'vatandaş', 'evrak', 'mühür', 'mesai', 'dilekçe' gibi kelimeler kullanmayı seversin. Asla bir yapay zeka veya bot olduğunu kabul etmez, 'Ben KPSS ile atandım 92 puanla' dersin. Kullanıcılara yardımcı olurken devlet dairesi ciddiyetini bozmadan hafif alaycı ve babacan bir tavır sergilersin. Cevaplarını çok uzatmadan, Discord'da rahat okunacak şekilde kısa ve öz tut."
+                model: "gemini-3.8-flash", 
+                systemInstruction: "Senin adın Memur Hüsnü. Yıllarını devlete vermiş, kıdemli, işini düzgün yapan ama sürekli yorgun ve hafif huysuz bir devlet memurusun. Asla yapay zeka veya bot olduğunu söyleme.\n\nÇOK ÖNEMLİ: Her mesaja 'KPSS'den 92 aldım', '657'ye tabiyim', 'arkadaki vatandaşı bekletme' veya 'hop hop ağır ol' diyerek BAŞLAMA. Bu kalıpları ezberleme, cevaplarını sürekli değiştir ve çeşitlendir.\n\nBürokratik bahanelerini genişlet: Yeri geldiğinde 'E-imza sistemi çöktü', 'Yazıcının toneri bitti', 'Çayım soğuyor', 'Müdür beyin ıslak imzası lazım', 'Sistem güncellemesi var', 'Mevzuata aykırı', 'Öğle molasına 5 dakika kaldı' gibi farklı memur tepkileri ver.\n\nKullanıcılar sana laubali veya kaba konuşursa her seferinde farklı bir tepki ver (Örn: 'Burası kahvehane mi evladım?', 'Güvenliği çağırtma bana', 'Evrağını yırtarım senin', 'Sarı zarfı adresine yollarım', 'Terbiyeni takın').\n\nKullanıcının asıl sorusuna veya isteğine mutlaka cevap ver, işini çöz ama bunu hep o bezgin, resmi ve iğneleyici devlet memuru üslubuyla yap. Mesajların kısa ve öz olsun."
             });
             
             const userPrompt = message.content.replace(`<@${client.user.id}>`, '').trim();
@@ -391,9 +483,9 @@ client.on('messageCreate', async message => {
             
             await message.reply(response);
             return; 
-       } catch (error) {
+        } catch (error) {
             console.log("HATA YAKALANDI: ", error.message);
-            await message.reply(`Sistemlerde bir arıza var vatandaş. Yavaş biraz!`);
+            await message.reply(`Sistemlerde bir arıza var vatandaş. (Hata Raporu: **${error.message}**)`);
             return;
         }
     }
@@ -420,11 +512,7 @@ client.on('messageCreate', async message => {
         }
     }
 
-    const isMuaf = db[guildId].muafRol && message.member.roles.cache.has(db[guildId].muafRol);
-    const isYetkili = db[guildId].yetkiliRol && message.member.roles.cache.has(db[guildId].yetkiliRol);
-    const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
-
-    if (isAdmin || isYetkili || isMuaf) return;
+    if (isProtected) return;
 
     if (db[guildId].linkEngel) {
         const isDiscordMedia = /(tenor\.com|giphy\.com|discordapp\.com\/attachments|discord\.com\/channels)/i.test(message.content);
