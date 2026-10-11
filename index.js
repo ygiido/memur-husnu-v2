@@ -20,7 +20,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User]
 });
 
-// YENİ: Yapay Zeka Kurulumu
+// Yapay Zeka Kurulumu
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
 const dbPath = './database.json';
@@ -120,6 +120,14 @@ setInterval(() => {
 client.once('ready', async () => {
     console.log(`🤖 Sistem aktif! ${client.user.tag} (Evrak Kayıt) giriş yaptı.`);
     
+    // --- YAPAY ZEKA BAĞLANTI TESTİ ---
+    if (process.env.GEMINI_API_KEY) {
+        console.log("✅ Yapay Zeka (Gemini) başarıyla bağlandı!");
+    } else {
+        console.log("❌ DİKKAT: GEMINI_API_KEY bulunamadı! Yapay zeka çalışmayacak. Lütfen Render ortam değişkenlerini kontrol edin.");
+    }
+    // ---------------------------------
+
     const commands = [
         {
             name: 'ayar',
@@ -368,7 +376,7 @@ client.on('messageCreate', async message => {
 
     if (message.author.bot) return;
 
-    // --- YENİ: YAPAY ZEKA (GEMINI) SOHBET SİSTEMİ ---
+    // --- YAPAY ZEKA (GEMINI) SOHBET SİSTEMİ ---
     if (message.mentions.has(client.user) && !message.mentions.everyone && genAI) {
         try {
             await message.channel.sendTyping();
@@ -389,7 +397,7 @@ client.on('messageCreate', async message => {
             const response = result.response.text();
             
             await message.reply(response);
-            return; // Yapay zeka cevap verirse, aşağıdaki basit kelime oyunlarına girmesine gerek kalmaz
+            return; 
         } catch (error) {
             console.error("Yapay Zeka Hatası:", error);
             await message.reply("Sistemlerde şu an bir arıza var vatandaş, e-devlet çökmüş olabilir. Daha sonra tekrar dene.");
@@ -459,7 +467,7 @@ client.on('messageCreate', async message => {
     }
 });
 
-// LOG EVENTLERİ (Önceki sistemin aynısı, eksiksiz korunmuştur)
+// LOG EVENTLERİ
 client.on('guildUpdate', (oldGuild, newGuild) => { if (oldGuild.name !== newGuild.name) sendLog(newGuild, 'logGenel', { title: '🏢 Kurum Adı Güncellendi', desc: `Eski: **${oldGuild.name}**\nYeni: **${newGuild.name}**`, color: 0x3498db }); if (oldGuild.icon !== newGuild.icon) sendLog(newGuild, 'logGenel', { title: '🖼️ Kurum Logosu Değişti', desc: `Sunucu ikonu güncellendi.`, color: 0x3498db, thumbnail: newGuild.iconURL() }); });
 client.on('roleCreate', role => { sendLog(role.guild, 'logGenel', { title: '🏷️ Yeni Rol (Makam) Oluşturuldu', desc: `<@&${role.id}> (\`${role.name}\`)`, color: 0x57f287 }); });
 client.on('roleDelete', role => { sendLog(role.guild, 'logGenel', { title: '🗑️ Rol (Makam) İptal Edildi', desc: `**${role.name}** rolü silindi.`, color: 0xed4245 }); });
@@ -487,27 +495,3 @@ client.on('messageDelete', message => {
 });
 client.on('messageDeleteBulk', messages => {
     const guild = messages.first().guild;
-    const channel = messages.first().channel;
-    sendLog(guild, 'logGenel', { title: '🧹 Toplu Dosya İmhası', desc: `<#${channel.id}> departmanında **${messages.size}** adet belge topluca silindi.`, color: 0xed4245 });
-});
-client.on('messageUpdate', (oldMessage, newMessage) => {
-    if (!oldMessage.guild || oldMessage.author?.bot) return;
-    if (oldMessage.content === newMessage.content) return;
-    sendLog(oldMessage.guild, 'logGenel', { title: '✏️ Belge Üzerinde Oynama Yapıldı', desc: `**Yazan:** <@${oldMessage.author.id}>\n**Kanal:** <#${oldMessage.channel.id}>\n\n**Eski Hal:**\n${oldMessage.content || '[Yok]'}\n\n**Yeni Hal:**\n${newMessage.content || '[Yok]'}`, color: 0xfee75c });
-});
-client.on('voiceStateUpdate', (oldState, newState) => {
-    if (oldState.member.user.bot) return;
-    if (!oldState.channelId && newState.channelId) sendLog(newState.guild, 'logSes', { title: '🔊 Toplantıya Katıldı', desc: `<@${newState.member.id}>, <#${newState.channel.id}> odasına giriş yaptı.`, color: 0x57f287 });
-    else if (oldState.channelId && !newState.channelId) sendLog(oldState.guild, 'logSes', { title: '🔇 Toplantıdan Ayrıldı', desc: `<@${oldState.member.id}>, <#${oldState.channel.id}> odasından çıkış yaptı.`, color: 0xed4245 });
-    else if (oldState.channelId !== newState.channelId) sendLog(newState.guild, 'logSes', { title: '🔀 Oda Değiştirdi', desc: `<@${newState.member.id}>, <#${oldState.channel.id}> odasından <#${newState.channel.id}> odasına geçti.`, color: 0xfee75c });
-    if (!oldState.serverMute && newState.serverMute) sendLog(newState.guild, 'logSes', { title: '🔇 Söz Hakkı Alındı', desc: `<@${newState.member.id}> makam tarafından zorla susturuldu.`, color: 0xed4245 });
-    if (oldState.serverMute && !newState.serverMute) sendLog(newState.guild, 'logSes', { title: '🔊 Söz Hakkı Geri Verildi', desc: `<@${newState.member.id}> vatandaşının ses engeli kaldırıldı.`, color: 0x57f287 });
-    if (!oldState.selfMute && newState.selfMute) sendLog(newState.guild, 'logSes', { title: '🎙️ Mikrofonunu Kapattı', desc: `<@${newState.member.id}> mikrofonunu kapattı.`, color: 0xfee75c });
-    if (oldState.selfMute && !newState.selfMute) sendLog(newState.guild, 'logSes', { title: '🎙️ Mikrofonunu Açtı', desc: `<@${newState.member.id}> mikrofonunu açtı.`, color: 0x57f287 });
-    if (!oldState.streaming && newState.streaming) sendLog(newState.guild, 'logSes', { title: '📺 Dosya Paylaşımı (Ekran) Açtı', desc: `<@${newState.member.id}> toplantıda ekran yayını başlattı.`, color: 0x3498db });
-    if (oldState.streaming && !newState.streaming) sendLog(newState.guild, 'logSes', { title: '📺 Ekran Yayınını Kapattı', desc: `<@${newState.member.id}> ekran yayınını sonlandırdı.`, color: 0xed4245 });
-    if (!oldState.selfVideo && newState.selfVideo) sendLog(newState.guild, 'logSes', { title: '📷 Kamera Açtı', desc: `<@${newState.member.id}> toplantıda kamerasını açtı.`, color: 0x3498db });
-    if (oldState.selfVideo && !newState.selfVideo) sendLog(newState.guild, 'logSes', { title: '📷 Kamerayı Kapattı', desc: `<@${newState.member.id}> kamerasını kapattı.`, color: 0xed4245 });
-});
-
-client.login(process.env.TOKEN);
