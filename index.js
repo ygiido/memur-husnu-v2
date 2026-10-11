@@ -485,7 +485,7 @@ client.on('messageCreate', async message => {
             return; 
         } catch (error) {
             console.log("HATA YAKALANDI: ", error.message);
-            await message.reply(`Sistemlerde bir arıza var vatandaş. (Hata Raporu: **${error.message}**)`);
+            await message.reply(`Sistemlerde bir arıza var vatandaş. Biraz yavaş be!`);
             return;
         }
     }
