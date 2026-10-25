@@ -9,6 +9,7 @@ const fs = require('fs');
 const http = require('http');
 require('dotenv').config();
 
+// Render vb. bulut sunucularda botun aktif kalması için HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 http.createServer((req, res) => res.end('Bot aktif.')).listen(serverPort);
 
@@ -28,6 +29,7 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User, Partials.Reaction]
 });
 
+// Veritabanı (JSON) Okuma ve Kaydetme Fonksiyonları
 const dbPath = './database.json';
 if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
 const getDB = () => {
@@ -36,10 +38,12 @@ const getDB = () => {
 };
 const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
 
+// Geçici Hafıza Haritaları (Spam, Davet, Ses Süresi ve Cooldown Takibi)
 const spamMap = new Map();
 const invitesCache = new Map();
 const voiceTimerMap = new Map();
 const vcCooldownMap = new Map();
+const renameCooldownMap = new Map();
 
 function ensureGuildDB(db, guildId) {
     if (!db[guildId]) db[guildId] = {};
@@ -155,6 +159,7 @@ const otoCevaplar = [
     { tetikleyiciler: ["lan", "sus", "kes", "aptal", "mal", "salak"], cevaplar: ["Lütfen üslubumuza dikkat edelim.", "Birbirimize karşı daha saygılı olalım."], etiketle: true, tamKelime: true }
 ];
 
+// Denetim Kaydından (Audit Log) İşlemi Yapan Yetkiliyi Bulma Fonksiyonu
 async function getAuditExecutor(guild, actionType, targetId = null) {
     try {
         const fetchedLogs = await guild.fetchAuditLogs({ limit: 5, type: actionType });
@@ -169,6 +174,7 @@ async function getAuditExecutor(guild, actionType, targetId = null) {
     }
 }
 
+// Log Kanalına Embed Gönderme Fonksiyonu
 async function sendLog(guild, logCategory, options, files = []) {
     if (!guild) return;
     const db = getDB();
@@ -189,6 +195,7 @@ async function sendLog(guild, logCategory, options, files = []) {
     }
 }
 
+// Otomatik Hapis (Jail) Uygulama Fonksiyonu
 async function applyJail(member, guild, reason) {
     if (!member || !guild) return;
     const db = getDB();
@@ -219,6 +226,7 @@ async function applyJail(member, guild, reason) {
     });
 }
 
+// Küfür Uyarısı ve 3. İhlalde Hapis Fonksiyonu
 async function handleProfanity(message, db, guildId) {
     await message.delete().catch(() => {});
     ensureGuildDB(db, guildId);
@@ -268,7 +276,7 @@ function buildHomeDashboard(guild) {
             `**2. Log Ayarları Butonu**\n` +
             `Sunucuda gerçekleşen tüm olayları 6 ayrı kategoride (Ceza, Mesaj, Ses, Üye, Sunucu, Güvenlik) hangi kanallara raporlanacağını buradan belirleyebilirsiniz.\n\n` +
             `**3. Ticket Kurulumu Butonu**\n` +
-            `İstediğiniz kanala özel destek veya başvuru kutusu kurmanızı sağlar. Kategori ve kanal seçtiğinizde ekrana açılan pencereden (Form) tüm başlıkları ve mesajları kendi istediğiniz gibi yazabilirsiniz.\n\n` +
+            `İstediğiniz kanala özel destek veya başvuru kutusu kurmanızı sağlar. Üyeler butona bastığında karşılarına bir başvuru formu (Modal) çıkar; konu ve açıklamayı yazıp onayladıklarında özel kanal açılır.\n\n` +
             `**4. Komutlar ve Yetki Dağılımı**\n` +
             `- \`/panel\` : Bu yönetim ekranını açar (Sadece Sunucu Yöneticileri).\n` +
             `- \`/yaz\` : Bot üzerinden kanala duyuru/mesaj yazar (Sadece Sunucu Yöneticileri).\n` +
@@ -292,7 +300,7 @@ function buildAyarDashboard(guildDb) {
         .setDescription(
             `Aşağıdaki açılır menüden değiştirmek istediğiniz ayarı seçin. Seçtiğinizde hemen altında ilgili rol veya kanal seçme listesi belirecektir.\n\n` +
             `**Rollerin Görevleri:**\n` +
-            `- **Yetkili Rolü:** \`/hapis\`, \`/af\`, \`/sil\` komutlarını kullanabilen ve açılan Ticket taleplerini yönetebilen moderatör rolüdür.\n` +
+            `- **Yetkili Rolü:** \`/hapis\`, \`/af\`, \`/sil\` komutlarını kullanabilen ve açılan Ticket taleplerini yönetebilen tekil moderatör rolüdür.\n` +
             `- **Muaf Rolü:** Küfür, link, büyük harf (Caps Lock) ve spam korumasından etkilenmeyecek üyelere verilen roldür.\n` +
             `- **Cezalı (Jail) Rolü:** Ceza alan üyelere verilen roldür (Kanal izinlerinden bu rolün mesaj yazmasını kapatmanız önerilir).\n` +
             `- **Sicilli Rolü:** 10 dakikadan uzun ceza alanlara veya kuralları sürekli ihlal edenlere kalıcı olarak verilen roldür.`
@@ -315,7 +323,7 @@ function buildAyarDashboard(guildDb) {
                 { label: 'Sicilli Rolü Seç', description: 'Sicili bozulan kullanıcılara verilecek uyarı rolü.', value: 'sicilRol' },
                 { label: 'Geçici Oda Oluşturucu Ses Kanalı Seç', description: 'Üyelerin tıkladığında kendilerine özel oda açacağı ses kanalı.', value: 'odaKanal' },
                 { label: 'Geçici Oda Kategorisi Seç', description: 'Açılan özel ses odalarının altında toplanacağı kategori.', value: 'odaKategori' },
-                { label: 'Kick Duyuru Kanalı Seç', description: 'Kick yayın bildirimlerinin @everyone ile paylaşılacağı kanal.', value: 'kickKanal' },
+                { label: 'Kick Duyuru Kanalı Seç', description: 'Kick yayın bildirimlerinin @everyone ile paylaşılacağı kanal (Duyuru kanalı destekli).', value: 'kickKanal' },
                 { label: 'Kick Bildirim Botu Seç', description: 'Attığı mesaj yakalanıp duyuruya çevrilecek Kick botu.', value: 'kickBot' },
                 { label: 'Link Engeli (Aç / Kapat)', description: `Dış link paylaşımını engeller. (Şu an: ${guildDb.linkEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_link' },
                 { label: 'Küfür Engeli (Aç / Kapat)', description: `Küfürleri siler, 3. uyarıda hapse atar. (Şu an: ${guildDb.kufurEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_kufur' },
@@ -374,15 +382,12 @@ function buildTicketDashboard(guildDb) {
         .setTitle('Destek / Başvuru (Ticket) Paneli Kurulum Rehberi')
         .setDescription(
             `Sunucunuzda istediğiniz kadar farklı kanala (Örn: \`#destek\`, \`#yetkili-basvuru\`, \`#sikayet\`) birbirinden bağımsız Ticket panelleri kurabilirsiniz.\n\n` +
-            `**Kurulum Nasıl Yapılır?**\n` +
-            `**1. Adım:** Aşağıdaki ilk menüden, üyeler butona bastığında açılacak özel destek kanallarının hangi **Kategorinin (Klasörün)** altında toplanacağını seçin.\n` +
-            `**2. Adım:** İkinci menüden, hazırlayacağınız Ticket kutusunun (panelin) hangi **Metin Kanalına** gönderileceğini seçin.\n\n` +
-            `**3. Adım (Otomatik Açılan Form Penceresi):**\n` +
-            `Metin kanalını seçtiğiniz anda ekranınıza 4 kutucuklu bir pencere açılacaktır:\n` +
-            `- **Panel Başlığı:** Kanalda duracak olan ana kutunun en üstündeki kalın başlıktır.\n` +
-            `- **Panel Açıklaması:** Kutunun içinde üyelerin okuyacağı bilgilendirme yazısıdır.\n` +
-            `- **Buton Yazısı:** Üyelerin tıklayacağı butonun üzerindeki metindir (Örn: Talep Oluştur).\n` +
-            `- **Bilet İçi Karşılama Mesajı:** Üye butona basıp kendine özel kanal açıldığında, botun o yeni kanalın içine göndereceği ilk mesajdır.\n\n` +
+            `**Kullanıcı Deneyimi Nasıl Çalışır?**\n` +
+            `Üye kurduğunuz butona tıkladığında karşısına bir **Başvuru / Talep Formu (Modal)** çıkar. Bu formda **"Talep Konusu (Başvuru / Destek / Diğer)"** ve **"Detaylı Açıklama"** kısımlarını doldurup onayladığında kendisine özel kanal açılır ve yazdığı bilgiler yetkililerin önüne ilk mesaj olarak düşer.\n\n` +
+            `**Kurulum Adımları:**\n` +
+            `**1. Adım:** Aşağıdaki ilk menüden, açılacak özel destek kanallarının hangi **Kategorinin (Klasörün)** altında toplanacağını seçin.\n` +
+            `**2. Adım:** İkinci menüden, Ticket kutusunun gönderileceği **Metin veya Duyuru Kanalını** seçin.\n` +
+            `**3. Adım (Form Penceresi):** Kanalı seçtiğiniz anda açılacak pencerede kutunun başlığını, açıklamasını, buton yazısını ve bilet içi karşılama mesajını onaylayın.\n\n` +
             `**Şu An Seçili Kategori:** ${selectedCat}`
         )
         .setColor(0x2b2d31);
@@ -401,8 +406,8 @@ function buildTicketDashboard(guildDb) {
         const chRow = new ActionRowBuilder().addComponents(
             new ChannelSelectMenuBuilder()
                 .setCustomId(`select_ticket_kur_ch_${guildDb.tempTicketCat}`)
-                .setPlaceholder('2. Adım: Panelin gönderileceği metin kanalını seçin (Form açılır)...')
-                .setChannelTypes([ChannelType.GuildText])
+                .setPlaceholder('2. Adım: Panelin gönderileceği kanalı seçin (Form açılır)...')
+                .setChannelTypes([ChannelType.GuildText, ChannelType.GuildAnnouncement])
                 .setMaxValues(1)
         );
         components.push(chRow);
@@ -484,7 +489,7 @@ function buildTempVoiceEmbed(roomData) {
         .setTimestamp();
 }
 
-// Otomatik Tahliye Döngüsü
+// Otomatik Tahliye Döngüsü (Her 30 saniyede bir ceza süresi dolanları kontrol eder)
 setInterval(() => {
     const db = getDB();
     const now = Date.now();
@@ -625,7 +630,8 @@ client.on('interactionCreate', async interaction => {
     const guildId = interaction.guildId;
     ensureGuildDB(db, guildId);
 
-    const isYetkili = db[guildId].yetkiliRol && interaction.member.roles.cache.has(db[guildId].yetkiliRol);
+    // Tekli Yetkili Rolü ve Yönetici Kontrolü
+    const isYetkili = Boolean(db[guildId].yetkiliRol && interaction.member.roles.cache.has(db[guildId].yetkiliRol));
     const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
     // ------------------------------------------------------------------------
@@ -790,8 +796,9 @@ client.on('interactionCreate', async interaction => {
                 return interaction.update(panelData);
             }
 
+            // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği Eklendi
             const chTypeMap = {
-                'kickKanal': [ChannelType.GuildText],
+                'kickKanal': [ChannelType.GuildText, ChannelType.GuildAnnouncement],
                 'odaKanal': [ChannelType.GuildVoice],
                 'odaKategori': [ChannelType.GuildCategory]
             };
@@ -816,8 +823,8 @@ client.on('interactionCreate', async interaction => {
             const chSelect = new ActionRowBuilder().addComponents(
                 new ChannelSelectMenuBuilder()
                     .setCustomId(`set_log_ch_${logKey}`)
-                    .setPlaceholder('Bu log kategorisi için metin kanalını seçin...')
-                    .setChannelTypes([ChannelType.GuildText])
+                    .setPlaceholder('Bu log kategorisi için metin veya duyuru kanalını seçin...')
+                    .setChannelTypes([ChannelType.GuildText, ChannelType.GuildAnnouncement])
                     .setMaxValues(1)
             );
             const panelData = buildLogDashboard(db[guildId]);
@@ -910,15 +917,17 @@ client.on('interactionCreate', async interaction => {
 
             const titleInput = new TextInputBuilder()
                 .setCustomId('t_baslik')
-                .setLabel('Panel Başlığı (Kanaldaki kutunun üst başlığı)')
+                .setLabel('Panel Başlığı (Kutunun en üst başlığı)')
                 .setValue('Destek ve Başvuru Merkezi')
+                .setMaxLength(250)
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true);
 
             const descInput = new TextInputBuilder()
                 .setCustomId('t_aciklama')
                 .setLabel('Panel Açıklaması (Kutunun içindeki yazı)')
-                .setValue('Yetkililerle iletişime geçmek, başvuruda bulunmak veya destek almak için aşağıdaki butona tıklayabilirsiniz.')
+                .setValue('Yetkililerle iletişime geçmek, başvuruda bulunmak veya destek almak için aşağıdaki butona tıklayarak formu doldurabilirsiniz.')
+                .setMaxLength(2000)
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(true);
 
@@ -926,13 +935,15 @@ client.on('interactionCreate', async interaction => {
                 .setCustomId('t_buton')
                 .setLabel('Buton Metni (Tıklanacak butonun yazısı)')
                 .setValue('Talep Oluştur')
+                .setMaxLength(80)
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true);
 
             const welcomeInput = new TextInputBuilder()
                 .setCustomId('t_ic_mesaj')
                 .setLabel('Bilet İçi Mesaj (Oda açılınca yazacak mesaj)')
-                .setValue('Talebiniz oluşturuldu. Lütfen konuyu detaylı bir şekilde buraya yazın, yetkililer en kısa sürede sizinle ilgilenecektir.')
+                .setValue('Talebiniz ve ilettiğiniz bilgiler aşağıda yer almaktadır. Yetkililerimiz en kısa sürede sizinle ilgilenecektir.')
+                .setMaxLength(1500)
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(true);
 
@@ -1063,77 +1074,44 @@ client.on('interactionCreate', async interaction => {
 
         // --- TICKET (DESTEK) BUTONLARI ---
         if (customId.startsWith('ticket_')) {
+            // Kullanıcı "Talep Oluştur" butonuna bastığında Ön Form (Modal) açılır
             if (customId.startsWith('ticket_create_')) {
                 const panelKey = customId.replace('ticket_create_', '');
-                const panelConfig = db[guildId].ticketPanels ? db[guildId].ticketPanels[panelKey] : null;
 
-                let customCatId = null;
-                let welcomeMsg = 'Talebiniz oluşturuldu. Lütfen konuyu detaylı bir şekilde buraya yazın, yetkililer en kısa sürede sizinle ilgilenecektir.';
-                let panelTitle = 'Destek ve Başvuru Kanalı';
-
-                if (panelConfig) {
-                    customCatId = panelConfig.catId !== 'none' ? panelConfig.catId : null;
-                    if (panelConfig.welcomeMsg) welcomeMsg = panelConfig.welcomeMsg;
-                    if (panelConfig.title) panelTitle = panelConfig.title;
-                }
-
-                // Aynı kullanıcının aynı panelde açık talebi var mı kontrol et
                 const existingTicket = Object.values(db[guildId].tickets).find(t => t.ownerId === interaction.user.id && t.panelKey === panelKey);
                 if (existingTicket && interaction.guild.channels.cache.has(existingTicket.channelId)) {
                     return interaction.reply({ content: `Bu birimde zaten açık bir talebiniz bulunuyor: <#${existingTicket.channelId}>`, ephemeral: true });
                 }
 
-                const overwrites = [
-                    { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                    { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] },
-                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ReadMessageHistory] }
-                ];
-                if (db[guildId].yetkiliRol) {
-                    overwrites.push({ id: db[guildId].yetkiliRol, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ReadMessageHistory] });
-                }
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_ticket_open_${panelKey}`)
+                    .setTitle('Destek ve Başvuru Formu');
 
-                try {
-                    const ticketChannel = await interaction.guild.channels.create({
-                        name: `talep-${interaction.user.username}`,
-                        type: ChannelType.GuildText,
-                        parent: customCatId,
-                        permissionOverwrites: overwrites
-                    });
+                const subjectInput = new TextInputBuilder()
+                    .setCustomId('t_user_konu')
+                    .setLabel('Ne için talep açıyorsunuz? (Konu Başlığı)')
+                    .setPlaceholder('Örn: Yetkili Başvurusu / Destek Talebi / Şikayet / Diğer')
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(100)
+                    .setRequired(true);
 
-                    db[guildId].tickets[ticketChannel.id] = {
-                        ownerId: interaction.user.id,
-                        channelId: ticketChannel.id,
-                        panelKey: panelKey,
-                        claimedBy: null,
-                        locked: false,
-                        createdAt: Date.now()
-                    };
-                    saveDB(db);
+                const detailInput = new TextInputBuilder()
+                    .setCustomId('t_user_detay')
+                    .setLabel('Talebinizi detaylıca açıklayın')
+                    .setPlaceholder('Yetkililerin size hızlıca yardımcı olabilmesi için tüm detayları buraya yazın...')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setMaxLength(1500)
+                    .setRequired(true);
 
-                    const embed = new EmbedBuilder()
-                        .setTitle(panelTitle)
-                        .setDescription(`Merhaba <@${interaction.user.id}>,\n\n${welcomeMsg}`)
-                        .setColor(0x2b2d31)
-                        .setTimestamp();
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(subjectInput),
+                    new ActionRowBuilder().addComponents(detailInput)
+                );
 
-                    const row = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('ticket_claim').setLabel('Talebi Üstlen').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId('ticket_lock').setLabel('Kilitle / Aç').setStyle(ButtonStyle.Secondary),
-                        new ButtonBuilder().setCustomId('ticket_add').setLabel('Üye Ekle').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('ticket_remove').setLabel('Üye Çıkar').setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat ve Arşivle').setStyle(ButtonStyle.Danger)
-                    );
-
-                    const mentionText = db[guildId].yetkiliRol ? `<@${interaction.user.id}> | <@&${db[guildId].yetkiliRol}>` : `<@${interaction.user.id}>`;
-                    await ticketChannel.send({ content: mentionText, embeds: [embed], components: [row] });
-
-                    sendLog(interaction.guild, 'logSunucu', { title: 'Yeni Ticket Açıldı', desc: `**Açan Kullanıcı:** <@${interaction.user.id}>\n**Kanal:** <#${ticketChannel.id}>\n**Birim:** ${panelTitle}`, color: 0x57f287 });
-                    return interaction.reply({ content: `Talebiniz oluşturuldu: <#${ticketChannel.id}>`, ephemeral: true });
-                } catch (e) {
-                    return interaction.reply({ content: 'Kanal oluşturulurken bir yetki veya kategori hatası oluştu.', ephemeral: true });
-                }
+                return interaction.showModal(modal);
             }
 
+            // Kanal içi yönetim butonları (Sadece Yetkili Rol ve Yöneticiler)
             if (!isAdmin && !isYetkili) {
                 return interaction.reply({ content: 'Bu butonları sadece yetkililer kullanabilir.', ephemeral: true });
             }
@@ -1141,21 +1119,36 @@ client.on('interactionCreate', async interaction => {
             const ticketData = db[guildId].tickets[interaction.channel.id];
             if (!ticketData) return interaction.reply({ content: 'Bu kanal kayıtlı bir ticket kanalı değil.', ephemeral: true });
 
+            // Rate Limit'e takılmayan güvenli "Talebi Üstlen" (Claim) sistemi
             if (customId === 'ticket_claim') {
                 if (ticketData.claimedBy === interaction.user.id) {
                     return interaction.reply({ content: 'Bu talebi zaten siz üstlendiniz.', ephemeral: true });
                 }
                 ticketData.claimedBy = interaction.user.id;
                 saveDB(db);
-                await interaction.channel.setName(`destek-${interaction.user.username}`).catch(() => {});
-                return interaction.reply({ content: `Bu destek talebi <@${interaction.user.id}> tarafından üstlenildi.` });
+
+                if (interaction.message && interaction.message.embeds.length > 0) {
+                    const oldEmbed = interaction.message.embeds[0];
+                    const newEmbed = EmbedBuilder.from(oldEmbed);
+                    const fields = newEmbed.data.fields ? [...newEmbed.data.fields] : [];
+                    const claimIdx = fields.findIndex(f => f.name === 'İlgilenen Yetkili');
+                    if (claimIdx !== -1) {
+                        fields[claimIdx].value = `<@${interaction.user.id}>`;
+                    } else {
+                        fields.push({ name: 'İlgilenen Yetkili', value: `<@${interaction.user.id}>`, inline: true });
+                    }
+                    newEmbed.setFields(fields);
+                    await interaction.message.edit({ embeds: [newEmbed] }).catch(() => {});
+                }
+
+                return interaction.reply({ content: `Bu destek talebi <@${interaction.user.id}> tarafından üstlenildi. Yetkilimiz sizinle ilgilenecektir.` });
             }
 
             if (customId === 'ticket_lock') {
                 ticketData.locked = !ticketData.locked;
                 saveDB(db);
                 await interaction.channel.permissionOverwrites.edit(ticketData.ownerId, { SendMessages: !ticketData.locked }).catch(() => {});
-                return interaction.reply({ content: ticketData.locked ? 'Kanal kilitlendi (Kullanıcı mesaj yazamaz).' : 'Kanal kilidi açıldı.' });
+                return interaction.reply({ content: ticketData.locked ? 'Kanal kilitlendi (Talep sahibi mesaj yazamaz).' : 'Kanal kilidi açıldı.' });
             }
 
             if (customId === 'ticket_add') {
@@ -1178,6 +1171,8 @@ client.on('interactionCreate', async interaction => {
                     `TICKET KONUŞMA DÖKÜMÜ (ARŞİV)`,
                     `Kanal Adı       : ${interaction.channel.name}`,
                     `Talep Sahibi ID : ${ticketData.ownerId}`,
+                    `Talep Konusu    : ${ticketData.subject || 'Belirtilmedi'}`,
+                    `Talep Açıklaması: ${ticketData.details || 'Belirtilmedi'}`,
                     `Üstlenen Yetkili: ${ticketData.claimedBy ? ticketData.claimedBy : 'Üstlenilmedi'}`,
                     `Kapatan Yetkili : ${interaction.user.tag} (${interaction.user.id})`,
                     `Kapanış Tarihi  : ${new Date().toLocaleString('tr-TR')}`,
@@ -1187,7 +1182,7 @@ client.on('interactionCreate', async interaction => {
 
                 for (const m of sortedMessages) {
                     const timeStr = new Date(m.createdTimestamp).toLocaleString('tr-TR');
-                    const content = m.content || (m.embeds.length > 0 ? '[Sistem Paneli / Embed]' : '[Görsel / Dosya]');
+                    const content = m.content || (m.embeds.length > 0 ? '[Sistem Paneli / Başvuru Kartı]' : '[Görsel / Dosya]');
                     const attachmentUrls = m.attachments.size > 0 ? ` [Ekler: ${m.attachments.map(a => a.url).join(', ')}]` : '';
                     txtLines.push(`[${timeStr}] ${m.author.tag}: ${content}${attachmentUrls}`);
                 }
@@ -1197,7 +1192,7 @@ client.on('interactionCreate', async interaction => {
 
                 sendLog(interaction.guild, 'logMesaj', {
                     title: 'Ticket Kapatıldı ve Arşivlendi',
-                    desc: `**Kanal:** \`${interaction.channel.name}\`\n**Talep Sahibi:** <@${ticketData.ownerId}>\n**Üstlenen Yetkili:** ${ticketData.claimedBy ? `<@${ticketData.claimedBy}>` : 'Yok'}\n**Kapatan Yetkili:** <@${interaction.user.id}>\n**Arşivlenen Mesaj:** ${sortedMessages.length} adet`,
+                    desc: `**Kanal:** \`${interaction.channel.name}\`\n**Talep Sahibi:** <@${ticketData.ownerId}>\n**Konu:** ${ticketData.subject || 'Belirtilmedi'}\n**Üstlenen Yetkili:** ${ticketData.claimedBy ? `<@${ticketData.claimedBy}>` : 'Yok'}\n**Kapatan Yetkili:** <@${interaction.user.id}>\n**Arşivlenen Mesaj:** ${sortedMessages.length} adet`,
                     color: 0xed4245
                 }, [attachment]);
 
@@ -1210,9 +1205,10 @@ client.on('interactionCreate', async interaction => {
     }
 
     // ------------------------------------------------------------------------
-    // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU & TEMP VC)
+    // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA & TEMP VC)
     // ------------------------------------------------------------------------
     if (interaction.isModalSubmit()) {
+        // Yöneticinin Ticket Paneli Kurma Formu
         if (interaction.customId.startsWith('modal_ticket_kur_')) {
             const parts = interaction.customId.replace('modal_ticket_kur_', '').split('_');
             const chId = parts[0];
@@ -1252,6 +1248,91 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: `Ticket paneli <#${targetChannel.id}> kanalına başarıyla kuruldu.`, ephemeral: true });
         }
 
+        // Kullanıcının Ön Formu Doldurup Ticket Açması
+        if (interaction.customId.startsWith('modal_ticket_open_')) {
+            const panelKey = interaction.customId.replace('modal_ticket_open_', '');
+            const panelConfig = db[guildId].ticketPanels ? db[guildId].ticketPanels[panelKey] : null;
+
+            const existingTicket = Object.values(db[guildId].tickets).find(t => t.ownerId === interaction.user.id && t.panelKey === panelKey);
+            if (existingTicket && interaction.guild.channels.cache.has(existingTicket.channelId)) {
+                return interaction.reply({ content: `Bu birimde zaten açık bir talebiniz bulunuyor: <#${existingTicket.channelId}>`, ephemeral: true });
+            }
+
+            const konu = interaction.fields.getTextInputValue('t_user_konu').trim();
+            const detay = interaction.fields.getTextInputValue('t_user_detay').trim();
+
+            let customCatId = null;
+            let welcomeMsg = 'Talebiniz oluşturuldu. Yetkililer en kısa sürede sizinle ilgilenecektir.';
+            let panelTitle = 'Destek ve Başvuru Kanalı';
+
+            if (panelConfig) {
+                customCatId = panelConfig.catId !== 'none' ? panelConfig.catId : null;
+                if (panelConfig.welcomeMsg) welcomeMsg = panelConfig.welcomeMsg;
+                if (panelConfig.title) panelTitle = panelConfig.title;
+            }
+
+            const overwrites = [
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] },
+                { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ReadMessageHistory] }
+            ];
+            if (db[guildId].yetkiliRol) {
+                overwrites.push({ id: db[guildId].yetkiliRol, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ReadMessageHistory] });
+            }
+
+            try {
+                const ticketChannel = await interaction.guild.channels.create({
+                    name: `talep-${interaction.user.username}`,
+                    type: ChannelType.GuildText,
+                    parent: customCatId,
+                    permissionOverwrites: overwrites
+                });
+
+                db[guildId].tickets[ticketChannel.id] = {
+                    ownerId: interaction.user.id,
+                    channelId: ticketChannel.id,
+                    panelKey: panelKey,
+                    subject: konu,
+                    details: detay,
+                    claimedBy: null,
+                    locked: false,
+                    createdAt: Date.now()
+                };
+                saveDB(db);
+
+                const embed = new EmbedBuilder()
+                    .setTitle(panelTitle)
+                    .setDescription(`Merhaba <@${interaction.user.id}>,\n${welcomeMsg}`)
+                    .addFields(
+                        { name: 'Talep Konusu / Türü', value: `\`${konu}\``, inline: false },
+                        { name: 'Kullanıcının Talebi / Açıklaması', value: detay, inline: false },
+                        { name: 'İlgilenen Yetkili', value: 'Henüz üstlenilmedi', inline: true }
+                    )
+                    .setColor(0x2b2d31)
+                    .setTimestamp();
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('ticket_claim').setLabel('Talebi Üstlen').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('ticket_lock').setLabel('Kilitle / Aç').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('ticket_add').setLabel('Üye Ekle').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('ticket_remove').setLabel('Üye Çıkar').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat ve Arşivle').setStyle(ButtonStyle.Danger)
+                );
+
+                const mentionText = db[guildId].yetkiliRol ? `<@${interaction.user.id}> | <@&${db[guildId].yetkiliRol}>` : `<@${interaction.user.id}>`;
+                await ticketChannel.send({ content: mentionText, embeds: [embed], components: [row] });
+
+                sendLog(interaction.guild, 'logSunucu', { 
+                    title: 'Yeni Ticket Açıldı', 
+                    desc: `**Açan Kullanıcı:** <@${interaction.user.id}>\n**Kanal:** <#${ticketChannel.id}>\n**Birim:** ${panelTitle}\n**Konu:** ${konu}`, 
+                    color: 0x57f287 
+                });
+                return interaction.reply({ content: `Talebiniz başarıyla oluşturuldu: <#${ticketChannel.id}>`, ephemeral: true });
+            } catch (e) {
+                return interaction.reply({ content: 'Kanal oluşturulurken bir yetki veya kategori hatası oluştu.', ephemeral: true });
+            }
+        }
+
         if (interaction.customId === 'modal_vc_limit') {
             const val = parseInt(interaction.fields.getTextInputValue('limit_val'));
             if (isNaN(val) || val < 0 || val > 99) return interaction.reply({ content: 'Lütfen 0 ile 99 arasında geçerli bir sayı girin.', ephemeral: true });
@@ -1259,8 +1340,16 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: `Oda kişi sınırı **${val === 0 ? 'Sınırsız' : val}** olarak ayarlandı.`, ephemeral: true });
         }
 
+        // Geçici Oda İsim Değiştirme (Discord Rate Limit Korumalı - 5 Dakika)
         if (interaction.customId === 'modal_vc_rename') {
+            const now = Date.now();
+            const lastRename = renameCooldownMap.get(interaction.channel.id) || 0;
+            if (now - lastRename < 300000) {
+                const kalanSn = Math.ceil((300000 - (now - lastRename)) / 1000);
+                return interaction.reply({ content: `Discord hız sınırları (Rate Limit) nedeniyle oda ismini tekrar değiştirmek için **${kalanSn} saniye** beklemelisiniz.`, ephemeral: true });
+            }
             const newName = interaction.fields.getTextInputValue('name_val').trim();
+            renameCooldownMap.set(interaction.channel.id, now);
             await interaction.channel.setName(newName).catch(() => {});
             return interaction.reply({ content: `Oda ismi **${newName}** olarak güncellendi.`, ephemeral: true });
         }
@@ -1399,8 +1488,8 @@ client.on('messageCreate', async message => {
 
     if (message.author.bot || !message.member) return;
 
-    const isMuaf = db[guildId].muafRol && message.member.roles.cache.has(db[guildId].muafRol);
-    const isYetkili = db[guildId].yetkiliRol && message.member.roles.cache.has(db[guildId].yetkiliRol);
+    const isMuaf = Boolean(db[guildId].muafRol && message.member.roles.cache.has(db[guildId].muafRol));
+    const isYetkili = Boolean(db[guildId].yetkiliRol && message.member.roles.cache.has(db[guildId].yetkiliRol));
     const isAdmin = message.member.permissions.has(PermissionsBitField.Flags.Administrator);
     const isProtected = Boolean(isAdmin || isYetkili || isMuaf);
 
@@ -1564,8 +1653,8 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
     const db = getDB();
     const guildId = newMessage.guild.id;
     if (db[guildId] && newMessage.member) {
-        const isMuaf = db[guildId].muafRol && newMessage.member.roles.cache.has(db[guildId].muafRol);
-        const isYetkili = db[guildId].yetkiliRol && newMessage.member.roles.cache.has(db[guildId].yetkiliRol);
+        const isMuaf = Boolean(db[guildId].muafRol && newMessage.member.roles.cache.has(db[guildId].muafRol));
+        const isYetkili = Boolean(db[guildId].yetkiliRol && newMessage.member.roles.cache.has(db[guildId].yetkiliRol));
         const isAdmin = newMessage.member.permissions.has(PermissionsBitField.Flags.Administrator);
         const isProtected = Boolean(isAdmin || isYetkili || isMuaf);
 
@@ -1705,6 +1794,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             const humanMembers = oldChannel.members.filter(m => !m.user.bot);
             if (humanMembers.size === 0) {
                 delete db[guildId].tempRooms[oldChannel.id];
+                renameCooldownMap.delete(oldChannel.id);
                 saveDB(db);
                 await oldChannel.delete().catch(() => {});
                 sendLog(oldState.guild, 'logSunucu', { title: 'Geçici Ses Odası Silindi', desc: `**Oda Adı:** \`${oldChannel.name}\` boşaldığı için otomatik silindi.`, color: 0xed4245 });
@@ -1867,13 +1957,15 @@ client.on('guildMemberRemove', async member => {
                     `TICKET KONUŞMA DÖKÜMÜ (ÜYE AYRILDIĞI İÇİN OTOMATİK KAPATILDI)`,
                     `Kanal Adı       : ${tChannel.name}`,
                     `Talep Sahibi    : ${member.user.tag} (${member.id})`,
+                    `Talep Konusu    : ${tData.subject || 'Belirtilmedi'}`,
+                    `Talep Açıklaması: ${tData.details || 'Belirtilmedi'}`,
                     `Kapanış Tarihi  : ${new Date().toLocaleString('tr-TR')}`,
                     `Toplam Mesaj    : ${sortedMessages.length}`,
                     `====================================================\n`
                 ];
                 for (const m of sortedMessages) {
                     const timeStr = new Date(m.createdTimestamp).toLocaleString('tr-TR');
-                    const content = m.content || (m.embeds.length > 0 ? '[Sistem Paneli / Embed]' : '[Görsel / Dosya]');
+                    const content = m.content || (m.embeds.length > 0 ? '[Sistem Paneli / Başvuru Kartı]' : '[Görsel / Dosya]');
                     txtLines.push(`[${timeStr}] ${m.author.tag}: ${content}`);
                 }
                 const txtBuffer = Buffer.from(txtLines.join('\n'), 'utf-8');
@@ -1881,7 +1973,7 @@ client.on('guildMemberRemove', async member => {
 
                 sendLog(member.guild, 'logMesaj', {
                     title: 'Ticket Otomatik Kapatıldı (Üye Sunucudan Ayrıldı)',
-                    desc: `**Kanal:** \`${tChannel.name}\`\n**Ayrılan Talep Sahibi:** <@${member.id}> (${member.user.tag})`,
+                    desc: `**Kanal:** \`${tChannel.name}\`\n**Ayrılan Talep Sahibi:** <@${member.id}> (${member.user.tag})\n**Konu:** ${tData.subject || 'Belirtilmedi'}`,
                     color: 0xe67e22
                 }, [attachment]);
 
@@ -1921,7 +2013,7 @@ client.on('guildMemberRemove', async member => {
     });
 });
 
-// 5. ÜYE GÜNCELLEMELERİ (İSİM, ROL, BOOST VE AVATAR - DURUM LOGU KALDIRILDI)
+// 5. ÜYE GÜNCELLEMELERİ (İSİM, ROL, BOOST VE AVATAR)
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
     const guild = newMember.guild;
 
