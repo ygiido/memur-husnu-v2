@@ -11,7 +11,13 @@ require('dotenv').config();
 
 // Render vb. bulut sunucularda botun aktif kalması için HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
-http.createServer((req, res) => res.end('Bot aktif.')).listen(serverPort);
+const server = http.createServer((req, res) => res.end('Bot aktif.'));
+server.on('error', (err) => {
+    console.error('HTTP Sunucusu Hatası (Port çakışması vb.):', err.message);
+});
+server.listen(serverPort, () => {
+    console.log(`HTTP sunucusu ${serverPort} portunda dinlemede.`);
+});
 
 const client = new Client({
     intents: [
@@ -29,14 +35,30 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User, Partials.Reaction]
 });
 
-// Veritabanı (JSON) Okuma ve Kaydetme Fonksiyonları
+// Veritabanı (JSON) Okuma ve Güvenli (Atomik) Kaydetme Fonksiyonları
 const dbPath = './database.json';
+const dbTmpPath = './database.json.tmp';
 if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
 const getDB = () => {
-    try { return JSON.parse(fs.readFileSync(dbPath, 'utf8')); } 
-    catch (e) { return {}; }
+    try { 
+        return JSON.parse(fs.readFileSync(dbPath, 'utf8')); 
+    } catch (e) { 
+        console.error('Veritabanı okuma hatası, geçici dosya kontrol ediliyor:', e.message);
+        if (fs.existsSync(dbTmpPath)) {
+            try { return JSON.parse(fs.readFileSync(dbTmpPath, 'utf8')); } catch (_) {}
+        }
+        return {}; 
+    }
 };
-const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
+const saveDB = (data) => {
+    try {
+        fs.writeFileSync(dbTmpPath, JSON.stringify(data, null, 4), 'utf8');
+        fs.renameSync(dbTmpPath, dbPath);
+    } catch (err) {
+        console.error('Veritabanı güvenli kayıt hatası:', err.message);
+        try { fs.writeFileSync(dbPath, JSON.stringify(data, null, 4), 'utf8'); } catch (_) {}
+    }
+};
 
 // Geçici Hafıza Haritaları (Spam, Davet, Ses Süresi ve Cooldown Takibi)
 const spamMap = new Map();
@@ -44,6 +66,22 @@ const invitesCache = new Map();
 const voiceTimerMap = new Map();
 const vcCooldownMap = new Map();
 const renameCooldownMap = new Map();
+
+// Bellek Sızıntılarını (Memory Leak) Önlemek İçin Düzenli Temizlik Döngüsü (5 Dakikada Bir)
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, timestamp] of vcCooldownMap.entries()) {
+        if (now - timestamp > 30000) vcCooldownMap.delete(key);
+    }
+    for (const [key, timestamp] of renameCooldownMap.entries()) {
+        if (now - timestamp > 300000) renameCooldownMap.delete(key);
+    }
+    for (const [key, timestamps] of spamMap.entries()) {
+        if (!timestamps || timestamps.length === 0 || now - timestamps[timestamps.length - 1] > 5000) {
+            spamMap.delete(key);
+        }
+    }
+}, 300000);
 
 function ensureGuildDB(db, guildId) {
     if (!db[guildId]) db[guildId] = {};
@@ -111,20 +149,27 @@ function kufurTespitEt(metin) {
     const wordsArray = wordsOnly.split(' ');
     const strippedText = dedupedText.replace(/[^a-z]/g, '');
 
+    // Masum Türkçe kelimelerin yanlışlıkla küfür sayılmasını önleme (False-Positive Koruması)
+    const orijinalKelimeler = text.replace(/[^a-zğüşıöç\s]/g, ' ').replace(/\s+/g, ' ').trim().split(' ');
+
     const kelimeBazliKufurler = [
         'amk', 'amc', 'amq', 'aq', 'oc', 'oç', 'pic', 'piç', 'sik', 'sg', 'mk', 'mq',
-        'got', 'göt', 'am', 'ami', 'amin', 'amina', 'aminda', 'amini', 'amcik', 'amck',
+        'got', 'göt', 'am', 'ami', 'amina', 'aminda', 'amini', 'amcik', 'amck',
         'siki', 'sikim', 'sikin', 'sikis', 'siker', 'sikerim', 'sikeyim', 'sikik', 'siktir', 'sktr', 'siktin', 'sokuk', 'sokarim', 'sokam',
         'yarak', 'yarrak', 'yarag', 'yarrag', 'yarram', 'yaraam',
         'orspu', 'orospu', 'oruspu', 'orosbu', 'orusbu',
         'pezevenk', 'pezeveng', 'pzvnk', 'gavat', 'kaltak', 'kahpe', 'kahbe', 'kancik', 'kevase', 'kaltag',
-        'ibne', 'ipne', 'top', 'puşt', 'pust', 'yavsak', 'yavşak', 'gotten', 'gotveren', 'götveren',
+        'ibne', 'ipne', 'puşt', 'pust', 'yavsak', 'yavşak', 'gotten', 'gotveren', 'götveren',
         'dalyarak', 'dalyarrak', 'malafat', 'taşak', 'tasak', 'tassak', 'daşak', 'dasak', 'dassak',
         'angut', 'lavuk', 'zibidi', 'haysiyetsiz', 'serefsiz', 'şerefsiz', 'namussuz', 'itoglu', 'kopekoglu',
-        'anan', 'anani', 'ananin', 'bacini', 'bacinin', 'sulan', 'sulaleni', 'ecdadini', 'soyunu', 'zürriyetini'
+        'anani', 'ananin', 'bacini', 'bacinin', 'sulan', 'sulaleni', 'ecdadini', 'soyunu', 'zürriyetini'
     ];
 
     for (let word of wordsArray) {
+        // "sıkı" veya "sıkıntı" gibi Türkçe kelimelerin "siki" / "sikis" sanılmasını engelle
+        if (word === 'siki' && orijinalKelimeler.some(k => k.startsWith('sıkı') || k === 'sıkı')) continue;
+        if (word.startsWith('sikis') && orijinalKelimeler.some(k => k.startsWith('sıkış') || k.startsWith('sıkıntı'))) continue;
+
         if (kelimeBazliKufurler.includes(word)) return true;
         if (/^(siktir|sikis|siker|sikey|sikim|orospu|oruspu|pezevenk|yavsak|amcik|yarrak|yarak|gotveren|kahpe|kaltak|ecdadini|sulaleni)/.test(word)) {
             return true;
@@ -490,36 +535,88 @@ function buildTempVoiceEmbed(roomData) {
 }
 
 // Otomatik Tahliye Döngüsü (Her 30 saniyede bir ceza süresi dolanları kontrol eder)
-setInterval(() => {
-    const db = getDB();
-    const now = Date.now();
-    let updated = false;
+setInterval(async () => {
+    try {
+        const db = getDB();
+        const now = Date.now();
+        let updated = false;
 
-    client.guilds.cache.forEach(async guild => {
-        if (!db[guild.id] || !db[guild.id].users) return;
-        const jailRoleId = db[guild.id].jailRol;
+        for (const guild of client.guilds.cache.values()) {
+            if (!db[guild.id] || !db[guild.id].users) continue;
+            const jailRoleId = db[guild.id].jailRol;
 
-        for (const userId in db[guild.id].users) {
-            let user = db[guild.id].users[userId];
-            if (user.jailExpire && now >= user.jailExpire) {
-                user.jailExpire = null;
-                updated = true;
-                if (jailRoleId) {
-                    const member = await guild.members.fetch(userId).catch(() => null);
-                    if (member && member.manageable) {
-                        member.roles.remove(jailRoleId).catch(() => {});
-                        sendLog(guild, 'logCeza', {
-                            title: 'Ceza Süresi Doldu',
-                            desc: `**Kullanıcı:** <@${member.id}>\nKullanıcının uzaklaştırma (hapis) süresi doldu ve erişimi geri açıldı.`,
-                            color: 0x57f287
-                        });
+            for (const userId in db[guild.id].users) {
+                let user = db[guild.id].users[userId];
+                if (user.jailExpire && now >= user.jailExpire) {
+                    user.jailExpire = null;
+                    updated = true;
+                    if (jailRoleId) {
+                        const member = await guild.members.fetch(userId).catch(() => null);
+                        if (member && member.manageable) {
+                            await member.roles.remove(jailRoleId).catch(() => {});
+                            sendLog(guild, 'logCeza', {
+                                title: 'Ceza Süresi Doldu',
+                                desc: `**Kullanıcı:** <@${member.id}>\nKullanıcının uzaklaştırma (hapis) süresi doldu ve erişimi geri açıldı.`,
+                                color: 0x57f287
+                            });
+                        }
                     }
                 }
             }
         }
-    });
-    if (updated) saveDB(db);
+        if (updated) saveDB(db);
+    } catch (loopErr) {
+        console.error('Tahliye döngüsü hatası:', loopErr);
+    }
 }, 30000);
+
+// ============================================================================
+// SLASH KOMUTLARI LİSTESİ
+// ============================================================================
+const commands = [
+    {
+        name: 'panel',
+        description: 'Sunucu sistem ayarları, log kanalları ve ticket kurulum kontrol panelini açar (Sadece Yöneticiler).',
+        default_member_permissions: PermissionsBitField.Flags.Administrator.toString()
+    },
+    {
+        name: 'yaz',
+        description: 'Bot üzerinden bulunduğunuz kanala mesaj veya duyuru gönderir (Sadece Yöneticiler).',
+        default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
+        options: [
+            { name: 'mesaj', type: 3, description: 'Botun kanala yazacağı metin', required: true }
+        ]
+    },
+    {
+        name: 'hapis',
+        description: 'Kullanıcıyı belirtilen süre ve sebeple cezalıya (hapis) atar.',
+        options: [
+            { name: 'kullanici', type: 6, description: 'Cezalandırılacak kullanıcıyı seçin', required: true },
+            { name: 'sure', type: 4, description: 'Ceza süresi miktarını girin (Sayı)', required: true },
+            { name: 'birim', type: 3, description: 'Ceza süresinin zaman birimini seçin', required: true, choices: [
+                { name: 'Saniye', value: 'saniye' },
+                { name: 'Dakika', value: 'dakika' },
+                { name: 'Saat', value: 'saat' },
+                { name: 'Gün', value: 'gun' }
+            ]},
+            { name: 'sebep', type: 3, description: 'Cezalandırma sebebini yazın (Logda görünür)', required: true }
+        ]
+    },
+    {
+        name: 'af',
+        description: 'Seçilen kullanıcının veya tüm sunucunun ceza ve sicil kaydını temizler.',
+        options: [
+            { name: 'kullanici', type: 6, description: 'Affedilecek kullanıcı (Boş bırakılırsa sadece Yöneticiler için genel af uygular)', required: false }
+        ]
+    },
+    {
+        name: 'sil',
+        description: 'Bulunduğunuz kanaldaki mesajları belirtilen miktarda toplu olarak siler.',
+        options: [
+            { name: 'miktar', type: 4, description: 'Silinecek mesaj sayısı (1 ile 100 arasında bir sayı girin)', required: true }
+        ]
+    }
+];
 
 // ============================================================================
 // BOT HAZIR OLDUĞUNDA, HAYALET ODA TEMİZLİĞİ VE SLASH KOMUT KURULUMU
@@ -571,54 +668,17 @@ client.once('ready', async () => {
 
     if (dbUpdated) saveDB(db);
 
-    const commands = [
-        {
-            name: 'panel',
-            description: 'Sunucu sistem ayarları, log kanalları ve ticket kurulum kontrol panelini açar (Sadece Yöneticiler).',
-            default_member_permissions: PermissionsBitField.Flags.Administrator.toString()
-        },
-        {
-            name: 'yaz',
-            description: 'Bot üzerinden bulunduğunuz kanala mesaj veya duyuru gönderir (Sadece Yöneticiler).',
-            default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
-            options: [
-                { name: 'mesaj', type: 3, description: 'Botun kanala yazacağı metin', required: true }
-            ]
-        },
-        {
-            name: 'hapis',
-            description: 'Kullanıcıyı belirtilen süre ve sebeple cezalıya (hapis) atar.',
-            options: [
-                { name: 'kullanici', type: 6, description: 'Cezalandırılacak kullanıcıyı seçin', required: true },
-                { name: 'sure', type: 4, description: 'Ceza süresi miktarını girin (Sayı)', required: true },
-                { name: 'birim', type: 3, description: 'Ceza süresinin zaman birimini seçin', required: true, choices: [
-                    { name: 'Saniye', value: 'saniye' },
-                    { name: 'Dakika', value: 'dakika' },
-                    { name: 'Saat', value: 'saat' },
-                    { name: 'Gün', value: 'gun' }
-                ]},
-                { name: 'sebep', type: 3, description: 'Cezalandırma sebebini yazın (Logda görünür)', required: true }
-            ]
-        },
-        {
-            name: 'af',
-            description: 'Seçilen kullanıcının veya tüm sunucunun ceza ve sicil kaydını temizler.',
-            options: [
-                { name: 'kullanici', type: 6, description: 'Affedilecek kullanıcı (Boş bırakılırsa sadece Yöneticiler için genel af uygular)', required: false }
-            ]
-        },
-        {
-            name: 'sil',
-            description: 'Bulunduğunuz kanaldaki mesajları belirtilen miktarda toplu olarak siler.',
-            options: [
-                { name: 'miktar', type: 4, description: 'Silinecek mesaj sayısı (1 ile 100 arasında bir sayı girin)', required: true }
-            ]
-        }
-    ];
-
+    if (client.application) {
+        await client.application.commands.set(commands).catch(e => console.error('Global komut kurulum hatası:', e.message));
+    }
     for (const guild of client.guilds.cache.values()) {
         await guild.commands.set(commands).catch(() => {});
     }
+});
+
+// Bot Yeni Bir Sunucuya Eklendiğinde Slash Komutlarını Otomatik Tanımla
+client.on('guildCreate', async guild => {
+    await guild.commands.set(commands).catch(() => {});
 });
 
 // ============================================================================
@@ -1162,7 +1222,13 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (customId === 'ticket_close') {
-                await interaction.reply({ content: 'Kanal kapatılıyor ve tüm konuşma geçmişi `.txt` olarak arşivleniyor...' });
+                if (ticketData.closing) {
+                    return interaction.reply({ content: 'Bu talep şu anda zaten kapatılıyor ve arşivleniyor, lütfen bekleyin...', ephemeral: true });
+                }
+                ticketData.closing = true;
+                saveDB(db);
+
+                await interaction.reply({ content: 'Kanal kapatılıyor ve tüm konuşma geçmişi `.txt` olarak arşivleniyor...' }).catch(() => {});
 
                 const sortedMessages = await fetchAllMessages(interaction.channel, 1000);
 
@@ -1599,11 +1665,12 @@ client.on('messageDelete', async message => {
     const silenBilgisi = executor ? `<@${executor.id}> (Yetkili)` : (message.author ? `<@${message.author.id}> (Kendisi)` : 'Bilinmiyor');
     const content = message.content ? message.content : "[Görsel veya Dosya İçeriği]";
 
-    if (message.mentions) {
-        const hasUsers = message.mentions.users.size > 0;
-        const hasRoles = message.mentions.roles.size > 0;
+    if (message.mentions && message.createdTimestamp) {
+        const isRecent = (Date.now() - message.createdTimestamp) < 60000;
+        const hasUsers = message.mentions.users && message.mentions.users.size > 0;
+        const hasRoles = message.mentions.roles && message.mentions.roles.size > 0;
         const hasEveryone = message.mentions.everyone;
-        if (hasUsers || hasRoles || hasEveryone) {
+        if (isRecent && (hasUsers || hasRoles || hasEveryone)) {
             sendLog(message.guild, 'logMesaj', {
                 title: 'Hayalet Etiket (Ghost Ping) Tespit Edildi',
                 desc: `**Atan Kişi:** ${targetId ? `<@${targetId}>` : 'Bilinmiyor'}\n**Kanal:** <#${message.channel.id}>\n**Silinen Mesaj:**\n${content}`,
@@ -1620,8 +1687,10 @@ client.on('messageDelete', async message => {
             if (att.size <= 8 * 1024 * 1024) {
                 try {
                     const res = await fetch(att.url);
-                    const arrayBuffer = await res.arrayBuffer();
-                    recoveredFiles.push(new AttachmentBuilder(Buffer.from(arrayBuffer), { name: att.name || 'silinen-medya.png' }));
+                    if (res.ok) {
+                        const arrayBuffer = await res.arrayBuffer();
+                        recoveredFiles.push(new AttachmentBuilder(Buffer.from(arrayBuffer), { name: att.name || 'silinen-medya.png' }));
+                    }
                 } catch (e) {}
             }
         }
@@ -1669,6 +1738,17 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
                 if (hasLink && !isDiscordMedia) {
                     await newMessage.delete().catch(() => {});
                     await applyJail(newMessage.member, newMessage.guild, "Yasaklı Link Paylaşımı (Düzenlenen Mesaj)");
+                    return;
+                }
+            }
+            // Caps Lock Koruması (Düzenlenen Mesaj)
+            const lettersOnly = newMessage.content.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ]/g, "");
+            if (lettersOnly.length > 5) {
+                const upperCount = lettersOnly.replace(/[^A-ZĞÜŞİÖÇ]/g, "").length;
+                if ((upperCount / lettersOnly.length) >= 0.75) {
+                    await newMessage.delete().catch(() => {});
+                    newMessage.channel.send(`${newMessage.member}, lütfen tamamı büyük harf (Caps Lock) içeren mesajlar yazmayalım.`).then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
+                    sendLog(newMessage.guild, 'logCeza', { title: 'Büyük Harf (Caps Lock) Uyarısı (Düzenleme)', desc: `**Kullanıcı:** <@${newMessage.author.id}>\n**Kanal:** <#${newMessage.channel.id}>\n**Mesaj:** ${newMessage.content}`, color: 0xfee75c });
                     return;
                 }
             }
@@ -1747,7 +1827,13 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                     ]
                 });
 
-                await member.voice.setChannel(newChannel);
+                try {
+                    await member.voice.setChannel(newChannel);
+                } catch (moveErr) {
+                    // Kullanıcı kanal açılırken sesten çıktıysa yetim oda kalmasını önle
+                    await newChannel.delete().catch(() => {});
+                    return;
+                }
 
                 const roomData = {
                     ownerId: member.id,
@@ -2267,7 +2353,8 @@ client.on('inviteDelete', invite => {
 });
 
 process.on('unhandledRejection', error => {
-    if (error.code === 10062) return; 
+    // Bilinen ve uygulamanın çökmesini gerektirmeyen zararsız Discord API hataları
+    if (error && [10062, 40060, 50013, 10008].includes(error.code)) return; 
     console.error('Sistem Hatası (Rejection):', error);
 });
 

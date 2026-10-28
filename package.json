@@ -1,6 +1,6 @@
 {
   "name": "discord-yonetim-botu",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Gelişmiş moderasyon, log, ticket ve geçici ses odası botu.",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,6 @@
     "dotenv": "^16.4.5"
   },
   "engines": {
-    "node": "18.x"
+    "node": ">=18.0.0"
   }
 }
