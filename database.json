@@ -1,1 +1,43 @@
-{}
+{
+    "1538928601951633599": {
+        "users": {
+            "225706666740416512": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793190417051,
+                "inviterId": "810509659559165992",
+                "inviteCode": "5Xat2rJSU"
+            }
+        },
+        "tempRooms": {},
+        "tickets": {},
+        "ticketPanels": {},
+        "odaKanal": "1557704478629691422",
+        "odaKategori": "1557704477312684102",
+        "jailRol": "1557759431679279124",
+        "muafRol": "1558956324728082486",
+        "sicilRol": "1557759397969789083",
+        "kickKanal": "1538929283593011252",
+        "kickBot": "1118578278299611246",
+        "linkEngel": true,
+        "kufurEngel": true,
+        "yetkiliRol": "1545835991053631639",
+        "logCeza": "1558956540965294120",
+        "logMesaj": "1558956540965294120",
+        "logSes": "1558956540965294120",
+        "logUye": "1558956540965294120",
+        "logSunucu": "1558956540965294120",
+        "logGuvenlik": "1558956540965294120"
+    },
+    "1265700826387714153": {
+        "users": {},
+        "tempRooms": {},
+        "tickets": {},
+        "ticketPanels": {},
+        "yetkiliRol": "1267241616750546984",
+        "muafRol": "1267237958457495653"
+    }
+}

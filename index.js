@@ -1,9 +1,15 @@
-const { 
-    Client, GatewayIntentBits, Partials, PermissionsBitField, 
-    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, 
+const dns = require('dns');
+// Bulut sunucularda (Render, Fly vb.) IPv6 kaynaklı Gateway donmasını önlemek için IPv4 önceliği
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
+
+const {
+    Client, GatewayIntentBits, Partials, PermissionsBitField,
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
-    RoleSelectMenuBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, 
-    AttachmentBuilder, ChannelType, AuditLogEvent 
+    RoleSelectMenuBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder,
+    AttachmentBuilder, ChannelType, AuditLogEvent
 } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
@@ -11,7 +17,20 @@ require('dotenv').config();
 
 // Render vb. bulut sunucularda botun aktif kalması için HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
-http.createServer((req, res) => res.end('Bot aktif.')).listen(serverPort);
+const server = http.createServer((req, res) => {
+    const isBotReady = Boolean(client && client.isReady && client.isReady());
+    const msg = isBotReady 
+        ? `Bot aktif ve Discord'a bağlı (${client.user.tag}).` 
+        : `Bot web servisi ayakta, Discord Gateway bağlantısı bekleniyor...`;
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(msg);
+});
+server.on('error', (err) => {
+    console.error('HTTP Sunucusu Hatası:', err.message);
+});
+server.listen(serverPort, () => {
+    console.log(`HTTP sunucusu ${serverPort} portunda dinlemede.`);
+});
 
 const client = new Client({
     intents: [
@@ -29,11 +48,17 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User, Partials.Reaction]
 });
 
+// Shard ve Bağlantı Hata Dinleyicileri
+client.on('error', error => console.error('Discord İstemci Hatası:', error));
+client.on('shardError', (error, shardId) => console.error(`[SHARD ${shardId} ERROR]:`, error));
+client.on('shardDisconnect', (event, shardId) => console.warn(`[SHARD ${shardId} DISCONNECT]: Code ${event.code}, Reason: ${event.reason}`));
+client.on('shardReconnecting', shardId => console.log(`[SHARD ${shardId}] Yeniden bağlanılıyor...`));
+
 // Veritabanı (JSON) Okuma ve Kaydetme Fonksiyonları
 const dbPath = './database.json';
 if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
 const getDB = () => {
-    try { return JSON.parse(fs.readFileSync(dbPath, 'utf8')); } 
+    try { return JSON.parse(fs.readFileSync(dbPath, 'utf8')); }
     catch (e) { return {}; }
 };
 const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
@@ -191,7 +216,7 @@ async function sendLog(guild, logCategory, options, files = []) {
         if (options.thumbnail) embed.setThumbnail(options.thumbnail);
         if (options.image) embed.setImage(options.image);
         if (options.footer) embed.setFooter({ text: options.footer });
-        channel.send({ embeds: [embed], files: files }).catch(() => {});
+        channel.send({ embeds: [embed], files: files }).catch(() => { });
     }
 }
 
@@ -206,16 +231,16 @@ async function applyJail(member, guild, reason) {
 
     let userData = db[guild.id].users[member.id];
     userData.jailCount += 1;
-    userData.sicilli = true; 
+    userData.sicilli = true;
 
     const durations = [15, 30, 60, 180];
-    let durationMins = durations[userData.jailCount - 1] ? durations[userData.jailCount - 1] : 180; 
+    let durationMins = durations[userData.jailCount - 1] ? durations[userData.jailCount - 1] : 180;
     userData.jailExpire = Date.now() + (durationMins * 60 * 1000);
     saveDB(db);
 
     if (member.manageable) {
-        if (db[guild.id].jailRol) await member.roles.add(db[guild.id].jailRol).catch(() => {});
-        if (db[guild.id].sicilRol) await member.roles.add(db[guild.id].sicilRol).catch(() => {});
+        if (db[guild.id].jailRol) await member.roles.add(db[guild.id].jailRol).catch(() => { });
+        if (db[guild.id].sicilRol) await member.roles.add(db[guild.id].sicilRol).catch(() => { });
     }
 
     sendLog(guild, 'logCeza', {
@@ -228,19 +253,19 @@ async function applyJail(member, guild, reason) {
 
 // Küfür Uyarısı ve 3. İhlalde Hapis Fonksiyonu
 async function handleProfanity(message, db, guildId) {
-    await message.delete().catch(() => {});
+    await message.delete().catch(() => { });
     ensureGuildDB(db, guildId);
     if (!db[guildId].users[message.author.id]) {
         db[guildId].users[message.author.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
     }
-    
+
     let userData = db[guildId].users[message.author.id];
     const currentKufur = userData.kufurUyari ? userData.kufurUyari : 0;
     userData.kufurUyari = currentKufur + 1;
     saveDB(db);
 
     if (userData.kufurUyari < 3) {
-        message.channel.send(`<@${message.author.id}>, lütfen üslubunuza dikkat edin. Sunucuda küfür ve argo kullanımı yasaktır. (**${userData.kufurUyari}/3 Uyarı**)`).then(m => setTimeout(() => m.delete().catch(() => {}), 6000));
+        message.channel.send(`<@${message.author.id}>, lütfen üslubunuza dikkat edin. Sunucuda küfür ve argo kullanımı yasaktır. (**${userData.kufurUyari}/3 Uyarı**)`).then(m => setTimeout(() => m.delete().catch(() => { }), 6000));
         sendLog(message.guild, 'logCeza', {
             title: 'Küfür / Argo Uyarısı',
             desc: `**Kullanıcı:** <@${message.author.id}>\n**Kanal:** <#${message.channel.id}>\n**Uyarı Sayısı:** ${userData.kufurUyari}/3\n**Silinen Mesaj:** ${message.content}`,
@@ -507,7 +532,7 @@ setInterval(() => {
                 if (jailRoleId) {
                     const member = await guild.members.fetch(userId).catch(() => null);
                     if (member && member.manageable) {
-                        member.roles.remove(jailRoleId).catch(() => {});
+                        member.roles.remove(jailRoleId).catch(() => { });
                         sendLog(guild, 'logCeza', {
                             title: 'Ceza Süresi Doldu',
                             desc: `**Kullanıcı:** <@${member.id}>\nKullanıcının uzaklaştırma (hapis) süresi doldu ve erişimi geri açıldı.`,
@@ -534,7 +559,7 @@ client.once('ready', async () => {
         try {
             const firstInvites = await guild.invites.fetch();
             invitesCache.set(guild.id, new Map(firstInvites.map(inv => [inv.code, inv.uses])));
-        } catch (e) {}
+        } catch (e) { }
 
         guild.voiceStates.cache.forEach(vs => {
             if (vs.channelId && vs.member && !vs.member.user.bot) {
@@ -554,7 +579,7 @@ client.once('ready', async () => {
                 if (humanCount === 0) {
                     delete db[guild.id].tempRooms[chId];
                     dbUpdated = true;
-                    await ch.delete().catch(() => {});
+                    await ch.delete().catch(() => { });
                 } else if (!ch.members.has(rData.ownerId) && rData.panelMsgId) {
                     const panelMsg = await ch.messages.fetch(rData.panelMsgId).catch(() => null);
                     if (panelMsg) {
@@ -562,7 +587,7 @@ client.once('ready', async () => {
                             content: `Oda sahibi (<@${rData.ownerId}>) odadan ayrıldı. Odadaki üyelerden biri **Sahipliği Al** butonuna basarak odayı devralabilir.`,
                             embeds: [buildTempVoiceEmbed(rData)],
                             components: buildTempVoiceComponents(rData, true)
-                        }).catch(() => {});
+                        }).catch(() => { });
                     }
                 }
             }
@@ -591,12 +616,14 @@ client.once('ready', async () => {
             options: [
                 { name: 'kullanici', type: 6, description: 'Cezalandırılacak kullanıcıyı seçin', required: true },
                 { name: 'sure', type: 4, description: 'Ceza süresi miktarını girin (Sayı)', required: true },
-                { name: 'birim', type: 3, description: 'Ceza süresinin zaman birimini seçin', required: true, choices: [
-                    { name: 'Saniye', value: 'saniye' },
-                    { name: 'Dakika', value: 'dakika' },
-                    { name: 'Saat', value: 'saat' },
-                    { name: 'Gün', value: 'gun' }
-                ]},
+                {
+                    name: 'birim', type: 3, description: 'Ceza süresinin zaman birimini seçin', required: true, choices: [
+                        { name: 'Saniye', value: 'saniye' },
+                        { name: 'Dakika', value: 'dakika' },
+                        { name: 'Saat', value: 'saat' },
+                        { name: 'Gün', value: 'gun' }
+                    ]
+                },
                 { name: 'sebep', type: 3, description: 'Cezalandırma sebebini yazın (Logda görünür)', required: true }
             ]
         },
@@ -617,7 +644,7 @@ client.once('ready', async () => {
     ];
 
     for (const guild of client.guilds.cache.values()) {
-        await guild.commands.set(commands).catch(() => {});
+        await guild.commands.set(commands).catch(() => { });
     }
 });
 
@@ -699,8 +726,8 @@ client.on('interactionCreate', async interaction => {
                 if (sicilVerilecek) userData.sicilli = true;
                 saveDB(db);
 
-                if (db[guildId].jailRol) await member.roles.add(db[guildId].jailRol).catch(() => {});
-                if (sicilVerilecek && db[guildId].sicilRol) await member.roles.add(db[guildId].sicilRol).catch(() => {});
+                if (db[guildId].jailRol) await member.roles.add(db[guildId].jailRol).catch(() => { });
+                if (sicilVerilecek && db[guildId].sicilRol) await member.roles.add(db[guildId].sicilRol).catch(() => { });
 
                 sendLog(interaction.guild, 'logCeza', {
                     title: 'Manuel Cezalandırma (Hapis)',
@@ -720,8 +747,8 @@ client.on('interactionCreate', async interaction => {
                         saveDB(db);
                         const member = await interaction.guild.members.fetch(user.id).catch(() => null);
                         if (member && member.manageable) {
-                            if (db[guildId].jailRol) member.roles.remove(db[guildId].jailRol).catch(() => {});
-                            if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => {});
+                            if (db[guildId].jailRol) member.roles.remove(db[guildId].jailRol).catch(() => { });
+                            if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
                         }
                         sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
                         return interaction.reply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
@@ -843,28 +870,28 @@ client.on('interactionCreate', async interaction => {
             const choice = interaction.values[0];
             if (choice === 'lock') {
                 roomData.locked = true;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false }).catch(() => {});
+                await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false }).catch(() => { });
             } else if (choice === 'unlock') {
                 roomData.locked = false;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true }).catch(() => {});
+                await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true }).catch(() => { });
             } else if (choice === 'invisible') {
                 roomData.hidden = true;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => {});
+                await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => { });
             } else if (choice === 'visible') {
                 roomData.hidden = false;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: true }).catch(() => {});
+                await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: true }).catch(() => { });
             } else if (choice === 'close_chat') {
                 roomData.chatClosed = true;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: false }).catch(() => {});
+                await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: false }).catch(() => { });
             } else if (choice === 'open_chat') {
                 roomData.chatClosed = false;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: true }).catch(() => {});
+                await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: true }).catch(() => { });
             }
 
             saveDB(db);
-            return interaction.update({ 
-                embeds: [buildTempVoiceEmbed(roomData)], 
-                components: buildTempVoiceComponents(roomData, false) 
+            return interaction.update({
+                embeds: [buildTempVoiceEmbed(roomData)],
+                components: buildTempVoiceComponents(roomData, false)
             });
         }
     }
@@ -1006,7 +1033,7 @@ client.on('interactionCreate', async interaction => {
 
                 await channel.permissionOverwrites.edit(interaction.user.id, {
                     ManageChannels: true, MoveMembers: true, Connect: true, ViewChannel: true, SendMessages: true
-                }).catch(() => {});
+                }).catch(() => { });
 
                 return interaction.update({
                     content: `Odanın yeni sahibi <@${interaction.user.id}> oldu.`,
@@ -1067,7 +1094,7 @@ client.on('interactionCreate', async interaction => {
                 delete db[guildId].tempRooms[channel.id];
                 saveDB(db);
                 await interaction.reply({ content: 'Oda siliniyor...', ephemeral: true });
-                await channel.delete().catch(() => {});
+                await channel.delete().catch(() => { });
                 return;
             }
         }
@@ -1138,7 +1165,7 @@ client.on('interactionCreate', async interaction => {
                         fields.push({ name: 'İlgilenen Yetkili', value: `<@${interaction.user.id}>`, inline: true });
                     }
                     newEmbed.setFields(fields);
-                    await interaction.message.edit({ embeds: [newEmbed] }).catch(() => {});
+                    await interaction.message.edit({ embeds: [newEmbed] }).catch(() => { });
                 }
 
                 return interaction.reply({ content: `Bu destek talebi <@${interaction.user.id}> tarafından üstlenildi. Yetkilimiz sizinle ilgilenecektir.` });
@@ -1147,7 +1174,7 @@ client.on('interactionCreate', async interaction => {
             if (customId === 'ticket_lock') {
                 ticketData.locked = !ticketData.locked;
                 saveDB(db);
-                await interaction.channel.permissionOverwrites.edit(ticketData.ownerId, { SendMessages: !ticketData.locked }).catch(() => {});
+                await interaction.channel.permissionOverwrites.edit(ticketData.ownerId, { SendMessages: !ticketData.locked }).catch(() => { });
                 return interaction.reply({ content: ticketData.locked ? 'Kanal kilitlendi (Talep sahibi mesaj yazamaz).' : 'Kanal kilidi açıldı.' });
             }
 
@@ -1199,7 +1226,7 @@ client.on('interactionCreate', async interaction => {
                 delete db[guildId].tickets[interaction.channel.id];
                 saveDB(db);
 
-                setTimeout(() => { interaction.channel.delete().catch(() => {}); }, 3000);
+                setTimeout(() => { interaction.channel.delete().catch(() => { }); }, 3000);
             }
         }
     }
@@ -1322,10 +1349,10 @@ client.on('interactionCreate', async interaction => {
                 const mentionText = db[guildId].yetkiliRol ? `<@${interaction.user.id}> | <@&${db[guildId].yetkiliRol}>` : `<@${interaction.user.id}>`;
                 await ticketChannel.send({ content: mentionText, embeds: [embed], components: [row] });
 
-                sendLog(interaction.guild, 'logSunucu', { 
-                    title: 'Yeni Ticket Açıldı', 
-                    desc: `**Açan Kullanıcı:** <@${interaction.user.id}>\n**Kanal:** <#${ticketChannel.id}>\n**Birim:** ${panelTitle}\n**Konu:** ${konu}`, 
-                    color: 0x57f287 
+                sendLog(interaction.guild, 'logSunucu', {
+                    title: 'Yeni Ticket Açıldı',
+                    desc: `**Açan Kullanıcı:** <@${interaction.user.id}>\n**Kanal:** <#${ticketChannel.id}>\n**Birim:** ${panelTitle}\n**Konu:** ${konu}`,
+                    color: 0x57f287
                 });
                 return interaction.reply({ content: `Talebiniz başarıyla oluşturuldu: <#${ticketChannel.id}>`, ephemeral: true });
             } catch (e) {
@@ -1336,7 +1363,7 @@ client.on('interactionCreate', async interaction => {
         if (interaction.customId === 'modal_vc_limit') {
             const val = parseInt(interaction.fields.getTextInputValue('limit_val'));
             if (isNaN(val) || val < 0 || val > 99) return interaction.reply({ content: 'Lütfen 0 ile 99 arasında geçerli bir sayı girin.', ephemeral: true });
-            await interaction.channel.setUserLimit(val).catch(() => {});
+            await interaction.channel.setUserLimit(val).catch(() => { });
             return interaction.reply({ content: `Oda kişi sınırı **${val === 0 ? 'Sınırsız' : val}** olarak ayarlandı.`, ephemeral: true });
         }
 
@@ -1350,7 +1377,7 @@ client.on('interactionCreate', async interaction => {
             }
             const newName = interaction.fields.getTextInputValue('name_val').trim();
             renameCooldownMap.set(interaction.channel.id, now);
-            await interaction.channel.setName(newName).catch(() => {});
+            await interaction.channel.setName(newName).catch(() => { });
             return interaction.reply({ content: `Oda ismi **${newName}** olarak güncellendi.`, ephemeral: true });
         }
     }
@@ -1374,31 +1401,31 @@ client.on('interactionCreate', async interaction => {
         const roomData = db[guildId].tempRooms[channel.id];
 
         if (interaction.customId === 'select_vc_trust') {
-            await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, Connect: true, SendMessages: true }).catch(() => {});
+            await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, Connect: true, SendMessages: true }).catch(() => { });
             return interaction.update({ content: `<@${targetId}> izinli (Trust) listesine eklendi. Oda kilitli veya gizli olsa bile girebilir.`, components: [] });
         }
 
         if (interaction.customId === 'select_vc_untrust') {
-            await channel.permissionOverwrites.delete(targetId).catch(() => {});
+            await channel.permissionOverwrites.delete(targetId).catch(() => { });
             return interaction.update({ content: `<@${targetId}> kullanıcısının özel oda izinleri kaldırıldı.`, components: [] });
         }
 
         if (interaction.customId === 'select_vc_block') {
             if (targetId === interaction.user.id) return interaction.update({ content: 'Kendinizi engelleyemezsiniz.', components: [] });
-            if (targetMember.voice.channelId === channel.id) await targetMember.voice.disconnect().catch(() => {});
-            await channel.permissionOverwrites.edit(targetId, { ViewChannel: false, Connect: false, SendMessages: false }).catch(() => {});
+            if (targetMember.voice.channelId === channel.id) await targetMember.voice.disconnect().catch(() => { });
+            await channel.permissionOverwrites.edit(targetId, { ViewChannel: false, Connect: false, SendMessages: false }).catch(() => { });
             return interaction.update({ content: `<@${targetId}> odadan engellendi (Block) ve bağlantısı kesildi.`, components: [] });
         }
 
         if (interaction.customId === 'select_vc_unblock') {
-            await channel.permissionOverwrites.delete(targetId).catch(() => {});
+            await channel.permissionOverwrites.delete(targetId).catch(() => { });
             return interaction.update({ content: `<@${targetId}> kullanıcısının oda engeli kaldırıldı.`, components: [] });
         }
 
         if (interaction.customId === 'select_vc_kick') {
             if (targetId === interaction.user.id) return interaction.update({ content: 'Kendinizi odadan atamazsınız.', components: [] });
             if (targetMember.voice.channelId !== channel.id) return interaction.update({ content: 'Bu kullanıcı şu an ses odasında değil.', components: [] });
-            await targetMember.voice.disconnect().catch(() => {});
+            await targetMember.voice.disconnect().catch(() => { });
             return interaction.update({ content: `<@${targetId}> ses odasından çıkarıldı.`, components: [] });
         }
 
@@ -1409,7 +1436,7 @@ client.on('interactionCreate', async interaction => {
             roomData.ownerId = targetId;
             saveDB(db);
 
-            await channel.permissionOverwrites.edit(targetId, { ManageChannels: true, MoveMembers: true, Connect: true, ViewChannel: true, SendMessages: true }).catch(() => {});
+            await channel.permissionOverwrites.edit(targetId, { ManageChannels: true, MoveMembers: true, Connect: true, ViewChannel: true, SendMessages: true }).catch(() => { });
 
             if (roomData.panelMsgId) {
                 const panelMsg = await channel.messages.fetch(roomData.panelMsgId).catch(() => null);
@@ -1418,20 +1445,20 @@ client.on('interactionCreate', async interaction => {
                         content: `Oda sahipliği <@${targetId}> kullanıcısına devredildi.`,
                         embeds: [buildTempVoiceEmbed(roomData)],
                         components: buildTempVoiceComponents(roomData, false)
-                    }).catch(() => {});
+                    }).catch(() => { });
                 }
             }
             return interaction.update({ content: `Oda sahipliği başarıyla <@${targetId}> kullanıcısına devredildi.`, components: [] });
         }
 
         if (interaction.customId === 'select_ticket_add') {
-            await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, AttachFiles: true, ReadMessageHistory: true }).catch(() => {});
+            await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, AttachFiles: true, ReadMessageHistory: true }).catch(() => { });
             await interaction.update({ content: `<@${targetId}> kanala eklendi.`, components: [] });
             return channel.send(`<@${targetId}>, <@${interaction.user.id}> tarafından bu talebe eklendi.`);
         }
 
         if (interaction.customId === 'select_ticket_remove') {
-            await channel.permissionOverwrites.delete(targetId).catch(() => {});
+            await channel.permissionOverwrites.delete(targetId).catch(() => { });
             await interaction.update({ content: `<@${targetId}> kanaldan çıkarıldı.`, components: [] });
             return channel.send(`<@${targetId}>, <@${interaction.user.id}> tarafından bu talepten çıkarıldı.`);
         }
@@ -1470,18 +1497,18 @@ client.on('messageCreate', async message => {
                 kickLink = embedUrl.includes('kick.com') ? embedUrl : (embedMatch ? embedMatch[0] : null);
             }
             if (kickLink) {
-                await message.delete().catch(() => {});
+                await message.delete().catch(() => { });
                 const row = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setLabel('Yayına Katıl').setStyle(ButtonStyle.Link).setURL(kickLink)
                 );
                 const duyuruKanali = message.guild.channels.cache.get(db[guildId].kickKanal);
                 if (duyuruKanali) {
-                    duyuruKanali.send({ 
-                        content: '@everyone **Yayındayız! Katılmak için aşağıdaki butona tıklayın.**', 
-                        components: [row] 
-                    }).catch(() => {});
+                    duyuruKanali.send({
+                        content: '@everyone **Yayındayız! Katılmak için aşağıdaki butona tıklayın.**',
+                        components: [row]
+                    }).catch(() => { });
                 }
-                return; 
+                return;
             }
         }
     }
@@ -1505,7 +1532,7 @@ client.on('messageCreate', async message => {
         const lowerContent = message.content.toLocaleLowerCase('tr-TR');
         for (const ayar of otoCevaplar) {
             let eslesti = false;
-            if (ayar.tetikleyiciler.includes("selam") && lowerContent.includes("aleyküm")) continue; 
+            if (ayar.tetikleyiciler.includes("selam") && lowerContent.includes("aleyküm")) continue;
             for (const tetikleyici of ayar.tetikleyiciler) {
                 if (ayar.tamKelime) {
                     const regex = new RegExp(`(?:^|\\s|[.,!?:])${tetikleyici}(?:$|\\s|[.,!?:])`, 'i');
@@ -1516,8 +1543,8 @@ client.on('messageCreate', async message => {
             }
             if (eslesti) {
                 const rastgeleCevap = ayar.cevaplar[Math.floor(Math.random() * ayar.cevaplar.length)];
-                if (ayar.etiketle) await message.reply(rastgeleCevap).catch(() => {});
-                else await message.channel.send(rastgeleCevap).catch(() => {});
+                if (ayar.etiketle) await message.reply(rastgeleCevap).catch(() => { });
+                else await message.channel.send(rastgeleCevap).catch(() => { });
                 break;
             }
         }
@@ -1530,9 +1557,9 @@ client.on('messageCreate', async message => {
         const isDiscordMedia = /(tenor\.com|giphy\.com|discordapp\.com\/attachments|discord\.com\/channels|cdn\.discordapp\.com)/i.test(message.content);
         const hasLink = /(https?:\/\/[^\s]+|discord\.gg\/[^\s]+)/gi.test(message.content);
         if (hasLink && !isDiscordMedia) {
-            await message.delete().catch(() => {});
+            await message.delete().catch(() => { });
             await applyJail(message.member, message.guild, "Yasaklı Link Paylaşımı");
-            return; 
+            return;
         }
     }
 
@@ -1541,8 +1568,8 @@ client.on('messageCreate', async message => {
     if (lettersOnly.length > 5) {
         const upperCount = lettersOnly.replace(/[^A-ZĞÜŞİÖÇ]/g, "").length;
         if ((upperCount / lettersOnly.length) >= 0.75) {
-            await message.delete().catch(() => {});
-            message.channel.send(`${message.member}, lütfen tamamı büyük harf (Caps Lock) içeren mesajlar yazmayalım.`).then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
+            await message.delete().catch(() => { });
+            message.channel.send(`${message.member}, lütfen tamamı büyük harf (Caps Lock) içeren mesajlar yazmayalım.`).then(m => setTimeout(() => m.delete().catch(() => { }), 4000));
             sendLog(message.guild, 'logCeza', { title: 'Büyük Harf (Caps Lock) Uyarısı', desc: `**Kullanıcı:** <@${message.author.id}>\n**Kanal:** <#${message.channel.id}>\n**Mesaj:** ${message.content}`, color: 0xfee75c });
         }
     }
@@ -1556,8 +1583,8 @@ client.on('messageCreate', async message => {
     spamMap.set(message.author.id, recentMsgs);
 
     if (recentMsgs.length >= 4) {
-        spamMap.delete(message.author.id); 
-        await message.channel.bulkDelete(4, true).catch(() => {}); 
+        spamMap.delete(message.author.id);
+        await message.channel.bulkDelete(4, true).catch(() => { });
 
         ensureGuildDB(db, guildId);
         if (!db[guildId].users[message.author.id]) {
@@ -1569,9 +1596,9 @@ client.on('messageCreate', async message => {
 
         if (uData.spamWarn === 1) {
             if (message.member.manageable) {
-                await message.member.timeout(3 * 60 * 1000, "Spam / Flood (1. İhlal)").catch(() => {});
+                await message.member.timeout(3 * 60 * 1000, "Spam / Flood (1. İhlal)").catch(() => { });
             }
-            message.channel.send(`<@${message.author.id}>, art arda hızlı mesaj (spam) gönderdiğiniz için **3 dakika** zaman aşımı (timeout) aldınız. Tekrarı halinde hapis cezası uygulanacaktır.`).then(m => setTimeout(() => m.delete().catch(() => {}), 8000));
+            message.channel.send(`<@${message.author.id}>, art arda hızlı mesaj (spam) gönderdiğiniz için **3 dakika** zaman aşımı (timeout) aldınız. Tekrarı halinde hapis cezası uygulanacaktır.`).then(m => setTimeout(() => m.delete().catch(() => { }), 8000));
             sendLog(message.guild, 'logCeza', {
                 title: 'Otomatik Spam Müdahalesi (1. İhlal - Timeout)',
                 desc: `**Kullanıcı:** <@${message.author.id}>\n**Kanal:** <#${message.channel.id}>\n**İşlem:** 3 Dakika Zaman Aşımı (Timeout)`,
@@ -1593,7 +1620,7 @@ client.on('messageCreate', async message => {
 client.on('messageDelete', async message => {
     if (!message.guild) return;
     if (message.author && message.author.bot) return;
-    
+
     const targetId = message.author ? message.author.id : null;
     const executor = await getAuditExecutor(message.guild, AuditLogEvent.MessageDelete, targetId);
     const silenBilgisi = executor ? `<@${executor.id}> (Yetkili)` : (message.author ? `<@${message.author.id}> (Kendisi)` : 'Bilinmiyor');
@@ -1622,7 +1649,7 @@ client.on('messageDelete', async message => {
                     const res = await fetch(att.url);
                     const arrayBuffer = await res.arrayBuffer();
                     recoveredFiles.push(new AttachmentBuilder(Buffer.from(arrayBuffer), { name: att.name || 'silinen-medya.png' }));
-                } catch (e) {}
+                } catch (e) { }
             }
         }
     }
@@ -1640,7 +1667,7 @@ client.on('messageDelete', async message => {
 client.on('messageUpdate', async (oldMessage, newMessage) => {
     if (!oldMessage.guild) return;
     if (newMessage.author && newMessage.author.bot) return;
-    
+
     if (!oldMessage.pinned && newMessage.pinned) {
         return sendLog(oldMessage.guild, 'logMesaj', { title: 'Mesaj Sabitlendi (Pin)', desc: `**Kanal:** <#${oldMessage.channel.id}>\n**Mesaj Sahibi:** <@${newMessage.author.id}>\n[Mesaja Git](${newMessage.url})`, color: 0x3498db });
     }
@@ -1667,7 +1694,7 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
                 const isDiscordMedia = /(tenor\.com|giphy\.com|discordapp\.com\/attachments|discord\.com\/channels|cdn\.discordapp\.com)/i.test(newMessage.content);
                 const hasLink = /(https?:\/\/[^\s]+|discord\.gg\/[^\s]+)/gi.test(newMessage.content);
                 if (hasLink && !isDiscordMedia) {
-                    await newMessage.delete().catch(() => {});
+                    await newMessage.delete().catch(() => { });
                     await applyJail(newMessage.member, newMessage.guild, "Yasaklı Link Paylaşımı (Düzenlenen Mesaj)");
                     return;
                 }
@@ -1720,7 +1747,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             const lastCreated = vcCooldownMap.get(cdKey) || 0;
 
             if (now - lastCreated < 15000) {
-                await member.voice.disconnect().catch(() => {});
+                await member.voice.disconnect().catch(() => { });
                 return;
             }
             vcCooldownMap.set(cdKey, now);
@@ -1732,17 +1759,17 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                     type: ChannelType.GuildVoice,
                     parent: db[guildId].odaKategori,
                     permissionOverwrites: [
-                        { 
-                            id: newState.guild.id, 
-                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] 
+                        {
+                            id: newState.guild.id,
+                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
                         },
-                        { 
-                            id: member.id, 
-                            allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] 
+                        {
+                            id: member.id,
+                            allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
                         },
-                        { 
-                            id: client.user.id, 
-                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ReadMessageHistory] 
+                        {
+                            id: client.user.id,
+                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ReadMessageHistory]
                         }
                     ]
                 });
@@ -1762,10 +1789,10 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
                 setTimeout(async () => {
                     try {
-                        const panelMsg = await newChannel.send({ 
-                            content: `<@${member.id}>, oda kontrol paneliniz aşağıdadır:`, 
-                            embeds: [buildTempVoiceEmbed(roomData)], 
-                            components: buildTempVoiceComponents(roomData, false) 
+                        const panelMsg = await newChannel.send({
+                            content: `<@${member.id}>, oda kontrol paneliniz aşağıdadır:`,
+                            embeds: [buildTempVoiceEmbed(roomData)],
+                            components: buildTempVoiceComponents(roomData, false)
                         });
                         if (panelMsg) {
                             const freshDb = getDB();
@@ -1796,17 +1823,17 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                 delete db[guildId].tempRooms[oldChannel.id];
                 renameCooldownMap.delete(oldChannel.id);
                 saveDB(db);
-                await oldChannel.delete().catch(() => {});
+                await oldChannel.delete().catch(() => { });
                 sendLog(oldState.guild, 'logSunucu', { title: 'Geçici Ses Odası Silindi', desc: `**Oda Adı:** \`${oldChannel.name}\` boşaldığı için otomatik silindi.`, color: 0xed4245 });
             } else if (oldState.id === roomData.ownerId) {
                 if (roomData.panelMsgId) {
                     const panelMsg = await oldChannel.messages.fetch(roomData.panelMsgId).catch(() => null);
                     if (panelMsg) {
-                        await panelMsg.edit({ 
-                            content: `Oda sahibi (<@${roomData.ownerId}>) odadan ayrıldı. Odadaki üyelerden biri **Sahipliği Al** butonuna basarak odayı devralabilir.`, 
+                        await panelMsg.edit({
+                            content: `Oda sahibi (<@${roomData.ownerId}>) odadan ayrıldı. Odadaki üyelerden biri **Sahipliği Al** butonuna basarak odayı devralabilir.`,
                             embeds: [buildTempVoiceEmbed(roomData)],
-                            components: buildTempVoiceComponents(roomData, true) 
-                        }).catch(() => {});
+                            components: buildTempVoiceComponents(roomData, true)
+                        }).catch(() => { });
                     }
                 }
             }
@@ -1887,10 +1914,10 @@ client.on('guildMemberAdd', async member => {
 
     if (member.manageable) {
         if (userData.jailExpire && Date.now() < userData.jailExpire && db[guildId].jailRol) {
-            await member.roles.add(db[guildId].jailRol).catch(() => {});
+            await member.roles.add(db[guildId].jailRol).catch(() => { });
         }
         if (userData.sicilli && db[guildId].sicilRol) {
-            await member.roles.add(db[guildId].sicilRol).catch(() => {});
+            await member.roles.add(db[guildId].sicilRol).catch(() => { });
         }
     }
 
@@ -1905,7 +1932,7 @@ client.on('guildMemberAdd', async member => {
             const prevUses = oldInvites.get(inv.code) ? oldInvites.get(inv.code) : 0;
             return inv.uses > prevUses;
         });
-        
+
         newInvites.forEach(inv => oldInvites.set(inv.code, inv.uses));
         invitesCache.set(member.guild.id, oldInvites);
 
@@ -1914,7 +1941,7 @@ client.on('guildMemberAdd', async member => {
             inviteCode = usedInvite.code;
             inviteMsg = `<@${usedInvite.inviter.id}> (\`${usedInvite.code}\` koduyla - Toplam **${usedInvite.uses}** kullanım)`;
         }
-    } catch (e) {}
+    } catch (e) { }
 
     userData.lastJoin = Date.now();
     userData.inviterId = inviterId;
@@ -1977,7 +2004,7 @@ client.on('guildMemberRemove', async member => {
                     color: 0xe67e22
                 }, [attachment]);
 
-                await tChannel.delete().catch(() => {});
+                await tChannel.delete().catch(() => { });
             }
             delete db[guildId].tickets[tChId];
             saveDB(db);
@@ -2063,7 +2090,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 
     const removedRoles = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
     const addedRoles = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
-    
+
     if (addedRoles.size > 0 || removedRoles.size > 0) {
         const executor = await getAuditExecutor(guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
         const yetkili = executor ? `<@${executor.id}>` : 'Sistem / Bilinmiyor';
@@ -2085,11 +2112,11 @@ client.on('userUpdate', (oldUser, newUser) => {
             sendLog(guild, 'logUye', { title: 'Discord Kullanıcı Adı Değişti', desc: `**Kullanıcı:** <@${newUser.id}>\n**Eski Adı:** \`${oldUser.username}\`\n**Yeni Adı:** \`${newUser.username}\``, color: 0x3498db });
         }
         if (oldUser.avatar !== newUser.avatar) {
-            sendLog(guild, 'logUye', { 
-                title: 'Discord Profil Fotoğrafı (PP) Değişti', 
-                desc: `**Kullanıcı:** <@${newUser.id}> genel profil fotoğrafını değiştirdi.\n[Eski PP](${oldUser.displayAvatarURL()}) -> [Yeni PP](${newUser.displayAvatarURL()})`, 
-                color: 0x3498db, 
-                thumbnail: newUser.displayAvatarURL() 
+            sendLog(guild, 'logUye', {
+                title: 'Discord Profil Fotoğrafı (PP) Değişti',
+                desc: `**Kullanıcı:** <@${newUser.id}> genel profil fotoğrafını değiştirdi.\n[Eski PP](${oldUser.displayAvatarURL()}) -> [Yeni PP](${newUser.displayAvatarURL()})`,
+                color: 0x3498db,
+                thumbnail: newUser.displayAvatarURL()
             });
         }
     });
@@ -2178,10 +2205,10 @@ client.on('roleUpdate', async (oldRole, newRole) => {
         const addedCritical = criticalPerms.filter(p => !oldRole.permissions.has(p.flag) && newRole.permissions.has(p.flag));
 
         if (addedCritical.length > 0) {
-            sendLog(newRole.guild, 'logSunucu', { 
-                title: 'KRİTİK ROL İZNİ EKLENDİ', 
-                desc: `**Rol:** <@&${newRole.id}> (\`${newRole.name}\`)\n**İşlemi Yapan:** ${yetkili}\n**Eklenen Kritik Yetkiler:**\n${addedCritical.map(p => `- \`${p.name}\``).join('\n')}`, 
-                color: 0xff0000 
+            sendLog(newRole.guild, 'logSunucu', {
+                title: 'KRİTİK ROL İZNİ EKLENDİ',
+                desc: `**Rol:** <@&${newRole.id}> (\`${newRole.name}\`)\n**İşlemi Yapan:** ${yetkili}\n**Eklenen Kritik Yetkiler:**\n${addedCritical.map(p => `- \`${p.name}\``).join('\n')}`,
+                color: 0xff0000
             });
         } else {
             sendLog(newRole.guild, 'logSunucu', { title: 'Rol İzinleri Güncellendi', desc: `**Rol:** <@&${newRole.id}>\n**Değiştiren Yetkili:** ${yetkili}\nRolün yetki ayarları değiştirildi.`, color: 0xfee75c });
@@ -2267,7 +2294,7 @@ client.on('inviteDelete', invite => {
 });
 
 process.on('unhandledRejection', error => {
-    if (error && [10062, 40060, 50013, 10008].includes(error.code)) return; 
+    if (error && [10062, 40060, 50013, 10008].includes(error.code)) return;
     console.error('Sistem Hatası (Rejection):', error);
 });
 
