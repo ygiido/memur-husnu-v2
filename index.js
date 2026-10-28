@@ -35,28 +35,21 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User, Partials.Reaction]
 });
 
-// Veritabanı (JSON) Okuma ve Güvenli (Atomik) Kaydetme Fonksiyonları
+// Veritabanı (JSON) Okuma ve Kaydetme Fonksiyonları
 const dbPath = './database.json';
-const dbTmpPath = './database.json.tmp';
 if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
 const getDB = () => {
     try { 
         return JSON.parse(fs.readFileSync(dbPath, 'utf8')); 
     } catch (e) { 
-        console.error('Veritabanı okuma hatası, geçici dosya kontrol ediliyor:', e.message);
-        if (fs.existsSync(dbTmpPath)) {
-            try { return JSON.parse(fs.readFileSync(dbTmpPath, 'utf8')); } catch (_) {}
-        }
         return {}; 
     }
 };
 const saveDB = (data) => {
     try {
-        fs.writeFileSync(dbTmpPath, JSON.stringify(data, null, 4), 'utf8');
-        fs.renameSync(dbTmpPath, dbPath);
+        fs.writeFileSync(dbPath, JSON.stringify(data, null, 4), 'utf8');
     } catch (err) {
-        console.error('Veritabanı güvenli kayıt hatası:', err.message);
-        try { fs.writeFileSync(dbPath, JSON.stringify(data, null, 4), 'utf8'); } catch (_) {}
+        console.error('Veritabanı kayıt hatası:', err.message);
     }
 };
 
@@ -669,7 +662,8 @@ client.once('ready', async () => {
     if (dbUpdated) saveDB(db);
 
     if (client.application) {
-        await client.application.commands.set(commands).catch(e => console.error('Global komut kurulum hatası:', e.message));
+        // Çakışan global komutları sıfırla (Discord istemcisinin anlık sunucu komutlarını kullanması için)
+        await client.application.commands.set([]).catch(() => {});
     }
     for (const guild of client.guilds.cache.values()) {
         await guild.commands.set(commands).catch(() => {});
