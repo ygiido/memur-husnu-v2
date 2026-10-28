@@ -20,7 +20,7 @@ const liveLogs = [];
 function addLiveLog(msg) {
     const time = new Date().toLocaleTimeString('tr-TR');
     liveLogs.push(`[${time}] ${msg}`);
-    if (liveLogs.length > 25) liveLogs.shift();
+    if (liveLogs.length > 50) liveLogs.shift();
     console.log(`[BOT DIAGNOSTIC] ${msg}`);
 }
 
@@ -43,6 +43,12 @@ const server = http.createServer((req, res) => {
     const wsCode = client && client.ws ? client.ws.status : null;
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
     
+    // Gelen istek ve UptimeRobot pingini kaydet
+    const ua = req.headers['user-agent'] || 'Bilinmeyen UA';
+    if (!req.url.includes('favicon')) {
+        addLiveLog(`[HTTP Ping] ${req.method} ${req.url} - UA: ${ua.slice(0, 35)}`);
+    }
+
     const statusData = {
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
@@ -60,6 +66,14 @@ server.on('error', (err) => {
 server.listen(serverPort, () => {
     addLiveLog(`HTTP sunucusu ${serverPort} portunda dinlemede.`);
 });
+
+// Render uyku önleyici dahili otomatik ping döngüsü (Keep-Alive)
+const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://memur-husnu-v2.onrender.com';
+setInterval(async () => {
+    try {
+        await fetch(RENDER_EXTERNAL_URL);
+    } catch (e) { }
+}, 8 * 60 * 1000);
 
 const client = new Client({
     intents: [
@@ -83,9 +97,8 @@ client.on('shardError', (error, shardId) => addLiveLog(`[Shard ${shardId} Hatas�
 client.on('shardDisconnect', (event, shardId) => addLiveLog(`[Shard ${shardId} Kesildi]: Kod ${event.code} (${event.reason || 'Sebep Yok'})`));
 client.on('shardReconnecting', shardId => addLiveLog(`[Shard ${shardId}] Yeniden bağlanılıyor...`));
 client.on('debug', msg => {
-    // Sadece bağlantı ve gateway ile ilgili tanı mesajlarını filtreleyerek kaydedelim
-    if (msg.includes('Heartbeat') && !msg.includes('acknowledged')) return;
-    if (msg.includes('Latency') || msg.includes('Swept')) return;
+    // Heartbeat ve gecikme mesajları logları doldurmasın
+    if (msg.includes('Heartbeat') || msg.includes('Latency') || msg.includes('Swept')) return;
     addLiveLog(`[DEBUG] ${msg}`);
 });
 
@@ -688,13 +701,22 @@ client.once('ready', async () => {
 // ============================================================================
 client.on('interactionCreate', async interaction => {
     if (!interaction.guild) return;
-    const db = getDB();
-    const guildId = interaction.guildId;
-    ensureGuildDB(db, guildId);
 
-    // Tekli Yetkili Rolü ve Yönetici Kontrolü
-    const isYetkili = Boolean(db[guildId].yetkiliRol && interaction.member.roles.cache.has(db[guildId].yetkiliRol));
-    const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+    const actionName = interaction.isChatInputCommand() ? `/${interaction.commandName}` : (interaction.customId || 'Etkileşim');
+    const userTag = interaction.user ? interaction.user.tag : 'Bilinmeyen Kullanıcı';
+    addLiveLog(`[ETKİLEŞİM] ${actionName} (${interaction.guild.name} - ${userTag})`);
+
+    try {
+        const db = getDB();
+        const guildId = interaction.guildId;
+        ensureGuildDB(db, guildId);
+
+        // Güvenli Yetkili Rolü ve Yönetici Kontrolü
+        const isAdmin = Boolean(interaction.memberPermissions && interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator));
+        const isYetkili = Boolean(
+            isAdmin || 
+            (db[guildId].yetkiliRol && interaction.member && interaction.member.roles && interaction.member.roles.cache && interaction.member.roles.cache.has(db[guildId].yetkiliRol))
+        );
 
     // ------------------------------------------------------------------------
     // 1. SLASH KOMUTLARI (/panel, /yaz, /hapis, /af, /sil)
@@ -1028,24 +1050,24 @@ client.on('interactionCreate', async interaction => {
 
         // --- /PANEL GEZİNME BUTONLARI ---
         if (customId === 'nav_panel_home') {
-            if (!isAdmin) return;
-            return interaction.update(buildHomeDashboard(interaction.guild));
+            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
+            return interaction.update(buildHomeDashboard(interaction.guild)).catch(() => {});
         }
         if (customId === 'nav_panel_ayar') {
-            if (!isAdmin) return;
-            return interaction.update(buildAyarDashboard(db[guildId]));
+            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
+            return interaction.update(buildAyarDashboard(db[guildId])).catch(() => {});
         }
         if (customId === 'nav_panel_log') {
-            if (!isAdmin) return;
-            return interaction.update(buildLogDashboard(db[guildId]));
+            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
+            return interaction.update(buildLogDashboard(db[guildId])).catch(() => {});
         }
         if (customId === 'nav_panel_ticket') {
-            if (!isAdmin) return;
-            return interaction.update(buildTicketDashboard(db[guildId]));
+            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
+            return interaction.update(buildTicketDashboard(db[guildId])).catch(() => {});
         }
         if (customId === 'nav_panel_info') {
-            if (!isAdmin) return;
-            return interaction.update(buildInfoDashboard(interaction.guild, db[guildId]));
+            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
+            return interaction.update(buildInfoDashboard(interaction.guild, db[guildId])).catch(() => {});
         }
 
         // --- GEÇİCİ ODA (TEMP VC) BUTONLARI ---
@@ -1496,6 +1518,13 @@ client.on('interactionCreate', async interaction => {
             await channel.permissionOverwrites.delete(targetId).catch(() => { });
             await interaction.update({ content: `<@${targetId}> kanaldan çıkarıldı.`, components: [] });
             return channel.send(`<@${targetId}>, <@${interaction.user.id}> tarafından bu talepten çıkarıldı.`);
+        }
+    }
+    } catch (err) {
+        addLiveLog(`❌ Etkileşim Hatası: ${err.message}`);
+        console.error('Etkileşim Hatası:', err);
+        if (!interaction.replied && !interaction.deferred) {
+            interaction.reply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.', ephemeral: true }).catch(() => {});
         }
     }
 });
