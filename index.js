@@ -15,21 +15,50 @@ const fs = require('fs');
 const http = require('http');
 require('dotenv').config();
 
-// Render vb. bulut sunucularda botun aktif kalması için HTTP sunucusu
+// Canlı Durum ve Tanı Kayıtları
+const liveLogs = [];
+function addLiveLog(msg) {
+    const time = new Date().toLocaleTimeString('tr-TR');
+    liveLogs.push(`[${time}] ${msg}`);
+    if (liveLogs.length > 25) liveLogs.shift();
+    console.log(`[BOT DIAGNOSTIC] ${msg}`);
+}
+
+const wsStatusMap = {
+    0: 'READY (Aktif / Çevrimiçi)',
+    1: 'CONNECTING (Bağlanıyor)',
+    2: 'RECONNECTING (Yeniden Bağlanıyor)',
+    3: 'IDLE (Boşta)',
+    4: 'NEARLY (Hazırlanıyor)',
+    5: 'DISCONNECTED (Bağlantı Kesik)',
+    6: 'WAITING_FOR_GUILDS (Sunucular Bekleniyor)',
+    7: 'IDENTIFYING (Kimlik Doğrulanıyor)',
+    8: 'RESUMING (Devam Ettiriliyor)'
+};
+
+// Render vb. bulut sunucularda botun aktif kalması ve canlı durum izleme HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
     const isBotReady = Boolean(client && client.isReady && client.isReady());
-    const msg = isBotReady 
-        ? `Bot aktif ve Discord'a bağlı (${client.user.tag}).` 
-        : `Bot web servisi ayakta, Discord Gateway bağlantısı bekleniyor...`;
-    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end(msg);
+    const wsCode = client && client.ws ? client.ws.status : null;
+    const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
+    
+    const statusData = {
+        durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
+        botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
+        discordWebsocketDurumu: wsText,
+        tokenTanimliMi: Boolean(process.env.TOKEN),
+        canliGunlukler: liveLogs
+    };
+
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(statusData, null, 2));
 });
 server.on('error', (err) => {
     console.error('HTTP Sunucusu Hatası:', err.message);
 });
 server.listen(serverPort, () => {
-    console.log(`HTTP sunucusu ${serverPort} portunda dinlemede.`);
+    addLiveLog(`HTTP sunucusu ${serverPort} portunda dinlemede.`);
 });
 
 const client = new Client({
@@ -48,11 +77,17 @@ const client = new Client({
     partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User, Partials.Reaction]
 });
 
-// Shard ve Bağlantı Hata Dinleyicileri
-client.on('error', error => console.error('Discord İstemci Hatası:', error));
-client.on('shardError', (error, shardId) => console.error(`[SHARD ${shardId} ERROR]:`, error));
-client.on('shardDisconnect', (event, shardId) => console.warn(`[SHARD ${shardId} DISCONNECT]: Code ${event.code}, Reason: ${event.reason}`));
-client.on('shardReconnecting', shardId => console.log(`[SHARD ${shardId}] Yeniden bağlanılıyor...`));
+// Shard ve Bağlantı Hata / Tanı Dinleyicileri
+client.on('error', error => addLiveLog(`Discord İstemci Hatası: ${error.message}`));
+client.on('shardError', (error, shardId) => addLiveLog(`[Shard ${shardId} Hatası]: ${error.message}`));
+client.on('shardDisconnect', (event, shardId) => addLiveLog(`[Shard ${shardId} Kesildi]: Kod ${event.code} (${event.reason || 'Sebep Yok'})`));
+client.on('shardReconnecting', shardId => addLiveLog(`[Shard ${shardId}] Yeniden bağlanılıyor...`));
+client.on('debug', msg => {
+    // Sadece bağlantı ve gateway ile ilgili tanı mesajlarını filtreleyerek kaydedelim
+    if (msg.includes('Heartbeat') && !msg.includes('acknowledged')) return;
+    if (msg.includes('Latency') || msg.includes('Swept')) return;
+    addLiveLog(`[DEBUG] ${msg}`);
+});
 
 // Veritabanı (JSON) Okuma ve Kaydetme Fonksiyonları
 const dbPath = './database.json';
@@ -550,7 +585,7 @@ setInterval(() => {
 // BOT HAZIR OLDUĞUNDA, HAYALET ODA TEMİZLİĞİ VE SLASH KOMUT KURULUMU
 // ============================================================================
 client.once('ready', async () => {
-    console.log(`Sistem aktif: ${client.user.tag} giriş yaptı.`);
+    addLiveLog(`🎉 Sistem aktif: ${client.user.tag} giriş yaptı! (${client.guilds.cache.size} sunucu)`);
 
     const db = getDB();
     let dbUpdated = false;
@@ -2305,17 +2340,43 @@ process.on('uncaughtException', error => {
 const botToken = process.env.TOKEN ? process.env.TOKEN.trim() : null;
 
 if (!botToken) {
-    console.error('================================================================');
-    console.error('❌ KRİTİK HATA: Discord Bot TOKEN ortam değişkeni bulunamadı!');
-    console.error('Render panelinde sol menüdeki "Environment" sekmesine gidin,');
-    console.error('Key: TOKEN');
-    console.error('Value: <Bot Tokenınız> olarak ekleyip "Save Changes" yapın.');
-    console.error('================================================================');
+    addLiveLog('❌ KRİTİK HATA: Discord Bot TOKEN ortam değişkeni bulunamadı!');
+    console.error('Render panelinde sol menüdeki "Environment" sekmesine gidin, Key: TOKEN, Value: <Token>');
 } else {
-    console.log('✅ TOKEN bulundu, Discord Gateway bağlantısı başlatılıyor...');
-    client.login(botToken)
-        .then(() => console.log('✅ Discord Gateway bağlantısı sağlandı.'))
-        .catch(err => {
-            console.error('❌ Discord Giriş Hatası:', err);
-        });
+    addLiveLog('✅ TOKEN bulundu, Discord bağlantı süreci başlatılıyor...');
+    
+    // Doğrudan REST ve Gateway Tanı Testi (Preflight)
+    (async () => {
+        try {
+            addLiveLog('Discord API (@me) doğrulanıyor...');
+            const meRes = await fetch('https://discord.com/api/v10/users/@me', {
+                headers: { Authorization: `Bot ${botToken}` }
+            });
+            if (!meRes.ok) {
+                const errText = await meRes.text();
+                addLiveLog(`❌ Discord API Kimlik Hatası: HTTP ${meRes.status} - ${errText}`);
+                return;
+            }
+            const me = await meRes.json();
+            addLiveLog(`✅ Bot Kimliği: ${me.username}#${me.discriminator} (ID: ${me.id})`);
+
+            const gwRes = await fetch('https://discord.com/api/v10/gateway/bot', {
+                headers: { Authorization: `Bot ${botToken}` }
+            });
+            if (gwRes.ok) {
+                const gw = await gwRes.json();
+                addLiveLog(`✅ Gateway URL: ${gw.url} (Kalan Oturum Limiti: ${gw.session_start_limit?.remaining}/${gw.session_start_limit?.total})`);
+            }
+        } catch (e) {
+            addLiveLog(`⚠️ Preflight API Hatası: ${e.message}`);
+        }
+
+        // Discord.js Login
+        try {
+            await client.login(botToken);
+            addLiveLog('✅ client.login() başarıyla tamamlandı.');
+        } catch (err) {
+            addLiveLog(`❌ Discord Giriş Hatası: ${err.message || err}`);
+        }
+    })();
 }
