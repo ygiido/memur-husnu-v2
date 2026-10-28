@@ -2267,7 +2267,7 @@ client.on('inviteDelete', invite => {
 });
 
 process.on('unhandledRejection', error => {
-    if (error.code === 10062) return; 
+    if (error && [10062, 40060, 50013, 10008].includes(error.code)) return; 
     console.error('Sistem Hatası (Rejection):', error);
 });
 
@@ -2275,4 +2275,20 @@ process.on('uncaughtException', error => {
     console.error('Beklenmeyen Hata (Exception):', error);
 });
 
-client.login(process.env.TOKEN);
+const botToken = process.env.TOKEN ? process.env.TOKEN.trim() : null;
+
+if (!botToken) {
+    console.error('================================================================');
+    console.error('❌ KRİTİK HATA: Discord Bot TOKEN ortam değişkeni bulunamadı!');
+    console.error('Render panelinde sol menüdeki "Environment" sekmesine gidin,');
+    console.error('Key: TOKEN');
+    console.error('Value: <Bot Tokenınız> olarak ekleyip "Save Changes" yapın.');
+    console.error('================================================================');
+} else {
+    console.log('✅ TOKEN bulundu, Discord Gateway bağlantısı başlatılıyor...');
+    client.login(botToken)
+        .then(() => console.log('✅ Discord Gateway bağlantısı sağlandı.'))
+        .catch(err => {
+            console.error('❌ Discord Giriş Hatası:', err);
+        });
+}
