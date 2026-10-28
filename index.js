@@ -2373,39 +2373,24 @@ if (!botToken) {
     console.error('Render panelinde sol menüdeki "Environment" sekmesine gidin, Key: TOKEN, Value: <Token>');
 } else {
     addLiveLog('✅ TOKEN bulundu, Discord bağlantı süreci başlatılıyor...');
-    
-    // Doğrudan REST ve Gateway Tanı Testi (Preflight)
-    (async () => {
-        try {
-            addLiveLog('Discord API (@me) doğrulanıyor...');
-            const meRes = await fetch('https://discord.com/api/v10/users/@me', {
-                headers: { Authorization: `Bot ${botToken}` }
-            });
-            if (!meRes.ok) {
-                const errText = await meRes.text();
-                addLiveLog(`❌ Discord API Kimlik Hatası: HTTP ${meRes.status} - ${errText}`);
-                return;
-            }
-            const me = await meRes.json();
-            addLiveLog(`✅ Bot Kimliği: ${me.username}#${me.discriminator} (ID: ${me.id})`);
 
-            const gwRes = await fetch('https://discord.com/api/v10/gateway/bot', {
-                headers: { Authorization: `Bot ${botToken}` }
-            });
-            if (gwRes.ok) {
-                const gw = await gwRes.json();
-                addLiveLog(`✅ Gateway URL: ${gw.url} (Kalan Oturum Limiti: ${gw.session_start_limit?.remaining}/${gw.session_start_limit?.total})`);
-            }
-        } catch (e) {
-            addLiveLog(`⚠️ Preflight API Hatası: ${e.message}`);
-        }
-
-        // Discord.js Login
+    let isLoggingIn = false;
+    async function startBot() {
+        if (isLoggingIn || (client.isReady && client.isReady())) return;
+        isLoggingIn = true;
         try {
+            addLiveLog('Discord Gateway bağlantısı başlatılıyor...');
             await client.login(botToken);
             addLiveLog('✅ client.login() başarıyla tamamlandı.');
         } catch (err) {
             addLiveLog(`❌ Discord Giriş Hatası: ${err.message || err}`);
+            isLoggingIn = false;
+            // Bağlantı koparsa veya hata verirse 10 saniye sonra otomatik yeniden dene
+            setTimeout(startBot, 10000);
+        } finally {
+            isLoggingIn = false;
         }
-    })();
+    }
+
+    startBot();
 }
