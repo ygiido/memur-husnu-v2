@@ -785,33 +785,60 @@ function buildTempVoiceEmbed(roomData) {
         .setTimestamp();
 }
 
-// Otomatik Tahliye Döngüsü (Her 30 saniyede bir ceza süresi dolanları kontrol eder)
+// Otomatik Tahliye ve Hayalet Geçici Oda Süpürücü Döngüsü (Her 30 saniyede bir çalışır)
 setInterval(() => {
     const db = getDB();
     const now = Date.now();
     let updated = false;
 
     client.guilds.cache.forEach(async guild => {
-        if (!db[guild.id] || !db[guild.id].users) return;
-        const jailRoleId = db[guild.id].jailRol;
+        if (!db[guild.id]) return;
 
-        for (const userId in db[guild.id].users) {
-            let user = db[guild.id].users[userId];
-            if (user.jailExpire && now >= user.jailExpire) {
-                user.jailExpire = null;
-                updated = true;
-                if (jailRoleId) {
-                    const member = await guild.members.fetch(userId).catch(() => null);
-                    if (member && member.manageable) {
-                        member.roles.remove(jailRoleId).catch(() => { });
-                        sendLog(guild, 'logCeza', {
-                            title: 'Ceza Süresi Doldu',
-                            desc: `**Kullanıcı:** <@${member.id}>\nKullanıcının uzaklaştırma (hapis) süresi doldu ve erişimi geri açıldı.`,
-                            color: 0x57f287
-                        });
+        // 1. Ceza Süresi Dolanları Çıkarma
+        if (db[guild.id].users) {
+            const jailRoleId = db[guild.id].jailRol;
+            for (const userId in db[guild.id].users) {
+                let user = db[guild.id].users[userId];
+                if (user.jailExpire && now >= user.jailExpire) {
+                    user.jailExpire = null;
+                    updated = true;
+                    if (jailRoleId) {
+                        const member = await guild.members.fetch(userId).catch(() => null);
+                        if (member && member.manageable) {
+                            member.roles.remove(jailRoleId).catch(() => { });
+                            sendLog(guild, 'logCeza', {
+                                title: 'Ceza Süresi Doldu',
+                                desc: `**Kullanıcı:** <@${member.id}>\nKullanıcının uzaklaştırma (hapis) süresi doldu ve erişimi geri açıldı.`,
+                                color: 0x57f287
+                            });
+                        }
                     }
                 }
             }
+        }
+
+        // 2. Boşta Kalan Geçici Ses Odalarını Süpürme (Hayalet Oda Temizliği)
+        if (db[guild.id].odaKategori) {
+            const kategoriId = db[guild.id].odaKategori;
+            const olusturucuId = db[guild.id].odaKanal;
+
+            guild.channels.cache.forEach(async ch => {
+                if (ch.type === ChannelType.GuildVoice && ch.parentId === kategoriId && ch.id !== olusturucuId) {
+                    // Oda yeni oluşturulduysa (10 saniyeden yeniyse) üyenin taşınmasını bekle
+                    if (now - ch.createdTimestamp < 10000) return;
+
+                    const humanCount = ch.members.filter(m => !m.user?.bot).size;
+                    if (humanCount === 0) {
+                        if (db[guild.id].tempRooms && db[guild.id].tempRooms[ch.id]) {
+                            delete db[guild.id].tempRooms[ch.id];
+                            updated = true;
+                        }
+                        renameCooldownMap.delete(ch.id);
+                        await ch.delete().catch(() => { });
+                        addLiveLog(`[OTOMATİK SÜPÜRME] Boş geçici oda silindi: ${ch.name} (${guild.name})`);
+                    }
+                }
+            });
         }
     });
     if (updated) saveDB(db);
@@ -840,13 +867,33 @@ client.once('ready', async () => {
 
         // Hayalet Geçici Oda Temizliği (Bot kapalıyken boşalmış odaları temizler)
         ensureGuildDB(db, guild.id);
-        for (const [chId, rData] of Object.entries(db[guild.id].tempRooms)) {
+        const kategoriId = db[guild.id].odaKategori;
+        const olusturucuId = db[guild.id].odaKanal;
+
+        // Kategori altındaki tüm ses kanallarını tara
+        if (kategoriId) {
+            guild.channels.cache.forEach(async ch => {
+                if (ch.type === ChannelType.GuildVoice && ch.parentId === kategoriId && ch.id !== olusturucuId) {
+                    const humanCount = ch.members.filter(m => !m.user?.bot).size;
+                    if (humanCount === 0) {
+                        if (db[guild.id].tempRooms && db[guild.id].tempRooms[ch.id]) {
+                            delete db[guild.id].tempRooms[ch.id];
+                            dbUpdated = true;
+                        }
+                        renameCooldownMap.delete(ch.id);
+                        await ch.delete().catch(() => { });
+                    }
+                }
+            });
+        }
+
+        for (const [chId, rData] of Object.entries(db[guild.id].tempRooms || {})) {
             const ch = guild.channels.cache.get(chId);
             if (!ch) {
                 delete db[guild.id].tempRooms[chId];
                 dbUpdated = true;
             } else {
-                const humanCount = ch.members.filter(m => !m.user.bot).size;
+                const humanCount = ch.members.filter(m => !m.user?.bot).size;
                 if (humanCount === 0) {
                     delete db[guild.id].tempRooms[chId];
                     dbUpdated = true;
@@ -2115,18 +2162,25 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
     // GEÇİCİ ODA SİLME VEYA SAHİPLİK DEVRİ AKTİFLEŞTİRME
     if (oldState.channelId && oldState.channelId !== newState.channelId) {
-        const oldChannel = oldState.guild.channels.cache.get(oldState.channelId);
-        const roomData = db[guildId].tempRooms[oldState.channelId];
+        const guild = oldState.guild;
+        const channelId = oldState.channelId;
+        const oldChannel = oldState.channel || guild.channels.cache.get(channelId);
+        const roomData = db[guildId].tempRooms ? db[guildId].tempRooms[channelId] : null;
+        const isUnderTempCategory = Boolean(db[guildId].odaKategori && oldChannel && oldChannel.parentId === db[guildId].odaKategori && oldChannel.id !== db[guildId].odaKanal);
 
-        if (oldChannel && roomData) {
-            const humanMembers = oldChannel.members.filter(m => !m.user.bot);
-            if (humanMembers.size === 0) {
-                delete db[guildId].tempRooms[oldChannel.id];
-                renameCooldownMap.delete(oldChannel.id);
+        if (oldChannel && (roomData || isUnderTempCategory)) {
+            // Ayrılan üye hariç kanalda kalan insan sayısı
+            const remainingHumans = oldChannel.members.filter(m => m.id !== oldState.id && !m.user?.bot);
+
+            if (remainingHumans.size === 0) {
+                if (db[guildId].tempRooms) delete db[guildId].tempRooms[channelId];
+                renameCooldownMap.delete(channelId);
                 saveDB(db);
-                await oldChannel.delete().catch(() => { });
+                await oldChannel.delete().catch(err => {
+                    addLiveLog(`❌ Geçici oda silme hatası: ${err.message}`);
+                });
                 sendLog(oldState.guild, 'logSunucu', { title: 'Geçici Ses Odası Silindi', desc: `**Oda Adı:** \`${oldChannel.name}\` boşaldığı için otomatik silindi.`, color: 0xed4245 });
-            } else if (oldState.id === roomData.ownerId) {
+            } else if (roomData && oldState.id === roomData.ownerId) {
                 if (roomData.panelMsgId) {
                     const panelMsg = await oldChannel.messages.fetch(roomData.panelMsgId).catch(() => null);
                     if (panelMsg) {
