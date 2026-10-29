@@ -124,7 +124,228 @@ function ensureGuildDB(db, guildId) {
     if (!db[guildId].tempRooms) db[guildId].tempRooms = {};
     if (!db[guildId].tickets) db[guildId].tickets = {};
     if (!db[guildId].ticketPanels) db[guildId].ticketPanels = {};
+    if (!db[guildId].trackers) db[guildId].trackers = [];
+    if (db[guildId].kickKanal && !db[guildId].duyuruKanal) {
+        db[guildId].duyuruKanal = db[guildId].kickKanal;
+        delete db[guildId].kickKanal;
+    }
+    if (db[guildId].kickBot) {
+        delete db[guildId].kickBot;
+    }
 }
+
+// ============================================================================
+// ÇOKLU PLATFORM YAYIN & İÇERİK DUYURU SİSTEMİ (YOUTUBE, KICK, TWITCH)
+// ============================================================================
+async function resolveChannelLink(inputUrl) {
+    const clean = inputUrl.trim();
+
+    // 1. Twitch: https://twitch.tv/kanal veya https://www.twitch.tv/kanal
+    const twitchMatch = clean.match(/twitch\.tv\/([a-zA-Z0-9_]{3,25})/i);
+    if (twitchMatch) {
+        const slug = twitchMatch[1].toLowerCase();
+        return { platform: 'twitch', slug, name: slug, url: `https://twitch.tv/${slug}` };
+    }
+
+    // 2. Kick: https://kick.com/kanal veya https://www.kick.com/kanal
+    const kickMatch = clean.match(/kick\.com\/([a-zA-Z0-9_-]{3,25})/i);
+    if (kickMatch) {
+        const slug = kickMatch[1].toLowerCase();
+        return { platform: 'kick', slug, name: slug, url: `https://kick.com/${slug}` };
+    }
+
+    // 3. YouTube: Kanal ID veya @Handle
+    const ytChannelMatch = clean.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]+)/i);
+    if (ytChannelMatch) {
+        const chId = ytChannelMatch[1];
+        return { platform: 'youtube', channelId: chId, name: chId, url: `https://www.youtube.com/channel/${chId}` };
+    }
+
+    const ytHandleMatch = clean.match(/youtube\.com\/(@[a-zA-Z0-9_.-]+)/i);
+    if (ytHandleMatch) {
+        try {
+            const handle = ytHandleMatch[1];
+            const res = await fetch(`https://www.youtube.com/${handle}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+            });
+            const html = await res.text();
+            const chId = html.match(/channel_id=([a-zA-Z0-9_-]+)/i)?.[1] || html.match(/"externalId":"([^"]+)"/i)?.[1];
+            const title = html.match(/<title>([^<]+)<\/title>/)?.[1]?.replace(' - YouTube', '').trim() || handle;
+            if (chId) {
+                return { platform: 'youtube', channelId: chId, name: title, url: `https://www.youtube.com/${handle}` };
+            }
+        } catch (e) { }
+    }
+
+    return null;
+}
+
+async function checkTwitch(slug) {
+    try {
+        const res = await fetch('https://gql.twitch.tv/gql', {
+            method: 'POST',
+            headers: {
+                'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                query: `query { user(login: "${slug}") { displayName profileImageURL(width: 300) stream { id title viewersCount previewImageURL(width: 1280, height: 720) } } }`
+            })
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const user = data.data?.user;
+        if (!user) return null;
+        if (!user.stream) return { isLive: false, name: user.displayName, avatar: user.profileImageURL };
+
+        const previewImg = user.stream.previewImageURL
+            ? user.stream.previewImageURL.replace('{width}', '1280').replace('{height}', '720')
+            : user.profileImageURL;
+
+        return {
+            isLive: true,
+            id: user.stream.id,
+            name: user.displayName,
+            avatar: user.profileImageURL,
+            title: user.stream.title || `${user.displayName} Canlı Yayında`,
+            url: `https://twitch.tv/${slug}`,
+            image: previewImg,
+            color: 0x9146FF
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+async function checkKick(slug) {
+    try {
+        const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json'
+            }
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const user = data.user;
+        const livestream = data.livestream;
+        const name = user?.username || slug;
+        const avatar = user?.profile_pic || null;
+
+        if (!livestream) return { isLive: false, name, avatar };
+
+        return {
+            isLive: true,
+            id: String(livestream.id),
+            name,
+            avatar,
+            title: livestream.session_title || `${name} Canlı Yayında`,
+            url: `https://kick.com/${slug}`,
+            image: livestream.thumbnail?.url || avatar,
+            color: 0x53FC18
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+async function checkYouTube(channelId) {
+    try {
+        const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        if (!res.ok) return null;
+        const xml = await res.text();
+        const videoId = xml.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1];
+        const title = xml.match(/<entry>[\s\S]*?<title>([^<]+)<\/title>/)?.[1];
+        const name = xml.match(/<author>[\s\S]*?<name>([^<]+)<\/name>/)?.[1] || 'YouTube';
+
+        if (!videoId) return null;
+        return {
+            isLive: true,
+            id: videoId,
+            name,
+            title: title || 'Yeni İçerik',
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            image: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            color: 0xFF0000
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+async function checkAllStreamTrackers() {
+    if (!client.isReady || !client.isReady()) return;
+    const db = getDB();
+    let dbUpdated = false;
+
+    for (const guild of client.guilds.cache.values()) {
+        const guildDb = db[guild.id];
+        if (!guildDb || !guildDb.duyuruKanal || !Array.isArray(guildDb.trackers) || guildDb.trackers.length === 0) continue;
+
+        const targetChannel = guild.channels.cache.get(guildDb.duyuruKanal);
+        if (!targetChannel) continue;
+
+        const mention = guildDb.duyuruRol ? `<@&${guildDb.duyuruRol}>` : '@everyone';
+
+        for (const tracker of guildDb.trackers) {
+            let info = null;
+            if (tracker.platform === 'twitch') info = await checkTwitch(tracker.slug);
+            else if (tracker.platform === 'kick') info = await checkKick(tracker.slug);
+            else if (tracker.platform === 'youtube') info = await checkYouTube(tracker.channelId);
+
+            if (!info) continue;
+
+            if (info.isLive) {
+                // Eğer bu yayın/video henüz duyurulmadıysa
+                if (tracker.lastSeenId !== info.id) {
+                    // İlk eklemede eski videoyu spamlamamak için sadece ID kaydedip geç
+                    if (tracker.lastSeenId === undefined && tracker.platform === 'youtube') {
+                        tracker.lastSeenId = info.id;
+                        dbUpdated = true;
+                        continue;
+                    }
+
+                    tracker.lastSeenId = info.id;
+                    dbUpdated = true;
+
+                    const embed = new EmbedBuilder()
+                        .setAuthor({ name: info.name, iconURL: info.avatar || undefined, url: info.url })
+                        .setTitle(info.title)
+                        .setURL(info.url)
+                        .setImage(info.image)
+                        .setColor(info.color)
+                        .setTimestamp();
+
+                    const isVideo = tracker.platform === 'youtube';
+                    const btnLabel = isVideo ? 'Videoyu İzle' : 'Yayını İzle';
+                    const contentMsg = isVideo
+                        ? `${mention} **${info.name}** yeni bir içerik yayınladı!`
+                        : `${mention} **${info.name}** yayında!`;
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setLabel(btnLabel).setStyle(ButtonStyle.Link).setURL(info.url)
+                    );
+
+                    await targetChannel.send({ content: contentMsg, embeds: [embed], components: [row] }).catch(() => { });
+                    addLiveLog(`[YAYIN DUYURUSU] ${info.name} (${tracker.platform}) duyuruldu.`);
+                }
+            } else {
+                // Yayın kapandıysa bir sonraki yayında tekrar duyurabilmek için sıfırla
+                if (tracker.platform !== 'youtube' && tracker.lastSeenId) {
+                    tracker.lastSeenId = null;
+                    dbUpdated = true;
+                }
+            }
+        }
+    }
+
+    if (dbUpdated) saveDB(db);
+}
+
+// 2 dakikada bir otomatik kontrol döngüsü
+setInterval(checkAllStreamTrackers, 120000);
 
 function formatDuration(ms) {
     const totalSeconds = Math.floor(ms / 1000);
@@ -366,7 +587,7 @@ function buildHomeDashboard(guild) {
 function buildAyarDashboard(guildDb) {
     const getRole = (id) => id ? `<@&${id}>` : 'Atanmamış';
     const getCh = (id) => id ? `<#${id}>` : 'Atanmamış';
-    const getUser = (id) => id ? `<@${id}>` : 'Atanmamış';
+    const trackerCount = Array.isArray(guildDb.trackers) ? guildDb.trackers.length : 0;
 
     const embed = new EmbedBuilder()
         .setTitle('Sistem Ayarları ve Açıklamaları')
@@ -381,7 +602,7 @@ function buildAyarDashboard(guildDb) {
         .setColor(0x2b2d31)
         .addFields(
             { name: 'Mevcut Rol Ayarları', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
-            { name: 'Geçici Oda ve Yayın', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nKick Duyuru Kanalı: ${getCh(guildDb.kickKanal)}\nKick Bildirim Botu: ${getUser(guildDb.kickBot)}`, inline: true },
+            { name: 'Geçici Ses ve Yayın', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
             { name: 'Koruma Filtreleri', value: `Link Engeli: **${guildDb.linkEngel ? 'Açık' : 'Kapalı'}**\nKüfür Engeli: **${guildDb.kufurEngel ? 'Açık' : 'Kapalı'}**\nOto-Cevap: **${guildDb.otoCevap !== false ? 'Açık' : 'Kapalı'}**`, inline: false }
         );
 
@@ -396,8 +617,10 @@ function buildAyarDashboard(guildDb) {
                 { label: 'Sicilli Rolü Seç', description: 'Sicili bozulan kullanıcılara verilecek uyarı rolü.', value: 'sicilRol' },
                 { label: 'Geçici Oda Oluşturucu Ses Kanalı Seç', description: 'Üyelerin tıkladığında kendilerine özel oda açacağı ses kanalı.', value: 'odaKanal' },
                 { label: 'Geçici Oda Kategorisi Seç', description: 'Açılan özel ses odalarının altında toplanacağı kategori.', value: 'odaKategori' },
-                { label: 'Kick Duyuru Kanalı Seç', description: 'Kick yayın bildirimlerinin @everyone ile paylaşılacağı kanal (Duyuru kanalı destekli).', value: 'kickKanal' },
-                { label: 'Kick Bildirim Botu Seç', description: 'Attığı mesaj yakalanıp duyuruya çevrilecek Kick botu.', value: 'kickBot' },
+                { label: 'Yayın & İçerik Duyuru Kanalı Seç', description: 'YouTube, Kick ve Twitch bildirimlerinin paylaşılacağı metin kanalı.', value: 'duyuruKanal' },
+                { label: 'Duyuru Bildirim Rolü Seç', description: 'Duyurularda etiketlenecek rol (Atanmazsa @everyone).', value: 'duyuruRol' },
+                { label: 'Yayıncı / Kanal Ekle (YT, Kick, Twitch)', description: 'Otomatik takip edilecek kanal linkini girin.', value: 'add_stream_tracker' },
+                { label: 'Takip Edilen Kanalları Listele / Sil', description: 'Kayıtlı YouTube, Kick ve Twitch kanallarını inceleyin veya silin.', value: 'list_stream_trackers' },
                 { label: 'Link Engeli (Aç / Kapat)', description: `Dış link paylaşımını engeller. (Şu an: ${guildDb.linkEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_link' },
                 { label: 'Küfür Engeli (Aç / Kapat)', description: `Küfürleri siler, 3. uyarıda hapse atar. (Şu an: ${guildDb.kufurEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_kufur' },
                 { label: 'Otomatik Cevap (Aç / Kapat)', description: `Selamlaşmalara otomatik yanıt verir. (Şu an: ${guildDb.otoCevap !== false ? 'Açık' : 'Kapalı'})`, value: 'toggle_oto' }
@@ -492,7 +715,7 @@ function buildTicketDashboard(guildDb) {
 function buildInfoDashboard(guild, guildDb) {
     const getRole = (id) => id ? `<@&${id}>` : 'Atanmamış';
     const getCh = (id) => id ? `<#${id}>` : 'Atanmamış';
-    const getUser = (id) => id ? `<@${id}>` : 'Atanmamış';
+    const trackerCount = Array.isArray(guildDb.trackers) ? guildDb.trackers.length : 0;
 
     const activeTickets = guildDb.tickets ? Object.keys(guildDb.tickets).length : 0;
     const activeRooms = guildDb.tempRooms ? Object.keys(guildDb.tempRooms).length : 0;
@@ -504,7 +727,7 @@ function buildInfoDashboard(guild, guildDb) {
         .addFields(
             { name: 'Sunucu İstatistikleri', value: `Üye Sayısı: **${guild.memberCount}** | Açık Ticket: **${activeTickets}** | Açık Geçici Oda: **${activeRooms}**`, inline: false },
             { name: 'Rol Ayarları', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
-            { name: 'Kanal ve Yayın Ayarları', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nYayın Duyuru: ${getCh(guildDb.kickKanal)}\nKick Bot: ${getUser(guildDb.kickBot)}`, inline: true },
+            { name: 'Kanal ve Yayın Ayarları', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
             { name: 'Log Kanalları', value: `**Ceza:** ${getCh(guildDb.logCeza)}\n**Mesaj:** ${getCh(guildDb.logMesaj)}\n**Ses:** ${getCh(guildDb.logSes)}\n**Üye:** ${getCh(guildDb.logUye)}\n**Sunucu:** ${getCh(guildDb.logSunucu)}\n**Güvenlik:** ${getCh(guildDb.logGuvenlik)}`, inline: false },
             { name: 'Koruma Filtreleri', value: `Link Engeli: **${guildDb.linkEngel ? 'Aktif' : 'Kapalı'}** | Küfür Engeli: **${guildDb.kufurEngel ? 'Aktif' : 'Kapalı'}** | Oto-Cevap: **${guildDb.otoCevap !== false ? 'Aktif' : 'Kapalı'}**`, inline: false }
         )
@@ -856,7 +1079,7 @@ client.on('interactionCreate', async interaction => {
                     return interaction.update(buildAyarDashboard(db[guildId]));
                 }
 
-                if (['yetkiliRol', 'muafRol', 'jailRol', 'sicilRol'].includes(secim)) {
+                if (['yetkiliRol', 'muafRol', 'jailRol', 'sicilRol', 'duyuruRol'].includes(secim)) {
                     const roleSelect = new ActionRowBuilder().addComponents(
                         new RoleSelectMenuBuilder()
                             .setCustomId(`set_ayar_rol_${secim}`)
@@ -868,21 +1091,44 @@ client.on('interactionCreate', async interaction => {
                     return interaction.update(panelData);
                 }
 
-                if (secim === 'kickBot') {
-                    const userSelect = new ActionRowBuilder().addComponents(
-                        new UserSelectMenuBuilder()
-                            .setCustomId(`set_ayar_user_kickBot`)
-                            .setPlaceholder('Kick bildirim botunu listeden seçin...')
-                            .setMaxValues(1)
+                if (secim === 'add_stream_tracker') {
+                    const modal = new ModalBuilder()
+                        .setCustomId('modal_add_stream_tracker')
+                        .setTitle('Yayıncı / Kanal Ekle');
+                    const input = new TextInputBuilder()
+                        .setCustomId('tracker_url')
+                        .setLabel('Kanal Linki (YouTube, Kick veya Twitch)')
+                        .setPlaceholder('Örn: https://kick.com/kanal veya https://twitch.tv/kanal')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (secim === 'list_stream_trackers') {
+                    const trackers = db[guildId].trackers || [];
+                    if (trackers.length === 0) {
+                        return interaction.reply({ content: 'Bu sunucuda henüz eklenmiş bir YouTube, Kick veya Twitch kanalı bulunmuyor.', ephemeral: true });
+                    }
+                    const trackerOptions = trackers.slice(0, 25).map(t => ({
+                        label: `${t.name} (${t.platform.toUpperCase()})`,
+                        description: t.url.slice(0, 100),
+                        value: t.url
+                    }));
+                    const selectMenu = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId('delete_stream_tracker_select')
+                            .setPlaceholder('Silmek istediğiniz kanalı seçin...')
+                            .addOptions(trackerOptions)
                     );
                     const panelData = buildAyarDashboard(db[guildId]);
-                    panelData.components.push(userSelect);
+                    panelData.components.push(selectMenu);
                     return interaction.update(panelData);
                 }
 
-                // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği Eklendi
+                // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği
                 const chTypeMap = {
-                    'kickKanal': [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+                    'duyuruKanal': [ChannelType.GuildText, ChannelType.GuildAnnouncement],
                     'odaKanal': [ChannelType.GuildVoice],
                     'odaKategori': [ChannelType.GuildCategory]
                 };
@@ -898,6 +1144,14 @@ client.on('interactionCreate', async interaction => {
                     panelData.components.push(chSelect);
                     return interaction.update(panelData);
                 }
+            }
+
+            if (interaction.customId === 'delete_stream_tracker_select') {
+                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                const selectedUrl = interaction.values[0];
+                db[guildId].trackers = (db[guildId].trackers || []).filter(t => t.url !== selectedUrl);
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId]));
             }
 
             if (interaction.customId === 'panel_log_sec') {
@@ -1289,9 +1543,38 @@ client.on('interactionCreate', async interaction => {
         }
 
         // ------------------------------------------------------------------------
-        // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA & TEMP VC)
+        // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA, YAYINCI EKLEME & TEMP VC)
         // ------------------------------------------------------------------------
         if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'modal_add_stream_tracker') {
+                const rawUrl = interaction.fields.getTextInputValue('tracker_url').trim();
+                await interaction.deferReply({ ephemeral: true });
+
+                const resolved = await resolveChannelLink(rawUrl);
+                if (!resolved) {
+                    return interaction.editReply({ content: '❌ Geçersiz kanal bağlantısı! Lütfen geçerli bir YouTube (`youtube.com/@kanal`), Kick (`kick.com/kanal`) veya Twitch (`twitch.tv/kanal`) linki girin.' });
+                }
+
+                if (!db[guildId].trackers) db[guildId].trackers = [];
+                const exists = db[guildId].trackers.some(t => t.url.toLowerCase() === resolved.url.toLowerCase());
+                if (exists) {
+                    return interaction.editReply({ content: `⚠️ **${resolved.name}** kanalı zaten takip listesinde ekli!` });
+                }
+
+                if (resolved.platform === 'youtube') {
+                    const ytData = await checkYouTube(resolved.channelId);
+                    resolved.lastSeenId = ytData?.id || null;
+                } else {
+                    resolved.lastSeenId = null;
+                }
+
+                db[guildId].trackers.push(resolved);
+                saveDB(db);
+
+                addLiveLog(`[YAYINCI EKLENDİ] ${resolved.name} (${resolved.platform}) - ${interaction.guild.name}`);
+                return interaction.editReply({ content: `✅ **${resolved.name}** (${resolved.platform.toUpperCase()}) başarıyla takip listesine eklendi!\nYayın açıldığında veya yeni video yayınlandığında duyuru kanalına otomatik olarak gönderilecek.` });
+            }
+
             // Yöneticinin Ticket Paneli Kurma Formu
             if (interaction.customId.startsWith('modal_ticket_kur_')) {
                 const parts = interaction.customId.replace('modal_ticket_kur_', '').split('_');
@@ -1443,13 +1726,6 @@ client.on('interactionCreate', async interaction => {
         // 6. KULLANICI SEÇİM MENÜSÜ (USER SELECT MENU) ETKİLEŞİMLERİ
         // ------------------------------------------------------------------------
         if (interaction.isUserSelectMenu()) {
-            if (interaction.customId === 'set_ayar_user_kickBot') {
-                if (!isAdmin) return;
-                db[guildId].kickBot = interaction.values[0];
-                saveDB(db);
-                return interaction.update(buildAyarDashboard(db[guildId]));
-            }
-
             const targetId = interaction.values[0];
             const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
             if (!targetMember) return interaction.update({ content: 'Kullanıcı bulunamadı.', components: [] });
@@ -1537,45 +1813,6 @@ client.on('messageCreate', async message => {
     const db = getDB();
     const guildId = message.guild.id;
     if (!db[guildId]) return;
-
-    // Kick Yayın Duyuru Yakalayıcı
-    if (message.author.bot && db[guildId].kickBot && db[guildId].kickKanal) {
-        if (message.author.id === db[guildId].kickBot) {
-            let kickLink = null;
-            if (message.components && message.components.length > 0) {
-                for (const row of message.components) {
-                    for (const component of row.components) {
-                        if (component.url && component.url.includes('kick.com')) { kickLink = component.url; break; }
-                    }
-                    if (kickLink) break;
-                }
-            }
-            if (!kickLink) {
-                const linkMatch = message.content.match(/(https?:\/\/kick\.com\/[^\s]+)/i);
-                if (linkMatch) kickLink = linkMatch[0];
-            }
-            if (!kickLink && message.embeds.length > 0) {
-                const embedDesc = message.embeds[0].description ? message.embeds[0].description : "";
-                const embedUrl = message.embeds[0].url ? message.embeds[0].url : "";
-                const embedMatch = embedDesc.match(/(https?:\/\/kick\.com\/[^\s]+)/i);
-                kickLink = embedUrl.includes('kick.com') ? embedUrl : (embedMatch ? embedMatch[0] : null);
-            }
-            if (kickLink) {
-                await message.delete().catch(() => { });
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setLabel('Yayına Katıl').setStyle(ButtonStyle.Link).setURL(kickLink)
-                );
-                const duyuruKanali = message.guild.channels.cache.get(db[guildId].kickKanal);
-                if (duyuruKanali) {
-                    duyuruKanali.send({
-                        content: '@everyone **Yayındayız! Katılmak için aşağıdaki butona tıklayın.**',
-                        components: [row]
-                    }).catch(() => { });
-                }
-                return;
-            }
-        }
-    }
 
     if (message.author.bot || !message.member) return;
 
