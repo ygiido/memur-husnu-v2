@@ -42,7 +42,7 @@ const server = http.createServer((req, res) => {
     const isBotReady = Boolean(client && client.isReady && client.isReady());
     const wsCode = client && client.ws ? client.ws.status : null;
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
-    
+
     // Gelen istek ve UptimeRobot pingini kaydet
     const ua = req.headers['user-agent'] || 'Bilinmeyen UA';
     if (!req.url.includes('favicon')) {
@@ -714,817 +714,817 @@ client.on('interactionCreate', async interaction => {
         // Güvenli Yetkili Rolü ve Yönetici Kontrolü
         const isAdmin = Boolean(interaction.memberPermissions && interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator));
         const isYetkili = Boolean(
-            isAdmin || 
+            isAdmin ||
             (db[guildId].yetkiliRol && interaction.member && interaction.member.roles && interaction.member.roles.cache && interaction.member.roles.cache.has(db[guildId].yetkiliRol))
         );
 
-    // ------------------------------------------------------------------------
-    // 1. SLASH KOMUTLARI (/panel, /yaz, /hapis, /af, /sil)
-    // ------------------------------------------------------------------------
-    if (interaction.isChatInputCommand()) {
-        const { commandName } = interaction;
+        // ------------------------------------------------------------------------
+        // 1. SLASH KOMUTLARI (/panel, /yaz, /hapis, /af, /sil)
+        // ------------------------------------------------------------------------
+        if (interaction.isChatInputCommand()) {
+            const { commandName } = interaction;
 
-        if (commandName === 'panel') {
-            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
-            return interaction.reply({ ...buildHomeDashboard(interaction.guild), ephemeral: true });
-        }
+            if (commandName === 'panel') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
+                return interaction.reply({ ...buildHomeDashboard(interaction.guild), ephemeral: true });
+            }
 
-        if (commandName === 'yaz') {
-            if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
-            const mesaj = interaction.options.getString('mesaj');
-            await interaction.channel.send(mesaj);
-            return interaction.reply({ content: 'Mesaj başarıyla kanala gönderildi.', ephemeral: true });
-        }
+            if (commandName === 'yaz') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                const mesaj = interaction.options.getString('mesaj');
+                await interaction.channel.send(mesaj);
+                return interaction.reply({ content: 'Mesaj başarıyla kanala gönderildi.', ephemeral: true });
+            }
 
-        if (['hapis', 'af', 'sil'].includes(commandName)) {
-            if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.', ephemeral: true });
+            if (['hapis', 'af', 'sil'].includes(commandName)) {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.', ephemeral: true });
 
-            if (commandName === 'hapis') {
-                const user = interaction.options.getUser('kullanici');
-                const sayi = interaction.options.getInteger('sure');
-                const kavram = interaction.options.getString('birim');
-                const sebep = interaction.options.getString('sebep');
-                const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                if (commandName === 'hapis') {
+                    const user = interaction.options.getUser('kullanici');
+                    const sayi = interaction.options.getInteger('sure');
+                    const kavram = interaction.options.getString('birim');
+                    const sebep = interaction.options.getString('sebep');
+                    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-                if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
-                if (!member.manageable) return interaction.reply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.', ephemeral: true });
+                    if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+                    if (!member.manageable) return interaction.reply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.', ephemeral: true });
 
-                let sureMs = 0;
-                if (kavram === 'saniye') sureMs = sayi * 1000;
-                if (kavram === 'dakika') sureMs = sayi * 60 * 1000;
-                if (kavram === 'saat') sureMs = sayi * 60 * 60 * 1000;
-                if (kavram === 'gun') sureMs = sayi * 24 * 60 * 60 * 1000;
+                    let sureMs = 0;
+                    if (kavram === 'saniye') sureMs = sayi * 1000;
+                    if (kavram === 'dakika') sureMs = sayi * 60 * 1000;
+                    if (kavram === 'saat') sureMs = sayi * 60 * 60 * 1000;
+                    if (kavram === 'gun') sureMs = sayi * 24 * 60 * 60 * 1000;
 
-                const sureDk = sureMs / (1000 * 60);
+                    const sureDk = sureMs / (1000 * 60);
 
-                if (!db[guildId].users[user.id]) db[guildId].users[user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                    if (!db[guildId].users[user.id]) db[guildId].users[user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
 
-                let userData = db[guildId].users[user.id];
-                userData.jailExpire = Date.now() + sureMs;
-                userData.jailCount += 1;
+                    let userData = db[guildId].users[user.id];
+                    userData.jailExpire = Date.now() + sureMs;
+                    userData.jailCount += 1;
 
-                let sicilVerilecek = false;
-                let sicilDurumMesaji = "";
+                    let sicilVerilecek = false;
+                    let sicilDurumMesaji = "";
 
-                if (sureDk > 10) {
-                    sicilVerilecek = true;
-                    sicilDurumMesaji = "İşlendi (10 dakikadan uzun ceza)";
-                } else {
-                    const currentMinor = userData.minorJailCount ? userData.minorJailCount : 0;
-                    userData.minorJailCount = currentMinor + 1;
-                    if (userData.minorJailCount >= 11) {
+                    if (sureDk > 10) {
                         sicilVerilecek = true;
-                        sicilDurumMesaji = `İşlendi (Sınır aşıldı: ${userData.minorJailCount}/11)`;
+                        sicilDurumMesaji = "İşlendi (10 dakikadan uzun ceza)";
                     } else {
-                        sicilDurumMesaji = `Temiz (Hafif İhlal: ${userData.minorJailCount}/11)`;
-                    }
-                }
-
-                if (sicilVerilecek) userData.sicilli = true;
-                saveDB(db);
-
-                if (db[guildId].jailRol) await member.roles.add(db[guildId].jailRol).catch(() => { });
-                if (sicilVerilecek && db[guildId].sicilRol) await member.roles.add(db[guildId].sicilRol).catch(() => { });
-
-                sendLog(interaction.guild, 'logCeza', {
-                    title: 'Manuel Cezalandırma (Hapis)',
-                    desc: `**Yetkili:** <@${interaction.user.id}>\n**Kullanıcı:** <@${user.id}>\n**Süre:** ${sayi} ${kavram}\n**Sebep:** ${sebep}\n**Sicil:** ${sicilDurumMesaji}`,
-                    color: 0xed4245,
-                    thumbnail: user.displayAvatarURL()
-                });
-
-                return interaction.reply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.`, ephemeral: true });
-            }
-
-            if (commandName === 'af') {
-                const user = interaction.options.getUser('kullanici');
-                if (user) {
-                    if (db[guildId].users && db[guildId].users[user.id]) {
-                        delete db[guildId].users[user.id];
-                        saveDB(db);
-                        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-                        if (member && member.manageable) {
-                            if (db[guildId].jailRol) member.roles.remove(db[guildId].jailRol).catch(() => { });
-                            if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
+                        const currentMinor = userData.minorJailCount ? userData.minorJailCount : 0;
+                        userData.minorJailCount = currentMinor + 1;
+                        if (userData.minorJailCount >= 11) {
+                            sicilVerilecek = true;
+                            sicilDurumMesaji = `İşlendi (Sınır aşıldı: ${userData.minorJailCount}/11)`;
+                        } else {
+                            sicilDurumMesaji = `Temiz (Hafif İhlal: ${userData.minorJailCount}/11)`;
                         }
-                        sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
-                        return interaction.reply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
-                    } else {
-                        return interaction.reply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.`, ephemeral: true });
                     }
-                } else {
-                    if (!isAdmin) return interaction.reply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.', ephemeral: true });
-                    db[guildId].users = {};
-                    saveDB(db);
-                    sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı.`, color: 0x57f287 });
-                    return interaction.reply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.', ephemeral: true });
-                }
-            }
 
-            if (commandName === 'sil') {
-                const miktar = interaction.options.getInteger('miktar');
-                if (miktar < 1 || miktar > 100) return interaction.reply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.', ephemeral: true });
-                const deleted = await interaction.channel.bulkDelete(miktar, true).catch(() => null);
-                const count = deleted ? deleted.size : 0;
-                sendLog(interaction.guild, 'logMesaj', { title: 'Toplu Mesaj Silme (/sil)', desc: `**Yetkili:** <@${interaction.user.id}>\n**Kanal:** <#${interaction.channel.id}>\n**Miktar:** ${count} adet mesaj silindi.`, color: 0xed4245 });
-                return interaction.reply({ content: `**${count}** adet mesaj silindi.`, ephemeral: true });
+                    if (sicilVerilecek) userData.sicilli = true;
+                    saveDB(db);
+
+                    if (db[guildId].jailRol) await member.roles.add(db[guildId].jailRol).catch(() => { });
+                    if (sicilVerilecek && db[guildId].sicilRol) await member.roles.add(db[guildId].sicilRol).catch(() => { });
+
+                    sendLog(interaction.guild, 'logCeza', {
+                        title: 'Manuel Cezalandırma (Hapis)',
+                        desc: `**Yetkili:** <@${interaction.user.id}>\n**Kullanıcı:** <@${user.id}>\n**Süre:** ${sayi} ${kavram}\n**Sebep:** ${sebep}\n**Sicil:** ${sicilDurumMesaji}`,
+                        color: 0xed4245,
+                        thumbnail: user.displayAvatarURL()
+                    });
+
+                    return interaction.reply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.`, ephemeral: true });
+                }
+
+                if (commandName === 'af') {
+                    const user = interaction.options.getUser('kullanici');
+                    if (user) {
+                        if (db[guildId].users && db[guildId].users[user.id]) {
+                            delete db[guildId].users[user.id];
+                            saveDB(db);
+                            const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+                            if (member && member.manageable) {
+                                if (db[guildId].jailRol) member.roles.remove(db[guildId].jailRol).catch(() => { });
+                                if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
+                            }
+                            sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
+                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
+                        } else {
+                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.`, ephemeral: true });
+                        }
+                    } else {
+                        if (!isAdmin) return interaction.reply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.', ephemeral: true });
+                        db[guildId].users = {};
+                        saveDB(db);
+                        sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı.`, color: 0x57f287 });
+                        return interaction.reply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.', ephemeral: true });
+                    }
+                }
+
+                if (commandName === 'sil') {
+                    const miktar = interaction.options.getInteger('miktar');
+                    if (miktar < 1 || miktar > 100) return interaction.reply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.', ephemeral: true });
+                    const deleted = await interaction.channel.bulkDelete(miktar, true).catch(() => null);
+                    const count = deleted ? deleted.size : 0;
+                    sendLog(interaction.guild, 'logMesaj', { title: 'Toplu Mesaj Silme (/sil)', desc: `**Yetkili:** <@${interaction.user.id}>\n**Kanal:** <#${interaction.channel.id}>\n**Miktar:** ${count} adet mesaj silindi.`, color: 0xed4245 });
+                    return interaction.reply({ content: `**${count}** adet mesaj silindi.`, ephemeral: true });
+                }
             }
         }
-    }
 
-    // ------------------------------------------------------------------------
-    // 2. AÇILIR MENÜ (STRING SELECT MENU) ETKİLEŞİMLERİ
-    // ------------------------------------------------------------------------
-    if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === 'panel_ayar_sec') {
-            if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
-            const secim = interaction.values[0];
+        // ------------------------------------------------------------------------
+        // 2. AÇILIR MENÜ (STRING SELECT MENU) ETKİLEŞİMLERİ
+        // ------------------------------------------------------------------------
+        if (interaction.isStringSelectMenu()) {
+            if (interaction.customId === 'panel_ayar_sec') {
+                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                const secim = interaction.values[0];
 
-            if (secim === 'toggle_link') {
-                db[guildId].linkEngel = !db[guildId].linkEngel;
-                saveDB(db);
-                return interaction.update(buildAyarDashboard(db[guildId]));
-            }
-            if (secim === 'toggle_kufur') {
-                db[guildId].kufurEngel = !db[guildId].kufurEngel;
-                saveDB(db);
-                return interaction.update(buildAyarDashboard(db[guildId]));
-            }
-            if (secim === 'toggle_oto') {
-                db[guildId].otoCevap = db[guildId].otoCevap === false ? true : false;
-                saveDB(db);
-                return interaction.update(buildAyarDashboard(db[guildId]));
+                if (secim === 'toggle_link') {
+                    db[guildId].linkEngel = !db[guildId].linkEngel;
+                    saveDB(db);
+                    return interaction.update(buildAyarDashboard(db[guildId]));
+                }
+                if (secim === 'toggle_kufur') {
+                    db[guildId].kufurEngel = !db[guildId].kufurEngel;
+                    saveDB(db);
+                    return interaction.update(buildAyarDashboard(db[guildId]));
+                }
+                if (secim === 'toggle_oto') {
+                    db[guildId].otoCevap = db[guildId].otoCevap === false ? true : false;
+                    saveDB(db);
+                    return interaction.update(buildAyarDashboard(db[guildId]));
+                }
+
+                if (['yetkiliRol', 'muafRol', 'jailRol', 'sicilRol'].includes(secim)) {
+                    const roleSelect = new ActionRowBuilder().addComponents(
+                        new RoleSelectMenuBuilder()
+                            .setCustomId(`set_ayar_rol_${secim}`)
+                            .setPlaceholder('Atanacak rolü listeden seçin...')
+                            .setMaxValues(1)
+                    );
+                    const panelData = buildAyarDashboard(db[guildId]);
+                    panelData.components.push(roleSelect);
+                    return interaction.update(panelData);
+                }
+
+                if (secim === 'kickBot') {
+                    const userSelect = new ActionRowBuilder().addComponents(
+                        new UserSelectMenuBuilder()
+                            .setCustomId(`set_ayar_user_kickBot`)
+                            .setPlaceholder('Kick bildirim botunu listeden seçin...')
+                            .setMaxValues(1)
+                    );
+                    const panelData = buildAyarDashboard(db[guildId]);
+                    panelData.components.push(userSelect);
+                    return interaction.update(panelData);
+                }
+
+                // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği Eklendi
+                const chTypeMap = {
+                    'kickKanal': [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+                    'odaKanal': [ChannelType.GuildVoice],
+                    'odaKategori': [ChannelType.GuildCategory]
+                };
+                if (chTypeMap[secim]) {
+                    const chSelect = new ActionRowBuilder().addComponents(
+                        new ChannelSelectMenuBuilder()
+                            .setCustomId(`set_ayar_ch_${secim}`)
+                            .setPlaceholder('İlgili kanalı veya kategoriyi listeden seçin...')
+                            .setChannelTypes(chTypeMap[secim])
+                            .setMaxValues(1)
+                    );
+                    const panelData = buildAyarDashboard(db[guildId]);
+                    panelData.components.push(chSelect);
+                    return interaction.update(panelData);
+                }
             }
 
-            if (['yetkiliRol', 'muafRol', 'jailRol', 'sicilRol'].includes(secim)) {
-                const roleSelect = new ActionRowBuilder().addComponents(
-                    new RoleSelectMenuBuilder()
-                        .setCustomId(`set_ayar_rol_${secim}`)
-                        .setPlaceholder('Atanacak rolü listeden seçin...')
-                        .setMaxValues(1)
-                );
-                const panelData = buildAyarDashboard(db[guildId]);
-                panelData.components.push(roleSelect);
-                return interaction.update(panelData);
-            }
+            if (interaction.customId === 'panel_log_sec') {
+                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                const logKey = interaction.values[0];
 
-            if (secim === 'kickBot') {
-                const userSelect = new ActionRowBuilder().addComponents(
-                    new UserSelectMenuBuilder()
-                        .setCustomId(`set_ayar_user_kickBot`)
-                        .setPlaceholder('Kick bildirim botunu listeden seçin...')
-                        .setMaxValues(1)
-                );
-                const panelData = buildAyarDashboard(db[guildId]);
-                panelData.components.push(userSelect);
-                return interaction.update(panelData);
-            }
-
-            // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği Eklendi
-            const chTypeMap = {
-                'kickKanal': [ChannelType.GuildText, ChannelType.GuildAnnouncement],
-                'odaKanal': [ChannelType.GuildVoice],
-                'odaKategori': [ChannelType.GuildCategory]
-            };
-            if (chTypeMap[secim]) {
                 const chSelect = new ActionRowBuilder().addComponents(
                     new ChannelSelectMenuBuilder()
-                        .setCustomId(`set_ayar_ch_${secim}`)
-                        .setPlaceholder('İlgili kanalı veya kategoriyi listeden seçin...')
-                        .setChannelTypes(chTypeMap[secim])
+                        .setCustomId(`set_log_ch_${logKey}`)
+                        .setPlaceholder('Bu log kategorisi için metin veya duyuru kanalını seçin...')
+                        .setChannelTypes([ChannelType.GuildText, ChannelType.GuildAnnouncement])
                         .setMaxValues(1)
                 );
-                const panelData = buildAyarDashboard(db[guildId]);
+                const panelData = buildLogDashboard(db[guildId]);
                 panelData.components.push(chSelect);
                 return interaction.update(panelData);
             }
-        }
 
-        if (interaction.customId === 'panel_log_sec') {
-            if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
-            const logKey = interaction.values[0];
-
-            const chSelect = new ActionRowBuilder().addComponents(
-                new ChannelSelectMenuBuilder()
-                    .setCustomId(`set_log_ch_${logKey}`)
-                    .setPlaceholder('Bu log kategorisi için metin veya duyuru kanalını seçin...')
-                    .setChannelTypes([ChannelType.GuildText, ChannelType.GuildAnnouncement])
-                    .setMaxValues(1)
-            );
-            const panelData = buildLogDashboard(db[guildId]);
-            panelData.components.push(chSelect);
-            return interaction.update(panelData);
-        }
-
-        if (interaction.customId === 'vc_privacy_menu') {
-            const channel = interaction.channel;
-            const roomData = db[guildId].tempRooms[channel.id];
-            if (!roomData) return interaction.reply({ content: 'Bu odaya ait veri bulunamadı.', ephemeral: true });
-            if (interaction.user.id !== roomData.ownerId && !isAdmin) {
-                return interaction.reply({ content: `Bu menüyü sadece oda sahibi (<@${roomData.ownerId}>) kullanabilir.`, ephemeral: true });
-            }
-
-            const choice = interaction.values[0];
-            if (choice === 'lock') {
-                roomData.locked = true;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false }).catch(() => { });
-            } else if (choice === 'unlock') {
-                roomData.locked = false;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true }).catch(() => { });
-            } else if (choice === 'invisible') {
-                roomData.hidden = true;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => { });
-            } else if (choice === 'visible') {
-                roomData.hidden = false;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: true }).catch(() => { });
-            } else if (choice === 'close_chat') {
-                roomData.chatClosed = true;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: false }).catch(() => { });
-            } else if (choice === 'open_chat') {
-                roomData.chatClosed = false;
-                await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: true }).catch(() => { });
-            }
-
-            saveDB(db);
-            return interaction.update({
-                embeds: [buildTempVoiceEmbed(roomData)],
-                components: buildTempVoiceComponents(roomData, false)
-            });
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // 3. KANAL VE ROL SEÇİM MENÜSÜ ETKİLEŞİMLERİ
-    // ------------------------------------------------------------------------
-    if (interaction.isRoleSelectMenu()) {
-        if (interaction.customId.startsWith('set_ayar_rol_')) {
-            if (!isAdmin) return;
-            const key = interaction.customId.replace('set_ayar_rol_', '');
-            db[guildId][key] = interaction.values[0];
-            saveDB(db);
-            return interaction.update(buildAyarDashboard(db[guildId]));
-        }
-    }
-
-    if (interaction.isChannelSelectMenu()) {
-        if (interaction.customId.startsWith('set_ayar_ch_')) {
-            if (!isAdmin) return;
-            const key = interaction.customId.replace('set_ayar_ch_', '');
-            db[guildId][key] = interaction.values[0];
-            saveDB(db);
-            return interaction.update(buildAyarDashboard(db[guildId]));
-        }
-
-        if (interaction.customId.startsWith('set_log_ch_')) {
-            if (!isAdmin) return;
-            const key = interaction.customId.replace('set_log_ch_', '');
-            db[guildId][key] = interaction.values[0];
-            saveDB(db);
-            return interaction.update(buildLogDashboard(db[guildId]));
-        }
-
-        if (interaction.customId === 'select_ticket_kur_cat') {
-            if (!isAdmin) return;
-            db[guildId].tempTicketCat = interaction.values[0];
-            saveDB(db);
-            return interaction.update(buildTicketDashboard(db[guildId]));
-        }
-
-        if (interaction.customId.startsWith('select_ticket_kur_ch_')) {
-            if (!isAdmin) return;
-            const catId = interaction.customId.replace('select_ticket_kur_ch_', '');
-            const targetChId = interaction.values[0];
-
-            const modal = new ModalBuilder()
-                .setCustomId(`modal_ticket_kur_${targetChId}_${catId}`)
-                .setTitle('Ticket Paneli ve Mesaj Kurulumu');
-
-            const titleInput = new TextInputBuilder()
-                .setCustomId('t_baslik')
-                .setLabel('Panel Başlığı (Kutunun en üst başlığı)')
-                .setValue('Destek ve Başvuru Merkezi')
-                .setMaxLength(250)
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true);
-
-            const descInput = new TextInputBuilder()
-                .setCustomId('t_aciklama')
-                .setLabel('Panel Açıklaması (Kutunun içindeki yazı)')
-                .setValue('Yetkililerle iletişime geçmek, başvuruda bulunmak veya destek almak için aşağıdaki butona tıklayarak formu doldurabilirsiniz.')
-                .setMaxLength(2000)
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true);
-
-            const btnInput = new TextInputBuilder()
-                .setCustomId('t_buton')
-                .setLabel('Buton Metni (Tıklanacak butonun yazısı)')
-                .setValue('Talep Oluştur')
-                .setMaxLength(80)
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true);
-
-            const welcomeInput = new TextInputBuilder()
-                .setCustomId('t_ic_mesaj')
-                .setLabel('Bilet İçi Mesaj (Oda açılınca yazacak mesaj)')
-                .setValue('Talebiniz ve ilettiğiniz bilgiler aşağıda yer almaktadır. Yetkililerimiz en kısa sürede sizinle ilgilenecektir.')
-                .setMaxLength(1500)
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true);
-
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(titleInput),
-                new ActionRowBuilder().addComponents(descInput),
-                new ActionRowBuilder().addComponents(btnInput),
-                new ActionRowBuilder().addComponents(welcomeInput)
-            );
-
-            return interaction.showModal(modal);
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // 4. BUTON ETKİLEŞİMLERİ (DASHBOARD NAVİGASYON, TEMP VC & TICKET)
-    // ------------------------------------------------------------------------
-    if (interaction.isButton()) {
-        const customId = interaction.customId;
-
-        // --- /PANEL GEZİNME BUTONLARI ---
-        if (customId === 'nav_panel_home') {
-            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
-            return interaction.update(buildHomeDashboard(interaction.guild)).catch(() => {});
-        }
-        if (customId === 'nav_panel_ayar') {
-            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
-            return interaction.update(buildAyarDashboard(db[guildId])).catch(() => {});
-        }
-        if (customId === 'nav_panel_log') {
-            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
-            return interaction.update(buildLogDashboard(db[guildId])).catch(() => {});
-        }
-        if (customId === 'nav_panel_ticket') {
-            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
-            return interaction.update(buildTicketDashboard(db[guildId])).catch(() => {});
-        }
-        if (customId === 'nav_panel_info') {
-            if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => {});
-            return interaction.update(buildInfoDashboard(interaction.guild, db[guildId])).catch(() => {});
-        }
-
-        // --- GEÇİCİ ODA (TEMP VC) BUTONLARI ---
-        if (customId.startsWith('vc_')) {
-            const channel = interaction.channel;
-            const roomData = db[guildId].tempRooms[channel.id];
-            if (!roomData) return interaction.reply({ content: 'Bu ses odasına ait kayıt bulunamadı.', ephemeral: true });
-
-            if (customId === 'vc_claim') {
-                const currentOwner = channel.members.get(roomData.ownerId);
-                if (currentOwner) {
-                    return interaction.reply({ content: `Oda sahibi (<@${roomData.ownerId}>) hâlâ odada olduğu için sahipliği devralamazsınız.`, ephemeral: true });
-                }
-                if (!channel.members.has(interaction.user.id)) {
-                    return interaction.reply({ content: 'Sahipliği devralmak için ses kanalında olmalısınız.', ephemeral: true });
+            if (interaction.customId === 'vc_privacy_menu') {
+                const channel = interaction.channel;
+                const roomData = db[guildId].tempRooms[channel.id];
+                if (!roomData) return interaction.reply({ content: 'Bu odaya ait veri bulunamadı.', ephemeral: true });
+                if (interaction.user.id !== roomData.ownerId && !isAdmin) {
+                    return interaction.reply({ content: `Bu menüyü sadece oda sahibi (<@${roomData.ownerId}>) kullanabilir.`, ephemeral: true });
                 }
 
-                roomData.ownerId = interaction.user.id;
+                const choice = interaction.values[0];
+                if (choice === 'lock') {
+                    roomData.locked = true;
+                    await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false }).catch(() => { });
+                } else if (choice === 'unlock') {
+                    roomData.locked = false;
+                    await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true }).catch(() => { });
+                } else if (choice === 'invisible') {
+                    roomData.hidden = true;
+                    await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false }).catch(() => { });
+                } else if (choice === 'visible') {
+                    roomData.hidden = false;
+                    await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: true }).catch(() => { });
+                } else if (choice === 'close_chat') {
+                    roomData.chatClosed = true;
+                    await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: false }).catch(() => { });
+                } else if (choice === 'open_chat') {
+                    roomData.chatClosed = false;
+                    await channel.permissionOverwrites.edit(interaction.guild.id, { SendMessages: true }).catch(() => { });
+                }
+
                 saveDB(db);
-
-                await channel.permissionOverwrites.edit(interaction.user.id, {
-                    ManageChannels: true, MoveMembers: true, Connect: true, ViewChannel: true, SendMessages: true
-                }).catch(() => { });
-
                 return interaction.update({
-                    content: `Odanın yeni sahibi <@${interaction.user.id}> oldu.`,
                     embeds: [buildTempVoiceEmbed(roomData)],
                     components: buildTempVoiceComponents(roomData, false)
                 });
             }
+        }
 
-            if (interaction.user.id !== roomData.ownerId && !isAdmin) {
-                return interaction.reply({ content: `Bu işlemi sadece oda sahibi (<@${roomData.ownerId}>) yapabilir.`, ephemeral: true });
-            }
-
-            if (customId === 'vc_rename') {
-                const modal = new ModalBuilder().setCustomId('modal_vc_rename').setTitle('Oda İsmini Değiştir');
-                const input = new TextInputBuilder().setCustomId('name_val').setLabel('Yeni Oda İsmi').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(32);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-
-            if (customId === 'vc_limit') {
-                const modal = new ModalBuilder().setCustomId('modal_vc_limit').setTitle('Kişi Sınırı Ayarla');
-                const input = new TextInputBuilder().setCustomId('limit_val').setLabel('Kişi Sınırı (0 = Sınırsız, Maks: 99)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2);
-                modal.addComponents(new ActionRowBuilder().addComponents(input));
-                return interaction.showModal(modal);
-            }
-
-            if (customId === 'vc_trust') {
-                const menu = new UserSelectMenuBuilder().setCustomId('select_vc_trust').setPlaceholder('Odaya giriş/yazma izni verilecek üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'İzinli (Trust) listesine eklenecek kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
-            }
-
-            if (customId === 'vc_untrust') {
-                const menu = new UserSelectMenuBuilder().setCustomId('select_vc_untrust').setPlaceholder('Özel izni kaldırılacak üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'Özel izni (Trust) kaldırılacak kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
-            }
-
-            if (customId === 'vc_block') {
-                const menu = new UserSelectMenuBuilder().setCustomId('select_vc_block').setPlaceholder('Odadan engellenecek (Block) üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'Odadan engellenecek (Block) kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
-            }
-
-            if (customId === 'vc_unblock') {
-                const menu = new UserSelectMenuBuilder().setCustomId('select_vc_unblock').setPlaceholder('Engeli kaldırılacak üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'Odaya giriş engeli (Block) kaldırılacak kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
-            }
-
-            if (customId === 'vc_kick') {
-                const menu = new UserSelectMenuBuilder().setCustomId('select_vc_kick').setPlaceholder('Odadan atılacak üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'Ses kanalından atılacak (Kick) kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
-            }
-
-            if (customId === 'vc_transfer') {
-                const menu = new UserSelectMenuBuilder().setCustomId('select_vc_transfer').setPlaceholder('Oda sahipliğinin devredileceği üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'Oda sahipliğini devretmek istediğiniz kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
-            }
-
-            if (customId === 'vc_delete') {
-                delete db[guildId].tempRooms[channel.id];
+        // ------------------------------------------------------------------------
+        // 3. KANAL VE ROL SEÇİM MENÜSÜ ETKİLEŞİMLERİ
+        // ------------------------------------------------------------------------
+        if (interaction.isRoleSelectMenu()) {
+            if (interaction.customId.startsWith('set_ayar_rol_')) {
+                if (!isAdmin) return;
+                const key = interaction.customId.replace('set_ayar_rol_', '');
+                db[guildId][key] = interaction.values[0];
                 saveDB(db);
-                await interaction.reply({ content: 'Oda siliniyor...', ephemeral: true });
-                await channel.delete().catch(() => { });
-                return;
+                return interaction.update(buildAyarDashboard(db[guildId]));
             }
         }
 
-        // --- TICKET (DESTEK) BUTONLARI ---
-        if (customId.startsWith('ticket_')) {
-            // Kullanıcı "Talep Oluştur" butonuna bastığında Ön Form (Modal) açılır
-            if (customId.startsWith('ticket_create_')) {
-                const panelKey = customId.replace('ticket_create_', '');
+        if (interaction.isChannelSelectMenu()) {
+            if (interaction.customId.startsWith('set_ayar_ch_')) {
+                if (!isAdmin) return;
+                const key = interaction.customId.replace('set_ayar_ch_', '');
+                db[guildId][key] = interaction.values[0];
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId]));
+            }
+
+            if (interaction.customId.startsWith('set_log_ch_')) {
+                if (!isAdmin) return;
+                const key = interaction.customId.replace('set_log_ch_', '');
+                db[guildId][key] = interaction.values[0];
+                saveDB(db);
+                return interaction.update(buildLogDashboard(db[guildId]));
+            }
+
+            if (interaction.customId === 'select_ticket_kur_cat') {
+                if (!isAdmin) return;
+                db[guildId].tempTicketCat = interaction.values[0];
+                saveDB(db);
+                return interaction.update(buildTicketDashboard(db[guildId]));
+            }
+
+            if (interaction.customId.startsWith('select_ticket_kur_ch_')) {
+                if (!isAdmin) return;
+                const catId = interaction.customId.replace('select_ticket_kur_ch_', '');
+                const targetChId = interaction.values[0];
+
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_ticket_kur_${targetChId}_${catId}`)
+                    .setTitle('Ticket Paneli ve Mesaj Kurulumu');
+
+                const titleInput = new TextInputBuilder()
+                    .setCustomId('t_baslik')
+                    .setLabel('Panel Başlığı (Kutunun en üst başlığı)')
+                    .setValue('Destek ve Başvuru Merkezi')
+                    .setMaxLength(250)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const descInput = new TextInputBuilder()
+                    .setCustomId('t_aciklama')
+                    .setLabel('Panel Açıklaması (Kutunun içindeki yazı)')
+                    .setValue('Yetkililerle iletişime geçmek, başvuruda bulunmak veya destek almak için aşağıdaki butona tıklayarak formu doldurabilirsiniz.')
+                    .setMaxLength(2000)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true);
+
+                const btnInput = new TextInputBuilder()
+                    .setCustomId('t_buton')
+                    .setLabel('Buton Metni (Tıklanacak butonun yazısı)')
+                    .setValue('Talep Oluştur')
+                    .setMaxLength(80)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const welcomeInput = new TextInputBuilder()
+                    .setCustomId('t_ic_mesaj')
+                    .setLabel('Bilet İçi Mesaj (Oda açılınca yazacak mesaj)')
+                    .setValue('Talebiniz ve ilettiğiniz bilgiler aşağıda yer almaktadır. Yetkililerimiz en kısa sürede sizinle ilgilenecektir.')
+                    .setMaxLength(1500)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(titleInput),
+                    new ActionRowBuilder().addComponents(descInput),
+                    new ActionRowBuilder().addComponents(btnInput),
+                    new ActionRowBuilder().addComponents(welcomeInput)
+                );
+
+                return interaction.showModal(modal);
+            }
+        }
+
+        // ------------------------------------------------------------------------
+        // 4. BUTON ETKİLEŞİMLERİ (DASHBOARD NAVİGASYON, TEMP VC & TICKET)
+        // ------------------------------------------------------------------------
+        if (interaction.isButton()) {
+            const customId = interaction.customId;
+
+            // --- /PANEL GEZİNME BUTONLARI ---
+            if (customId === 'nav_panel_home') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => { });
+                return interaction.update(buildHomeDashboard(interaction.guild)).catch(() => { });
+            }
+            if (customId === 'nav_panel_ayar') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => { });
+                return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
+            }
+            if (customId === 'nav_panel_log') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => { });
+                return interaction.update(buildLogDashboard(db[guildId])).catch(() => { });
+            }
+            if (customId === 'nav_panel_ticket') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => { });
+                return interaction.update(buildTicketDashboard(db[guildId])).catch(() => { });
+            }
+            if (customId === 'nav_panel_info') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => { });
+                return interaction.update(buildInfoDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            // --- GEÇİCİ ODA (TEMP VC) BUTONLARI ---
+            if (customId.startsWith('vc_')) {
+                const channel = interaction.channel;
+                const roomData = db[guildId].tempRooms[channel.id];
+                if (!roomData) return interaction.reply({ content: 'Bu ses odasına ait kayıt bulunamadı.', ephemeral: true });
+
+                if (customId === 'vc_claim') {
+                    const currentOwner = channel.members.get(roomData.ownerId);
+                    if (currentOwner) {
+                        return interaction.reply({ content: `Oda sahibi (<@${roomData.ownerId}>) hâlâ odada olduğu için sahipliği devralamazsınız.`, ephemeral: true });
+                    }
+                    if (!channel.members.has(interaction.user.id)) {
+                        return interaction.reply({ content: 'Sahipliği devralmak için ses kanalında olmalısınız.', ephemeral: true });
+                    }
+
+                    roomData.ownerId = interaction.user.id;
+                    saveDB(db);
+
+                    await channel.permissionOverwrites.edit(interaction.user.id, {
+                        ManageChannels: true, MoveMembers: true, Connect: true, ViewChannel: true, SendMessages: true
+                    }).catch(() => { });
+
+                    return interaction.update({
+                        content: `Odanın yeni sahibi <@${interaction.user.id}> oldu.`,
+                        embeds: [buildTempVoiceEmbed(roomData)],
+                        components: buildTempVoiceComponents(roomData, false)
+                    });
+                }
+
+                if (interaction.user.id !== roomData.ownerId && !isAdmin) {
+                    return interaction.reply({ content: `Bu işlemi sadece oda sahibi (<@${roomData.ownerId}>) yapabilir.`, ephemeral: true });
+                }
+
+                if (customId === 'vc_rename') {
+                    const modal = new ModalBuilder().setCustomId('modal_vc_rename').setTitle('Oda İsmini Değiştir');
+                    const input = new TextInputBuilder().setCustomId('name_val').setLabel('Yeni Oda İsmi').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(32);
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (customId === 'vc_limit') {
+                    const modal = new ModalBuilder().setCustomId('modal_vc_limit').setTitle('Kişi Sınırı Ayarla');
+                    const input = new TextInputBuilder().setCustomId('limit_val').setLabel('Kişi Sınırı (0 = Sınırsız, Maks: 99)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(2);
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (customId === 'vc_trust') {
+                    const menu = new UserSelectMenuBuilder().setCustomId('select_vc_trust').setPlaceholder('Odaya giriş/yazma izni verilecek üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'İzinli (Trust) listesine eklenecek kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+                }
+
+                if (customId === 'vc_untrust') {
+                    const menu = new UserSelectMenuBuilder().setCustomId('select_vc_untrust').setPlaceholder('Özel izni kaldırılacak üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'Özel izni (Trust) kaldırılacak kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+                }
+
+                if (customId === 'vc_block') {
+                    const menu = new UserSelectMenuBuilder().setCustomId('select_vc_block').setPlaceholder('Odadan engellenecek (Block) üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'Odadan engellenecek (Block) kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+                }
+
+                if (customId === 'vc_unblock') {
+                    const menu = new UserSelectMenuBuilder().setCustomId('select_vc_unblock').setPlaceholder('Engeli kaldırılacak üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'Odaya giriş engeli (Block) kaldırılacak kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+                }
+
+                if (customId === 'vc_kick') {
+                    const menu = new UserSelectMenuBuilder().setCustomId('select_vc_kick').setPlaceholder('Odadan atılacak üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'Ses kanalından atılacak (Kick) kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+                }
+
+                if (customId === 'vc_transfer') {
+                    const menu = new UserSelectMenuBuilder().setCustomId('select_vc_transfer').setPlaceholder('Oda sahipliğinin devredileceği üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'Oda sahipliğini devretmek istediğiniz kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+                }
+
+                if (customId === 'vc_delete') {
+                    delete db[guildId].tempRooms[channel.id];
+                    saveDB(db);
+                    await interaction.reply({ content: 'Oda siliniyor...', ephemeral: true });
+                    await channel.delete().catch(() => { });
+                    return;
+                }
+            }
+
+            // --- TICKET (DESTEK) BUTONLARI ---
+            if (customId.startsWith('ticket_')) {
+                // Kullanıcı "Talep Oluştur" butonuna bastığında Ön Form (Modal) açılır
+                if (customId.startsWith('ticket_create_')) {
+                    const panelKey = customId.replace('ticket_create_', '');
+
+                    const existingTicket = Object.values(db[guildId].tickets).find(t => t.ownerId === interaction.user.id && t.panelKey === panelKey);
+                    if (existingTicket && interaction.guild.channels.cache.has(existingTicket.channelId)) {
+                        return interaction.reply({ content: `Bu birimde zaten açık bir talebiniz bulunuyor: <#${existingTicket.channelId}>`, ephemeral: true });
+                    }
+
+                    const modal = new ModalBuilder()
+                        .setCustomId(`modal_ticket_open_${panelKey}`)
+                        .setTitle('Destek ve Başvuru Formu');
+
+                    const subjectInput = new TextInputBuilder()
+                        .setCustomId('t_user_konu')
+                        .setLabel('Ne için talep açıyorsunuz? (Konu Başlığı)')
+                        .setPlaceholder('Örn: Yetkili Başvurusu / Destek Talebi / Şikayet / Diğer')
+                        .setStyle(TextInputStyle.Short)
+                        .setMaxLength(100)
+                        .setRequired(true);
+
+                    const detailInput = new TextInputBuilder()
+                        .setCustomId('t_user_detay')
+                        .setLabel('Talebinizi detaylıca açıklayın')
+                        .setPlaceholder('Yetkililerin size hızlıca yardımcı olabilmesi için tüm detayları buraya yazın...')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setMaxLength(1500)
+                        .setRequired(true);
+
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(subjectInput),
+                        new ActionRowBuilder().addComponents(detailInput)
+                    );
+
+                    return interaction.showModal(modal);
+                }
+
+                // Kanal içi yönetim butonları (Sadece Yetkili Rol ve Yöneticiler)
+                if (!isAdmin && !isYetkili) {
+                    return interaction.reply({ content: 'Bu butonları sadece yetkililer kullanabilir.', ephemeral: true });
+                }
+
+                const ticketData = db[guildId].tickets[interaction.channel.id];
+                if (!ticketData) return interaction.reply({ content: 'Bu kanal kayıtlı bir ticket kanalı değil.', ephemeral: true });
+
+                // Rate Limit'e takılmayan güvenli "Talebi Üstlen" (Claim) sistemi
+                if (customId === 'ticket_claim') {
+                    if (ticketData.claimedBy === interaction.user.id) {
+                        return interaction.reply({ content: 'Bu talebi zaten siz üstlendiniz.', ephemeral: true });
+                    }
+                    ticketData.claimedBy = interaction.user.id;
+                    saveDB(db);
+
+                    if (interaction.message && interaction.message.embeds.length > 0) {
+                        const oldEmbed = interaction.message.embeds[0];
+                        const newEmbed = EmbedBuilder.from(oldEmbed);
+                        const fields = newEmbed.data.fields ? [...newEmbed.data.fields] : [];
+                        const claimIdx = fields.findIndex(f => f.name === 'İlgilenen Yetkili');
+                        if (claimIdx !== -1) {
+                            fields[claimIdx].value = `<@${interaction.user.id}>`;
+                        } else {
+                            fields.push({ name: 'İlgilenen Yetkili', value: `<@${interaction.user.id}>`, inline: true });
+                        }
+                        newEmbed.setFields(fields);
+                        await interaction.message.edit({ embeds: [newEmbed] }).catch(() => { });
+                    }
+
+                    return interaction.reply({ content: `Bu destek talebi <@${interaction.user.id}> tarafından üstlenildi. Yetkilimiz sizinle ilgilenecektir.` });
+                }
+
+                if (customId === 'ticket_lock') {
+                    ticketData.locked = !ticketData.locked;
+                    saveDB(db);
+                    await interaction.channel.permissionOverwrites.edit(ticketData.ownerId, { SendMessages: !ticketData.locked }).catch(() => { });
+                    return interaction.reply({ content: ticketData.locked ? 'Kanal kilitlendi (Talep sahibi mesaj yazamaz).' : 'Kanal kilidi açıldı.' });
+                }
+
+                if (customId === 'ticket_add') {
+                    const selectMenu = new UserSelectMenuBuilder().setCustomId('select_ticket_add').setPlaceholder('Kanala eklenecek üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'Kanala eklenecek kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
+                }
+
+                if (customId === 'ticket_remove') {
+                    const selectMenu = new UserSelectMenuBuilder().setCustomId('select_ticket_remove').setPlaceholder('Kanaldan çıkarılacak üyeyi seçin').setMaxValues(1);
+                    return interaction.reply({ content: 'Kanaldan çıkarılacak kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
+                }
+
+                if (customId === 'ticket_close') {
+                    await interaction.reply({ content: 'Kanal kapatılıyor ve tüm konuşma geçmişi `.txt` olarak arşivleniyor...' });
+
+                    const sortedMessages = await fetchAllMessages(interaction.channel, 1000);
+
+                    let txtLines = [
+                        `====================================================`,
+                        `TICKET KONUŞMA DÖKÜMÜ (ARŞİV)`,
+                        `Kanal Adı       : ${interaction.channel.name}`,
+                        `Talep Sahibi ID : ${ticketData.ownerId}`,
+                        `Talep Konusu    : ${ticketData.subject || 'Belirtilmedi'}`,
+                        `Talep Açıklaması: ${ticketData.details || 'Belirtilmedi'}`,
+                        `Üstlenen Yetkili: ${ticketData.claimedBy ? ticketData.claimedBy : 'Üstlenilmedi'}`,
+                        `Kapatan Yetkili : ${interaction.user.tag} (${interaction.user.id})`,
+                        `Kapanış Tarihi  : ${new Date().toLocaleString('tr-TR')}`,
+                        `Toplam Mesaj    : ${sortedMessages.length}`,
+                        `====================================================\n`
+                    ];
+
+                    for (const m of sortedMessages) {
+                        const timeStr = new Date(m.createdTimestamp).toLocaleString('tr-TR');
+                        const content = m.content || (m.embeds.length > 0 ? '[Sistem Paneli / Başvuru Kartı]' : '[Görsel / Dosya]');
+                        const attachmentUrls = m.attachments.size > 0 ? ` [Ekler: ${m.attachments.map(a => a.url).join(', ')}]` : '';
+                        txtLines.push(`[${timeStr}] ${m.author.tag}: ${content}${attachmentUrls}`);
+                    }
+
+                    const txtBuffer = Buffer.from(txtLines.join('\n'), 'utf-8');
+                    const attachment = new AttachmentBuilder(txtBuffer, { name: `${interaction.channel.name}-arsiv.txt` });
+
+                    sendLog(interaction.guild, 'logMesaj', {
+                        title: 'Ticket Kapatıldı ve Arşivlendi',
+                        desc: `**Kanal:** \`${interaction.channel.name}\`\n**Talep Sahibi:** <@${ticketData.ownerId}>\n**Konu:** ${ticketData.subject || 'Belirtilmedi'}\n**Üstlenen Yetkili:** ${ticketData.claimedBy ? `<@${ticketData.claimedBy}>` : 'Yok'}\n**Kapatan Yetkili:** <@${interaction.user.id}>\n**Arşivlenen Mesaj:** ${sortedMessages.length} adet`,
+                        color: 0xed4245
+                    }, [attachment]);
+
+                    delete db[guildId].tickets[interaction.channel.id];
+                    saveDB(db);
+
+                    setTimeout(() => { interaction.channel.delete().catch(() => { }); }, 3000);
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------------
+        // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA & TEMP VC)
+        // ------------------------------------------------------------------------
+        if (interaction.isModalSubmit()) {
+            // Yöneticinin Ticket Paneli Kurma Formu
+            if (interaction.customId.startsWith('modal_ticket_kur_')) {
+                const parts = interaction.customId.replace('modal_ticket_kur_', '').split('_');
+                const chId = parts[0];
+                const catId = parts[1] || 'none';
+
+                const targetChannel = interaction.guild.channels.cache.get(chId);
+                if (!targetChannel) return interaction.reply({ content: 'Hedef kanal bulunamadı.', ephemeral: true });
+
+                const baslik = interaction.fields.getTextInputValue('t_baslik');
+                const aciklama = interaction.fields.getTextInputValue('t_aciklama');
+                const butonYazi = interaction.fields.getTextInputValue('t_buton');
+                const icMesaj = interaction.fields.getTextInputValue('t_ic_mesaj');
+
+                const panelId = Date.now().toString(36);
+                db[guildId].ticketPanels[panelId] = {
+                    catId: catId,
+                    title: baslik,
+                    welcomeMsg: icMesaj
+                };
+                delete db[guildId].tempTicketCat;
+                saveDB(db);
+
+                const embed = new EmbedBuilder()
+                    .setTitle(baslik)
+                    .setDescription(aciklama)
+                    .setColor(0x2b2d31)
+                    .setFooter({ text: interaction.guild.name, iconURL: interaction.guild.iconURL() || undefined });
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`ticket_create_${panelId}`)
+                        .setLabel(butonYazi)
+                        .setStyle(ButtonStyle.Primary)
+                );
+
+                await targetChannel.send({ embeds: [embed], components: [row] });
+                return interaction.reply({ content: `Ticket paneli <#${targetChannel.id}> kanalına başarıyla kuruldu.`, ephemeral: true });
+            }
+
+            // Kullanıcının Ön Formu Doldurup Ticket Açması
+            if (interaction.customId.startsWith('modal_ticket_open_')) {
+                const panelKey = interaction.customId.replace('modal_ticket_open_', '');
+                const panelConfig = db[guildId].ticketPanels ? db[guildId].ticketPanels[panelKey] : null;
 
                 const existingTicket = Object.values(db[guildId].tickets).find(t => t.ownerId === interaction.user.id && t.panelKey === panelKey);
                 if (existingTicket && interaction.guild.channels.cache.has(existingTicket.channelId)) {
                     return interaction.reply({ content: `Bu birimde zaten açık bir talebiniz bulunuyor: <#${existingTicket.channelId}>`, ephemeral: true });
                 }
 
-                const modal = new ModalBuilder()
-                    .setCustomId(`modal_ticket_open_${panelKey}`)
-                    .setTitle('Destek ve Başvuru Formu');
+                const konu = interaction.fields.getTextInputValue('t_user_konu').trim();
+                const detay = interaction.fields.getTextInputValue('t_user_detay').trim();
 
-                const subjectInput = new TextInputBuilder()
-                    .setCustomId('t_user_konu')
-                    .setLabel('Ne için talep açıyorsunuz? (Konu Başlığı)')
-                    .setPlaceholder('Örn: Yetkili Başvurusu / Destek Talebi / Şikayet / Diğer')
-                    .setStyle(TextInputStyle.Short)
-                    .setMaxLength(100)
-                    .setRequired(true);
+                let customCatId = null;
+                let welcomeMsg = 'Talebiniz oluşturuldu. Yetkililer en kısa sürede sizinle ilgilenecektir.';
+                let panelTitle = 'Destek ve Başvuru Kanalı';
 
-                const detailInput = new TextInputBuilder()
-                    .setCustomId('t_user_detay')
-                    .setLabel('Talebinizi detaylıca açıklayın')
-                    .setPlaceholder('Yetkililerin size hızlıca yardımcı olabilmesi için tüm detayları buraya yazın...')
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setMaxLength(1500)
-                    .setRequired(true);
-
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(subjectInput),
-                    new ActionRowBuilder().addComponents(detailInput)
-                );
-
-                return interaction.showModal(modal);
-            }
-
-            // Kanal içi yönetim butonları (Sadece Yetkili Rol ve Yöneticiler)
-            if (!isAdmin && !isYetkili) {
-                return interaction.reply({ content: 'Bu butonları sadece yetkililer kullanabilir.', ephemeral: true });
-            }
-
-            const ticketData = db[guildId].tickets[interaction.channel.id];
-            if (!ticketData) return interaction.reply({ content: 'Bu kanal kayıtlı bir ticket kanalı değil.', ephemeral: true });
-
-            // Rate Limit'e takılmayan güvenli "Talebi Üstlen" (Claim) sistemi
-            if (customId === 'ticket_claim') {
-                if (ticketData.claimedBy === interaction.user.id) {
-                    return interaction.reply({ content: 'Bu talebi zaten siz üstlendiniz.', ephemeral: true });
-                }
-                ticketData.claimedBy = interaction.user.id;
-                saveDB(db);
-
-                if (interaction.message && interaction.message.embeds.length > 0) {
-                    const oldEmbed = interaction.message.embeds[0];
-                    const newEmbed = EmbedBuilder.from(oldEmbed);
-                    const fields = newEmbed.data.fields ? [...newEmbed.data.fields] : [];
-                    const claimIdx = fields.findIndex(f => f.name === 'İlgilenen Yetkili');
-                    if (claimIdx !== -1) {
-                        fields[claimIdx].value = `<@${interaction.user.id}>`;
-                    } else {
-                        fields.push({ name: 'İlgilenen Yetkili', value: `<@${interaction.user.id}>`, inline: true });
-                    }
-                    newEmbed.setFields(fields);
-                    await interaction.message.edit({ embeds: [newEmbed] }).catch(() => { });
+                if (panelConfig) {
+                    customCatId = panelConfig.catId !== 'none' ? panelConfig.catId : null;
+                    if (panelConfig.welcomeMsg) welcomeMsg = panelConfig.welcomeMsg;
+                    if (panelConfig.title) panelTitle = panelConfig.title;
                 }
 
-                return interaction.reply({ content: `Bu destek talebi <@${interaction.user.id}> tarafından üstlenildi. Yetkilimiz sizinle ilgilenecektir.` });
-            }
-
-            if (customId === 'ticket_lock') {
-                ticketData.locked = !ticketData.locked;
-                saveDB(db);
-                await interaction.channel.permissionOverwrites.edit(ticketData.ownerId, { SendMessages: !ticketData.locked }).catch(() => { });
-                return interaction.reply({ content: ticketData.locked ? 'Kanal kilitlendi (Talep sahibi mesaj yazamaz).' : 'Kanal kilidi açıldı.' });
-            }
-
-            if (customId === 'ticket_add') {
-                const selectMenu = new UserSelectMenuBuilder().setCustomId('select_ticket_add').setPlaceholder('Kanala eklenecek üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'Kanala eklenecek kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
-            }
-
-            if (customId === 'ticket_remove') {
-                const selectMenu = new UserSelectMenuBuilder().setCustomId('select_ticket_remove').setPlaceholder('Kanaldan çıkarılacak üyeyi seçin').setMaxValues(1);
-                return interaction.reply({ content: 'Kanaldan çıkarılacak kullanıcıyı seçin:', components: [new ActionRowBuilder().addComponents(selectMenu)], ephemeral: true });
-            }
-
-            if (customId === 'ticket_close') {
-                await interaction.reply({ content: 'Kanal kapatılıyor ve tüm konuşma geçmişi `.txt` olarak arşivleniyor...' });
-
-                const sortedMessages = await fetchAllMessages(interaction.channel, 1000);
-
-                let txtLines = [
-                    `====================================================`,
-                    `TICKET KONUŞMA DÖKÜMÜ (ARŞİV)`,
-                    `Kanal Adı       : ${interaction.channel.name}`,
-                    `Talep Sahibi ID : ${ticketData.ownerId}`,
-                    `Talep Konusu    : ${ticketData.subject || 'Belirtilmedi'}`,
-                    `Talep Açıklaması: ${ticketData.details || 'Belirtilmedi'}`,
-                    `Üstlenen Yetkili: ${ticketData.claimedBy ? ticketData.claimedBy : 'Üstlenilmedi'}`,
-                    `Kapatan Yetkili : ${interaction.user.tag} (${interaction.user.id})`,
-                    `Kapanış Tarihi  : ${new Date().toLocaleString('tr-TR')}`,
-                    `Toplam Mesaj    : ${sortedMessages.length}`,
-                    `====================================================\n`
+                const overwrites = [
+                    { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] },
+                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ReadMessageHistory] }
                 ];
-
-                for (const m of sortedMessages) {
-                    const timeStr = new Date(m.createdTimestamp).toLocaleString('tr-TR');
-                    const content = m.content || (m.embeds.length > 0 ? '[Sistem Paneli / Başvuru Kartı]' : '[Görsel / Dosya]');
-                    const attachmentUrls = m.attachments.size > 0 ? ` [Ekler: ${m.attachments.map(a => a.url).join(', ')}]` : '';
-                    txtLines.push(`[${timeStr}] ${m.author.tag}: ${content}${attachmentUrls}`);
+                if (db[guildId].yetkiliRol) {
+                    overwrites.push({ id: db[guildId].yetkiliRol, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ReadMessageHistory] });
                 }
 
-                const txtBuffer = Buffer.from(txtLines.join('\n'), 'utf-8');
-                const attachment = new AttachmentBuilder(txtBuffer, { name: `${interaction.channel.name}-arsiv.txt` });
+                try {
+                    const ticketChannel = await interaction.guild.channels.create({
+                        name: `talep-${interaction.user.username}`,
+                        type: ChannelType.GuildText,
+                        parent: customCatId,
+                        permissionOverwrites: overwrites
+                    });
 
-                sendLog(interaction.guild, 'logMesaj', {
-                    title: 'Ticket Kapatıldı ve Arşivlendi',
-                    desc: `**Kanal:** \`${interaction.channel.name}\`\n**Talep Sahibi:** <@${ticketData.ownerId}>\n**Konu:** ${ticketData.subject || 'Belirtilmedi'}\n**Üstlenen Yetkili:** ${ticketData.claimedBy ? `<@${ticketData.claimedBy}>` : 'Yok'}\n**Kapatan Yetkili:** <@${interaction.user.id}>\n**Arşivlenen Mesaj:** ${sortedMessages.length} adet`,
-                    color: 0xed4245
-                }, [attachment]);
+                    db[guildId].tickets[ticketChannel.id] = {
+                        ownerId: interaction.user.id,
+                        channelId: ticketChannel.id,
+                        panelKey: panelKey,
+                        subject: konu,
+                        details: detay,
+                        claimedBy: null,
+                        locked: false,
+                        createdAt: Date.now()
+                    };
+                    saveDB(db);
 
-                delete db[guildId].tickets[interaction.channel.id];
-                saveDB(db);
+                    const embed = new EmbedBuilder()
+                        .setTitle(panelTitle)
+                        .setDescription(`Merhaba <@${interaction.user.id}>,\n${welcomeMsg}`)
+                        .addFields(
+                            { name: 'Talep Konusu / Türü', value: `\`${konu}\``, inline: false },
+                            { name: 'Kullanıcının Talebi / Açıklaması', value: detay, inline: false },
+                            { name: 'İlgilenen Yetkili', value: 'Henüz üstlenilmedi', inline: true }
+                        )
+                        .setColor(0x2b2d31)
+                        .setTimestamp();
 
-                setTimeout(() => { interaction.channel.delete().catch(() => { }); }, 3000);
-            }
-        }
-    }
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('ticket_claim').setLabel('Talebi Üstlen').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('ticket_lock').setLabel('Kilitle / Aç').setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('ticket_add').setLabel('Üye Ekle').setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('ticket_remove').setLabel('Üye Çıkar').setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat ve Arşivle').setStyle(ButtonStyle.Danger)
+                    );
 
-    // ------------------------------------------------------------------------
-    // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA & TEMP VC)
-    // ------------------------------------------------------------------------
-    if (interaction.isModalSubmit()) {
-        // Yöneticinin Ticket Paneli Kurma Formu
-        if (interaction.customId.startsWith('modal_ticket_kur_')) {
-            const parts = interaction.customId.replace('modal_ticket_kur_', '').split('_');
-            const chId = parts[0];
-            const catId = parts[1] || 'none';
+                    const mentionText = db[guildId].yetkiliRol ? `<@${interaction.user.id}> | <@&${db[guildId].yetkiliRol}>` : `<@${interaction.user.id}>`;
+                    await ticketChannel.send({ content: mentionText, embeds: [embed], components: [row] });
 
-            const targetChannel = interaction.guild.channels.cache.get(chId);
-            if (!targetChannel) return interaction.reply({ content: 'Hedef kanal bulunamadı.', ephemeral: true });
-
-            const baslik = interaction.fields.getTextInputValue('t_baslik');
-            const aciklama = interaction.fields.getTextInputValue('t_aciklama');
-            const butonYazi = interaction.fields.getTextInputValue('t_buton');
-            const icMesaj = interaction.fields.getTextInputValue('t_ic_mesaj');
-
-            const panelId = Date.now().toString(36);
-            db[guildId].ticketPanels[panelId] = {
-                catId: catId,
-                title: baslik,
-                welcomeMsg: icMesaj
-            };
-            delete db[guildId].tempTicketCat;
-            saveDB(db);
-
-            const embed = new EmbedBuilder()
-                .setTitle(baslik)
-                .setDescription(aciklama)
-                .setColor(0x2b2d31)
-                .setFooter({ text: interaction.guild.name, iconURL: interaction.guild.iconURL() || undefined });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`ticket_create_${panelId}`)
-                    .setLabel(butonYazi)
-                    .setStyle(ButtonStyle.Primary)
-            );
-
-            await targetChannel.send({ embeds: [embed], components: [row] });
-            return interaction.reply({ content: `Ticket paneli <#${targetChannel.id}> kanalına başarıyla kuruldu.`, ephemeral: true });
-        }
-
-        // Kullanıcının Ön Formu Doldurup Ticket Açması
-        if (interaction.customId.startsWith('modal_ticket_open_')) {
-            const panelKey = interaction.customId.replace('modal_ticket_open_', '');
-            const panelConfig = db[guildId].ticketPanels ? db[guildId].ticketPanels[panelKey] : null;
-
-            const existingTicket = Object.values(db[guildId].tickets).find(t => t.ownerId === interaction.user.id && t.panelKey === panelKey);
-            if (existingTicket && interaction.guild.channels.cache.has(existingTicket.channelId)) {
-                return interaction.reply({ content: `Bu birimde zaten açık bir talebiniz bulunuyor: <#${existingTicket.channelId}>`, ephemeral: true });
-            }
-
-            const konu = interaction.fields.getTextInputValue('t_user_konu').trim();
-            const detay = interaction.fields.getTextInputValue('t_user_detay').trim();
-
-            let customCatId = null;
-            let welcomeMsg = 'Talebiniz oluşturuldu. Yetkililer en kısa sürede sizinle ilgilenecektir.';
-            let panelTitle = 'Destek ve Başvuru Kanalı';
-
-            if (panelConfig) {
-                customCatId = panelConfig.catId !== 'none' ? panelConfig.catId : null;
-                if (panelConfig.welcomeMsg) welcomeMsg = panelConfig.welcomeMsg;
-                if (panelConfig.title) panelTitle = panelConfig.title;
-            }
-
-            const overwrites = [
-                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] },
-                { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ReadMessageHistory] }
-            ];
-            if (db[guildId].yetkiliRol) {
-                overwrites.push({ id: db[guildId].yetkiliRol, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ReadMessageHistory] });
-            }
-
-            try {
-                const ticketChannel = await interaction.guild.channels.create({
-                    name: `talep-${interaction.user.username}`,
-                    type: ChannelType.GuildText,
-                    parent: customCatId,
-                    permissionOverwrites: overwrites
-                });
-
-                db[guildId].tickets[ticketChannel.id] = {
-                    ownerId: interaction.user.id,
-                    channelId: ticketChannel.id,
-                    panelKey: panelKey,
-                    subject: konu,
-                    details: detay,
-                    claimedBy: null,
-                    locked: false,
-                    createdAt: Date.now()
-                };
-                saveDB(db);
-
-                const embed = new EmbedBuilder()
-                    .setTitle(panelTitle)
-                    .setDescription(`Merhaba <@${interaction.user.id}>,\n${welcomeMsg}`)
-                    .addFields(
-                        { name: 'Talep Konusu / Türü', value: `\`${konu}\``, inline: false },
-                        { name: 'Kullanıcının Talebi / Açıklaması', value: detay, inline: false },
-                        { name: 'İlgilenen Yetkili', value: 'Henüz üstlenilmedi', inline: true }
-                    )
-                    .setColor(0x2b2d31)
-                    .setTimestamp();
-
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('ticket_claim').setLabel('Talebi Üstlen').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId('ticket_lock').setLabel('Kilitle / Aç').setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder().setCustomId('ticket_add').setLabel('Üye Ekle').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('ticket_remove').setLabel('Üye Çıkar').setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat ve Arşivle').setStyle(ButtonStyle.Danger)
-                );
-
-                const mentionText = db[guildId].yetkiliRol ? `<@${interaction.user.id}> | <@&${db[guildId].yetkiliRol}>` : `<@${interaction.user.id}>`;
-                await ticketChannel.send({ content: mentionText, embeds: [embed], components: [row] });
-
-                sendLog(interaction.guild, 'logSunucu', {
-                    title: 'Yeni Ticket Açıldı',
-                    desc: `**Açan Kullanıcı:** <@${interaction.user.id}>\n**Kanal:** <#${ticketChannel.id}>\n**Birim:** ${panelTitle}\n**Konu:** ${konu}`,
-                    color: 0x57f287
-                });
-                return interaction.reply({ content: `Talebiniz başarıyla oluşturuldu: <#${ticketChannel.id}>`, ephemeral: true });
-            } catch (e) {
-                return interaction.reply({ content: 'Kanal oluşturulurken bir yetki veya kategori hatası oluştu.', ephemeral: true });
-            }
-        }
-
-        if (interaction.customId === 'modal_vc_limit') {
-            const val = parseInt(interaction.fields.getTextInputValue('limit_val'));
-            if (isNaN(val) || val < 0 || val > 99) return interaction.reply({ content: 'Lütfen 0 ile 99 arasında geçerli bir sayı girin.', ephemeral: true });
-            await interaction.channel.setUserLimit(val).catch(() => { });
-            return interaction.reply({ content: `Oda kişi sınırı **${val === 0 ? 'Sınırsız' : val}** olarak ayarlandı.`, ephemeral: true });
-        }
-
-        // Geçici Oda İsim Değiştirme (Discord Rate Limit Korumalı - 5 Dakika)
-        if (interaction.customId === 'modal_vc_rename') {
-            const now = Date.now();
-            const lastRename = renameCooldownMap.get(interaction.channel.id) || 0;
-            if (now - lastRename < 300000) {
-                const kalanSn = Math.ceil((300000 - (now - lastRename)) / 1000);
-                return interaction.reply({ content: `Discord hız sınırları (Rate Limit) nedeniyle oda ismini tekrar değiştirmek için **${kalanSn} saniye** beklemelisiniz.`, ephemeral: true });
-            }
-            const newName = interaction.fields.getTextInputValue('name_val').trim();
-            renameCooldownMap.set(interaction.channel.id, now);
-            await interaction.channel.setName(newName).catch(() => { });
-            return interaction.reply({ content: `Oda ismi **${newName}** olarak güncellendi.`, ephemeral: true });
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // 6. KULLANICI SEÇİM MENÜSÜ (USER SELECT MENU) ETKİLEŞİMLERİ
-    // ------------------------------------------------------------------------
-    if (interaction.isUserSelectMenu()) {
-        if (interaction.customId === 'set_ayar_user_kickBot') {
-            if (!isAdmin) return;
-            db[guildId].kickBot = interaction.values[0];
-            saveDB(db);
-            return interaction.update(buildAyarDashboard(db[guildId]));
-        }
-
-        const targetId = interaction.values[0];
-        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-        if (!targetMember) return interaction.update({ content: 'Kullanıcı bulunamadı.', components: [] });
-
-        const channel = interaction.channel;
-        const roomData = db[guildId].tempRooms[channel.id];
-
-        if (interaction.customId === 'select_vc_trust') {
-            await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, Connect: true, SendMessages: true }).catch(() => { });
-            return interaction.update({ content: `<@${targetId}> izinli (Trust) listesine eklendi. Oda kilitli veya gizli olsa bile girebilir.`, components: [] });
-        }
-
-        if (interaction.customId === 'select_vc_untrust') {
-            await channel.permissionOverwrites.delete(targetId).catch(() => { });
-            return interaction.update({ content: `<@${targetId}> kullanıcısının özel oda izinleri kaldırıldı.`, components: [] });
-        }
-
-        if (interaction.customId === 'select_vc_block') {
-            if (targetId === interaction.user.id) return interaction.update({ content: 'Kendinizi engelleyemezsiniz.', components: [] });
-            if (targetMember.voice.channelId === channel.id) await targetMember.voice.disconnect().catch(() => { });
-            await channel.permissionOverwrites.edit(targetId, { ViewChannel: false, Connect: false, SendMessages: false }).catch(() => { });
-            return interaction.update({ content: `<@${targetId}> odadan engellendi (Block) ve bağlantısı kesildi.`, components: [] });
-        }
-
-        if (interaction.customId === 'select_vc_unblock') {
-            await channel.permissionOverwrites.delete(targetId).catch(() => { });
-            return interaction.update({ content: `<@${targetId}> kullanıcısının oda engeli kaldırıldı.`, components: [] });
-        }
-
-        if (interaction.customId === 'select_vc_kick') {
-            if (targetId === interaction.user.id) return interaction.update({ content: 'Kendinizi odadan atamazsınız.', components: [] });
-            if (targetMember.voice.channelId !== channel.id) return interaction.update({ content: 'Bu kullanıcı şu an ses odasında değil.', components: [] });
-            await targetMember.voice.disconnect().catch(() => { });
-            return interaction.update({ content: `<@${targetId}> ses odasından çıkarıldı.`, components: [] });
-        }
-
-        if (interaction.customId === 'select_vc_transfer') {
-            if (targetId === interaction.user.id || targetMember.user.bot) return interaction.update({ content: 'Geçersiz kullanıcı seçimi.', components: [] });
-            if (!roomData) return interaction.update({ content: 'Oda verisi bulunamadı.', components: [] });
-
-            roomData.ownerId = targetId;
-            saveDB(db);
-
-            await channel.permissionOverwrites.edit(targetId, { ManageChannels: true, MoveMembers: true, Connect: true, ViewChannel: true, SendMessages: true }).catch(() => { });
-
-            if (roomData.panelMsgId) {
-                const panelMsg = await channel.messages.fetch(roomData.panelMsgId).catch(() => null);
-                if (panelMsg) {
-                    await panelMsg.edit({
-                        content: `Oda sahipliği <@${targetId}> kullanıcısına devredildi.`,
-                        embeds: [buildTempVoiceEmbed(roomData)],
-                        components: buildTempVoiceComponents(roomData, false)
-                    }).catch(() => { });
+                    sendLog(interaction.guild, 'logSunucu', {
+                        title: 'Yeni Ticket Açıldı',
+                        desc: `**Açan Kullanıcı:** <@${interaction.user.id}>\n**Kanal:** <#${ticketChannel.id}>\n**Birim:** ${panelTitle}\n**Konu:** ${konu}`,
+                        color: 0x57f287
+                    });
+                    return interaction.reply({ content: `Talebiniz başarıyla oluşturuldu: <#${ticketChannel.id}>`, ephemeral: true });
+                } catch (e) {
+                    return interaction.reply({ content: 'Kanal oluşturulurken bir yetki veya kategori hatası oluştu.', ephemeral: true });
                 }
             }
-            return interaction.update({ content: `Oda sahipliği başarıyla <@${targetId}> kullanıcısına devredildi.`, components: [] });
+
+            if (interaction.customId === 'modal_vc_limit') {
+                const val = parseInt(interaction.fields.getTextInputValue('limit_val'));
+                if (isNaN(val) || val < 0 || val > 99) return interaction.reply({ content: 'Lütfen 0 ile 99 arasında geçerli bir sayı girin.', ephemeral: true });
+                await interaction.channel.setUserLimit(val).catch(() => { });
+                return interaction.reply({ content: `Oda kişi sınırı **${val === 0 ? 'Sınırsız' : val}** olarak ayarlandı.`, ephemeral: true });
+            }
+
+            // Geçici Oda İsim Değiştirme (Discord Rate Limit Korumalı - 5 Dakika)
+            if (interaction.customId === 'modal_vc_rename') {
+                const now = Date.now();
+                const lastRename = renameCooldownMap.get(interaction.channel.id) || 0;
+                if (now - lastRename < 300000) {
+                    const kalanSn = Math.ceil((300000 - (now - lastRename)) / 1000);
+                    return interaction.reply({ content: `Discord hız sınırları (Rate Limit) nedeniyle oda ismini tekrar değiştirmek için **${kalanSn} saniye** beklemelisiniz.`, ephemeral: true });
+                }
+                const newName = interaction.fields.getTextInputValue('name_val').trim();
+                renameCooldownMap.set(interaction.channel.id, now);
+                await interaction.channel.setName(newName).catch(() => { });
+                return interaction.reply({ content: `Oda ismi **${newName}** olarak güncellendi.`, ephemeral: true });
+            }
         }
 
-        if (interaction.customId === 'select_ticket_add') {
-            await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, AttachFiles: true, ReadMessageHistory: true }).catch(() => { });
-            await interaction.update({ content: `<@${targetId}> kanala eklendi.`, components: [] });
-            return channel.send(`<@${targetId}>, <@${interaction.user.id}> tarafından bu talebe eklendi.`);
-        }
+        // ------------------------------------------------------------------------
+        // 6. KULLANICI SEÇİM MENÜSÜ (USER SELECT MENU) ETKİLEŞİMLERİ
+        // ------------------------------------------------------------------------
+        if (interaction.isUserSelectMenu()) {
+            if (interaction.customId === 'set_ayar_user_kickBot') {
+                if (!isAdmin) return;
+                db[guildId].kickBot = interaction.values[0];
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId]));
+            }
 
-        if (interaction.customId === 'select_ticket_remove') {
-            await channel.permissionOverwrites.delete(targetId).catch(() => { });
-            await interaction.update({ content: `<@${targetId}> kanaldan çıkarıldı.`, components: [] });
-            return channel.send(`<@${targetId}>, <@${interaction.user.id}> tarafından bu talepten çıkarıldı.`);
+            const targetId = interaction.values[0];
+            const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+            if (!targetMember) return interaction.update({ content: 'Kullanıcı bulunamadı.', components: [] });
+
+            const channel = interaction.channel;
+            const roomData = db[guildId].tempRooms[channel.id];
+
+            if (interaction.customId === 'select_vc_trust') {
+                await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, Connect: true, SendMessages: true }).catch(() => { });
+                return interaction.update({ content: `<@${targetId}> izinli (Trust) listesine eklendi. Oda kilitli veya gizli olsa bile girebilir.`, components: [] });
+            }
+
+            if (interaction.customId === 'select_vc_untrust') {
+                await channel.permissionOverwrites.delete(targetId).catch(() => { });
+                return interaction.update({ content: `<@${targetId}> kullanıcısının özel oda izinleri kaldırıldı.`, components: [] });
+            }
+
+            if (interaction.customId === 'select_vc_block') {
+                if (targetId === interaction.user.id) return interaction.update({ content: 'Kendinizi engelleyemezsiniz.', components: [] });
+                if (targetMember.voice.channelId === channel.id) await targetMember.voice.disconnect().catch(() => { });
+                await channel.permissionOverwrites.edit(targetId, { ViewChannel: false, Connect: false, SendMessages: false }).catch(() => { });
+                return interaction.update({ content: `<@${targetId}> odadan engellendi (Block) ve bağlantısı kesildi.`, components: [] });
+            }
+
+            if (interaction.customId === 'select_vc_unblock') {
+                await channel.permissionOverwrites.delete(targetId).catch(() => { });
+                return interaction.update({ content: `<@${targetId}> kullanıcısının oda engeli kaldırıldı.`, components: [] });
+            }
+
+            if (interaction.customId === 'select_vc_kick') {
+                if (targetId === interaction.user.id) return interaction.update({ content: 'Kendinizi odadan atamazsınız.', components: [] });
+                if (targetMember.voice.channelId !== channel.id) return interaction.update({ content: 'Bu kullanıcı şu an ses odasında değil.', components: [] });
+                await targetMember.voice.disconnect().catch(() => { });
+                return interaction.update({ content: `<@${targetId}> ses odasından çıkarıldı.`, components: [] });
+            }
+
+            if (interaction.customId === 'select_vc_transfer') {
+                if (targetId === interaction.user.id || targetMember.user.bot) return interaction.update({ content: 'Geçersiz kullanıcı seçimi.', components: [] });
+                if (!roomData) return interaction.update({ content: 'Oda verisi bulunamadı.', components: [] });
+
+                roomData.ownerId = targetId;
+                saveDB(db);
+
+                await channel.permissionOverwrites.edit(targetId, { ManageChannels: true, MoveMembers: true, Connect: true, ViewChannel: true, SendMessages: true }).catch(() => { });
+
+                if (roomData.panelMsgId) {
+                    const panelMsg = await channel.messages.fetch(roomData.panelMsgId).catch(() => null);
+                    if (panelMsg) {
+                        await panelMsg.edit({
+                            content: `Oda sahipliği <@${targetId}> kullanıcısına devredildi.`,
+                            embeds: [buildTempVoiceEmbed(roomData)],
+                            components: buildTempVoiceComponents(roomData, false)
+                        }).catch(() => { });
+                    }
+                }
+                return interaction.update({ content: `Oda sahipliği başarıyla <@${targetId}> kullanıcısına devredildi.`, components: [] });
+            }
+
+            if (interaction.customId === 'select_ticket_add') {
+                await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, SendMessages: true, AttachFiles: true, ReadMessageHistory: true }).catch(() => { });
+                await interaction.update({ content: `<@${targetId}> kanala eklendi.`, components: [] });
+                return channel.send(`<@${targetId}>, <@${interaction.user.id}> tarafından bu talebe eklendi.`);
+            }
+
+            if (interaction.customId === 'select_ticket_remove') {
+                await channel.permissionOverwrites.delete(targetId).catch(() => { });
+                await interaction.update({ content: `<@${targetId}> kanaldan çıkarıldı.`, components: [] });
+                return channel.send(`<@${targetId}>, <@${interaction.user.id}> tarafından bu talepten çıkarıldı.`);
+            }
         }
-    }
     } catch (err) {
         addLiveLog(`❌ Etkileşim Hatası: ${err.message}`);
         console.error('Etkileşim Hatası:', err);
         if (!interaction.replied && !interaction.deferred) {
-            interaction.reply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.', ephemeral: true }).catch(() => {});
+            interaction.reply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.', ephemeral: true }).catch(() => { });
         }
     }
 });
