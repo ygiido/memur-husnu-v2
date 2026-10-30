@@ -125,6 +125,7 @@ function ensureGuildDB(db, guildId) {
     if (!db[guildId].tickets) db[guildId].tickets = {};
     if (!db[guildId].ticketPanels) db[guildId].ticketPanels = {};
     if (!db[guildId].trackers) db[guildId].trackers = [];
+    if (!db[guildId].customKufurler) db[guildId].customKufurler = [];
     if (db[guildId].kickKanal && !db[guildId].duyuruKanal) {
         db[guildId].duyuruKanal = db[guildId].kickKanal;
         delete db[guildId].kickKanal;
@@ -381,9 +382,9 @@ async function fetchAllMessages(channel, maxMessages = 1000) {
 }
 
 // ============================================================================
-// GELİŞMİŞ KÜFÜR VE ARGO TESPİT MOTORU (ANTI-BYPASS)
+// GELİŞMİŞ KÜFÜR VE ARGO TESPİT MOTORU (ANTI-BYPASS & BAĞLAM KORUMALI)
 // ============================================================================
-function kufurTespitEt(metin) {
+function kufurTespitEt(metin, customList = []) {
     if (!metin) return false;
 
     let text = metin.toLocaleLowerCase('tr-TR');
@@ -400,33 +401,61 @@ function kufurTespitEt(metin) {
         normText += charMap[char] ? charMap[char] : char;
     }
 
-    const dedupedText = normText.replace(/(.)\1+/g, '$1');
-    const wordsOnly = dedupedText.replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    // 1. Noktalama, alt çizgi ve özel sembolleri temizleyip kelime ayrıştırma (a.m.k, s_i_k, o.ç, a*q)
+    const cleanPunctuation = normText.replace(/[\._\-\*\~\,\;\:\/\\\|\(\)\[\]\{\}\<\>\+\=\?\^\#\$\%\&\!\@]/g, ' ');
+    const dedupedPunct = cleanPunctuation.replace(/(.)\1+/g, '$1');
+    const wordsOnly = dedupedPunct.replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
     const wordsArray = wordsOnly.split(' ');
-    const strippedText = dedupedText.replace(/[^a-z]/g, '');
+    const strippedText = normText.replace(/(.)\1+/g, '$1').replace(/[^a-z]/g, '');
 
+    // Harfler arasına nokta/boşluk/çizgi konularak yapılan bypass girişimlerini yakalama
+    const bypassRegex = /(?:^|[\s\W_])([a4@][\s\W_]*[m][\s\W_]*[kqv]|[a4@][\s\W_]*[kq]|[o0][\s\W_]*[cç]|[p][\s\W_]*[i1!][\s\W_]*[cç]|[s5$][\s\W_]*[i1!][\s\W_]*[k]|[s5$][\s\W_]*[g]|[m][\s\W_]*[kq])(?:[\s\W_]|$)/i;
+    if (bypassRegex.test(normText)) return true;
+
+    // Sunucuya özel yasaklı kelimeler kontrolü
+    if (Array.isArray(customList) && customList.length > 0) {
+        for (let custom of customList) {
+            const cleanCustom = custom.toLowerCase().trim();
+            if (wordsArray.includes(cleanCustom) || strippedText.includes(cleanCustom)) return true;
+        }
+    }
+
+    // Doğrudan kelime bazlı küfürler (Masum kelimeler: top, amin, sulan, anan buradan çıkartıldı)
     const kelimeBazliKufurler = [
         'amk', 'amc', 'amq', 'aq', 'oc', 'oç', 'pic', 'piç', 'sik', 'sg', 'mk', 'mq',
-        'got', 'göt', 'am', 'ami', 'amin', 'amina', 'aminda', 'amini', 'amcik', 'amck',
+        'got', 'göt', 'amcik', 'amck',
         'siki', 'sikim', 'sikin', 'sikis', 'siker', 'sikerim', 'sikeyim', 'sikik', 'siktir', 'sktr', 'siktin', 'sokuk', 'sokarim', 'sokam',
         'yarak', 'yarrak', 'yarag', 'yarrag', 'yarram', 'yaraam',
         'orspu', 'orospu', 'oruspu', 'orosbu', 'orusbu',
         'pezevenk', 'pezeveng', 'pzvnk', 'gavat', 'kaltak', 'kahpe', 'kahbe', 'kancik', 'kevase', 'kaltag',
-        'ibne', 'ipne', 'top', 'puşt', 'pust', 'yavsak', 'yavşak', 'gotten', 'gotveren', 'götveren',
+        'ibne', 'ipne', 'puşt', 'pust', 'yavsak', 'yavşak', 'gotten', 'gotveren', 'götveren',
         'dalyarak', 'dalyarrak', 'malafat', 'taşak', 'tasak', 'tassak', 'daşak', 'dasak', 'dassak',
-        'angut', 'lavuk', 'zibidi', 'haysiyetsiz', 'serefsiz', 'şerefsiz', 'namussuz', 'itoglu', 'kopekoglu',
-        'anan', 'anani', 'ananin', 'bacini', 'bacinin', 'sulan', 'sulaleni', 'ecdadini', 'soyunu', 'zürriyetini'
+        'angut', 'lavuk', 'zibidi', 'haysiyetsiz', 'serefsiz', 'şerefsiz', 'namussuz', 'itoglu', 'kopekoglu'
     ];
 
     for (let word of wordsArray) {
         if (kelimeBazliKufurler.includes(word)) return true;
-        if (/^(siktir|sikis|siker|sikey|sikim|orospu|oruspu|pezevenk|yavsak|amcik|yarrak|yarak|gotveren|kahpe|kaltak|ecdadini|sulaleni)/.test(word)) {
+        if (/^(siktir|sikis|siker|sikey|sikim|orospu|oruspu|pezevenk|yavsak|amcik|yarrak|yarak|gotveren|kahpe|kaltak)/.test(word)) {
             return true;
         }
     }
 
-    const ayrilmisHarfDeseni = /(?:^|\s)([a4@]\s*[m]\s*[kqv]|[a4@]\s*[q]|[o0]\s*[cç]|[p]\s*[i1!]\s*[cç]|[s5$]\s*[i1!]\s*[k])(?:\s|$)/i;
-    if (ayrilmisHarfDeseni.test(text)) return true;
+    // Aileye ve Şahsa Yönelik Ağır Hakaret & Küfür Kombinasyonları
+    const aileveSahisKufurleri = [
+        /anan[ıi]?n?\s*(am[ıi]|sik|got|bac|sülale|ecdad|avrad|avrat|mezari)/i,
+        /anan[ıi]\s*(sike|sikt|sok|sik|ye)/i,
+        /bac[ıi]n[ıi]\s*(sike|sikt|sok|sik)/i,
+        /s[uü]l[aâ]len[ıi]\s*(sike|sikt|sok|sik)/i,
+        /ecdad[ıi]n[ıi]\s*(sike|sikt|sok|sik)/i,
+        /avrad[ıi]n[ıi]\s*(sike|sikt|sok|sik)/i,
+        /am[ıi]na\s*(koy|sok|cak|yag|soki|kor)/i,
+        /am[ıi]n[ıi]\s*(sik|sok|des)/i,
+        /g[oö]t[uü]n[eü]\s*(koy|sok|gir)/i
+    ];
+
+    for (let reg of aileveSahisKufurleri) {
+        if (reg.test(normText)) return true;
+    }
 
     const agirKombinasyonlar = [
         'orospu', 'oruspu', 'orosbu', 'pezevenk', 'pezeveng', 'siktir', 'sikerim', 'sikeyim', 'sikis',
@@ -520,7 +549,7 @@ async function applyJail(member, guild, reason) {
     });
 }
 
-// Küfür Uyarısı ve 3. İhlalde Hapis Fonksiyonu
+// Küfür Uyarısı (24 Saatlik Zaman Aşımı Korumalı) ve 3. İhlalde Hapis Fonksiyonu
 async function handleProfanity(message, db, guildId) {
     await message.delete().catch(() => { });
     ensureGuildDB(db, guildId);
@@ -529,12 +558,20 @@ async function handleProfanity(message, db, guildId) {
     }
 
     let userData = db[guildId].users[message.author.id];
+    const now = Date.now();
+
+    // 24 saatten (86.400.000 ms) eski uyarıları affet ve sıfırla
+    if (userData.lastKufurTime && (now - userData.lastKufurTime > 86400000)) {
+        userData.kufurUyari = 0;
+    }
+
     const currentKufur = userData.kufurUyari ? userData.kufurUyari : 0;
     userData.kufurUyari = currentKufur + 1;
+    userData.lastKufurTime = now;
     saveDB(db);
 
     if (userData.kufurUyari < 3) {
-        message.channel.send(`<@${message.author.id}>, lütfen üslubunuza dikkat edin. Sunucuda küfür ve argo kullanımı yasaktır. (**${userData.kufurUyari}/3 Uyarı**)`).then(m => setTimeout(() => m.delete().catch(() => { }), 6000));
+        message.channel.send(`<@${message.author.id}>, lütfen üslubunuza dikkat edin. Sunucuda küfür ve argo kullanımı yasaktır. (**${userData.kufurUyari}/3 Uyarı**)\n*(Uyarılarınız 24 saat temiz kalırsanız otomatik sıfırlanır)*`).then(m => setTimeout(() => m.delete().catch(() => { }), 6500));
         sendLog(message.guild, 'logCeza', {
             title: 'Küfür / Argo Uyarısı',
             desc: `**Kullanıcı:** <@${message.author.id}>\n**Kanal:** <#${message.channel.id}>\n**Uyarı Sayısı:** ${userData.kufurUyari}/3\n**Silinen Mesaj:** ${message.content}`,
@@ -542,6 +579,7 @@ async function handleProfanity(message, db, guildId) {
         });
     } else {
         userData.kufurUyari = 0;
+        userData.lastKufurTime = null;
         saveDB(db);
         await applyJail(message.member, message.guild, "Küfür / Hakaret (3. İhlal)");
     }
@@ -623,6 +661,8 @@ function buildAyarDashboard(guildDb) {
                 { label: 'Takip Edilen Kanalları Listele / Sil', description: 'Kayıtlı YouTube, Kick ve Twitch kanallarını inceleyin veya silin.', value: 'list_stream_trackers' },
                 { label: 'Link Engeli (Aç / Kapat)', description: `Dış link paylaşımını engeller. (Şu an: ${guildDb.linkEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_link' },
                 { label: 'Küfür Engeli (Aç / Kapat)', description: `Küfürleri siler, 3. uyarıda hapse atar. (Şu an: ${guildDb.kufurEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_kufur' },
+                { label: 'Özel Yasaklı Kelime Ekle', description: 'Sunucunuza özel engellenmesini istediğiniz kelime/argo ekleyin.', value: 'add_custom_kufur' },
+                { label: 'Özel Yasaklı Kelimeleri Listele / Sil', description: 'Eklediğiniz özel yasaklı kelimeleri görün veya silin.', value: 'list_custom_kufur' },
                 { label: 'Otomatik Cevap (Aç / Kapat)', description: `Selamlaşmalara otomatik yanıt verir. (Şu an: ${guildDb.otoCevap !== false ? 'Açık' : 'Kapalı'})`, value: 'toggle_oto' }
             ])
     );
@@ -1138,6 +1178,42 @@ client.on('interactionCreate', async interaction => {
                     return interaction.update(panelData);
                 }
 
+                if (secim === 'add_custom_kufur') {
+                    const modal = new ModalBuilder()
+                        .setCustomId('modal_add_custom_kufur')
+                        .setTitle('Özel Yasaklı Kelime Ekle');
+                    const input = new TextInputBuilder()
+                        .setCustomId('kufur_word')
+                        .setLabel('Engellenecek Kelime / İfade')
+                        .setPlaceholder('Örn: yasaklikelime')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setMaxLength(50);
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
+                }
+
+                if (secim === 'list_custom_kufur') {
+                    const customList = db[guildId].customKufurler || [];
+                    if (customList.length === 0) {
+                        return interaction.reply({ content: 'Bu sunucuda henüz eklenmiş özel bir yasaklı kelime bulunmuyor.', ephemeral: true });
+                    }
+                    const options = customList.slice(0, 25).map(w => ({
+                        label: w,
+                        description: `"${w}" kelimesini yasaklı listesinden kaldırır.`,
+                        value: w
+                    }));
+                    const selectMenu = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId('delete_custom_kufur_select')
+                            .setPlaceholder('Silmek istediğiniz yasaklı kelimeyi seçin...')
+                            .addOptions(options)
+                    );
+                    const panelData = buildAyarDashboard(db[guildId]);
+                    panelData.components.push(selectMenu);
+                    return interaction.update(panelData);
+                }
+
                 if (secim === 'add_stream_tracker') {
                     const modal = new ModalBuilder()
                         .setCustomId('modal_add_stream_tracker')
@@ -1197,6 +1273,14 @@ client.on('interactionCreate', async interaction => {
                 if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
                 const selectedUrl = interaction.values[0];
                 db[guildId].trackers = (db[guildId].trackers || []).filter(t => t.url !== selectedUrl);
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId]));
+            }
+
+            if (interaction.customId === 'delete_custom_kufur_select') {
+                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                const selectedWord = interaction.values[0];
+                db[guildId].customKufurler = (db[guildId].customKufurler || []).filter(w => w !== selectedWord);
                 saveDB(db);
                 return interaction.update(buildAyarDashboard(db[guildId]));
             }
@@ -1593,6 +1677,21 @@ client.on('interactionCreate', async interaction => {
         // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA, YAYINCI EKLEME & TEMP VC)
         // ------------------------------------------------------------------------
         if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'modal_add_custom_kufur') {
+                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                const newWord = interaction.fields.getTextInputValue('kufur_word').trim().toLowerCase();
+                if (!newWord || newWord.length < 2) {
+                    return interaction.reply({ content: 'Lütfen en az 2 karakterden oluşan geçerli bir kelime girin.', ephemeral: true });
+                }
+                if (!db[guildId].customKufurler) db[guildId].customKufurler = [];
+                if (db[guildId].customKufurler.includes(newWord)) {
+                    return interaction.reply({ content: `**${newWord}** zaten sunucunun özel yasaklı kelimeler listesinde ekli.`, ephemeral: true });
+                }
+                db[guildId].customKufurler.push(newWord);
+                saveDB(db);
+                return interaction.reply({ content: `✅ **"${newWord}"** kelimesi sunucunun özel yasaklı kelimeler listesine eklendi.`, ephemeral: true });
+            }
+
             if (interaction.customId === 'modal_add_stream_tracker') {
                 const rawUrl = interaction.fields.getTextInputValue('tracker_url').trim();
                 await interaction.deferReply({ ephemeral: true });
@@ -1869,7 +1968,8 @@ client.on('messageCreate', async message => {
     const isProtected = Boolean(isAdmin || isYetkili || isMuaf);
 
     if (db[guildId].kufurEngel && !isProtected) {
-        if (kufurTespitEt(message.content)) {
+        const customWords = db[guildId].customKufurler || [];
+        if (kufurTespitEt(message.content, customWords)) {
             await handleProfanity(message, db, guildId);
             return;
         }
@@ -2034,7 +2134,8 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
         const isProtected = Boolean(isAdmin || isYetkili || isMuaf);
 
         if (!isProtected) {
-            if (db[guildId].kufurEngel && kufurTespitEt(newMessage.content)) {
+            const customWords = db[guildId].customKufurler || [];
+            if (db[guildId].kufurEngel && kufurTespitEt(newMessage.content, customWords)) {
                 await handleProfanity(newMessage, db, guildId);
                 return;
             }
