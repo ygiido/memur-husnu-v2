@@ -692,6 +692,30 @@ function buildDashboardButtons(activeTab = 'home') {
     );
 }
 
+function buildHomeDashboard(guild) {
+    const embed = new EmbedBuilder()
+        .setTitle(`${guild.name} - Yönetim ve Rehber Paneli`)
+        .setDescription(
+            `Bu kontrol paneli üzerinden sunucunun tüm moderasyon, güvenlik, geçici ses odası, log ve destek (ticket) sistemlerini hiçbir komut ezberlemeden yapılandırabilirsiniz.\n\n` +
+            `**1. Sistem Ayarları Butonu**\n` +
+            `Yetkili, muaf, cezalı ve sicilli rollerini; geçici ses odası oluşturucu kanalını, yayın duyuru sistemini, küfür/link engellerini ve bot korumasını buradan yönetebilirsiniz.\n\n` +
+            `**2. Log Ayarları Butonu**\n` +
+            `Sunucuda gerçekleşen tüm olayları 6 ayrı kategoride (Ceza, Mesaj, Ses, Üye, Sunucu, Güvenlik) hangi kanallara raporlanacağını buradan belirleyebilirsiniz.\n\n` +
+            `**3. Ticket Kurulumu Butonu**\n` +
+            `İstediğiniz kanala özel destek veya başvuru kutusu kurmanızı sağlar. Üyeler butona bastığında karşılarına bir başvuru formu (Modal) çıkar; konu ve açıklamayı yazıp onayladıklarında özel kanal açılır.\n\n` +
+            `**4. Komutlar ve Yetki Dağılımı**\n` +
+            `- \`/panel\` : Bu yönetim ekranını açar (Sadece Sunucu Yöneticileri).\n` +
+            `- \`/yaz\` : Bot üzerinden kanala duyuru/mesaj yazar (Sadece Sunucu Yöneticileri).\n` +
+            `- \`/hapis\` : Kullanıcıyı belirtilen süreyle cezalıya atar (Yöneticiler ve Yetkili Rol).\n` +
+            `- \`/af\` : Kullanıcının cezasını ve sicilini temizler (Yöneticiler ve Yetkili Rol).\n` +
+            `- \`/sil\` : Kanaldaki mesajları toplu olarak temizler (Yöneticiler ve Yetkili Rol).`
+        )
+        .setColor(0x2b2d31)
+        .setTimestamp();
+
+    return { content: '', embeds: [embed], components: [buildDashboardButtons('home')] };
+}
+
 function buildAyarDashboard(guildDb) {
     const getRole = (id) => id ? `<@&${id}>` : 'Atanmamış';
     const getCh = (id) => id ? `<#${id}>` : 'Atanmamış';
