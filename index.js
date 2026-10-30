@@ -126,6 +126,8 @@ function ensureGuildDB(db, guildId) {
     if (!db[guildId].ticketPanels) db[guildId].ticketPanels = {};
     if (!db[guildId].trackers) db[guildId].trackers = [];
     if (!db[guildId].customKufurler) db[guildId].customKufurler = [];
+    if (!Array.isArray(db[guildId].botWhitelist)) db[guildId].botWhitelist = [];
+    if (db[guildId].antiBot === undefined) db[guildId].antiBot = true;
     if (db[guildId].kickKanal && !db[guildId].duyuruKanal) {
         db[guildId].duyuruKanal = db[guildId].kickKanal;
         delete db[guildId].kickKanal;
@@ -586,8 +588,100 @@ async function handleProfanity(message, db, guildId) {
 }
 
 // ============================================================================
-// REHBERLİ GÖRSEL KONTROL PANELİ (DASHBOARD - /panel KOMUTU İÇİN)
+// GELİŞMİŞ REKLAM & LİNK KORUMASI (BEYAZ LİSTE, GİZLİ LİNK & DAVET İSTİSNASI)
 // ============================================================================
+const allowedLinkDomains = [
+    'youtube.com', 'youtu.be', 'twitch.tv', 'kick.com', 'spotify.com',
+    'discord.com', 'discordapp.com', 'tenor.com', 'giphy.com', 'github.com',
+    'instagram.com', 'twitter.com', 'x.com', 'tiktok.com'
+];
+
+function isForbiddenLink(content, guildInvites = []) {
+    if (!content) return false;
+    let clean = content;
+
+    // 1. Standart URL Tespiti
+    const urlPattern = /(https?:\/\/[^\s]+|discord\.gg\/[^\s]+)/gi;
+    const matches = content.match(urlPattern) || [];
+
+    for (let u of matches) {
+        let full = u.startsWith('http') ? u : 'https://' + u;
+        try {
+            const parsed = new URL(full);
+            const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+
+            // Discord Davet Linki Kontrolü (Sunucunun kendi davet kodları serbest)
+            if (host === 'discord.gg' || (host === 'discord.com' && parsed.pathname.startsWith('/invite/'))) {
+                const code = parsed.pathname.split('/').filter(Boolean).pop();
+                if (guildInvites.includes(code)) {
+                    clean = clean.replace(u, '');
+                    continue;
+                }
+                return true; // Başka sunucunun daveti (Reklam)
+            }
+
+            // Güvenilir / İzinli Alan Adı Kontrolü
+            const isAllowed = allowedLinkDomains.some(d => host === d || host.endsWith('.' + d));
+            if (!isAllowed) {
+                return true; // Bilinmeyen / Yasaklı link
+            } else {
+                clean = clean.replace(u, '');
+            }
+        } catch (e) {
+            return true;
+        }
+    }
+
+    // 2. Gizli Davet ve Boşluklu Bypass Girişimleri (örn: discord . gg / kod)
+    const hiddenInviteRegex = /(?:discord(?:[\s\.\(\[\{\-_\*]+gg|\.com\/invite)[\s\.\(\[\{\-_\*\/]*([a-zA-Z0-9\-]+))/i;
+    const m = clean.match(hiddenInviteRegex);
+    if (m) {
+        const code = m[1];
+        if (!guildInvites.includes(code)) return true;
+        clean = clean.replace(m[0], '');
+    }
+
+    // 3. Şüpheli TLD Uzantılarıyla Gizlenmiş Linkler (site . com, reklam . xyz)
+    const hiddenLinkRegex = /(?:^|\s)[a-z0-9\-]+(?:\s*[\.\(\[\{]\s*|\s+dot\s+)(?:com|net|org|xyz|gg|top|site|ru|info|link|cc|to)(?:\/|\s|$)/i;
+    if (hiddenLinkRegex.test(clean)) return true;
+
+    return false;
+}
+
+// Reklam ve Link Uyarısı / Kademeli Ceza (2. İhlalde Hapis)
+async function handleLinkViolation(message, db, guildId) {
+    await message.delete().catch(() => { });
+    ensureGuildDB(db, guildId);
+    if (!db[guildId].users[message.author.id]) {
+        db[guildId].users[message.author.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0, linkUyari: 0 };
+    }
+
+    let userData = db[guildId].users[message.author.id];
+    const now = Date.now();
+
+    // 24 saat sonra link uyarısını sıfırla
+    if (userData.lastLinkTime && (now - userData.lastLinkTime > 86400000)) {
+        userData.linkUyari = 0;
+    }
+
+    userData.linkUyari = (userData.linkUyari || 0) + 1;
+    userData.lastLinkTime = now;
+    saveDB(db);
+
+    if (userData.linkUyari < 2) {
+        message.channel.send(`<@${message.author.id}>, sunucuda harici reklam veya izinsiz link paylaşımı yasaktır. (**${userData.linkUyari}/2 Uyarı**)\n*(Tekrarında otomatik hapis cezası uygulanır)*`).then(m => setTimeout(() => m.delete().catch(() => { }), 6500));
+        sendLog(message.guild, 'logCeza', {
+            title: 'Reklam / Yasaklı Link Uyarısı',
+            desc: `**Kullanıcı:** <@${message.author.id}>\n**Kanal:** <#${message.channel.id}>\n**Uyarı:** ${userData.linkUyari}/2\n**Engellenen İçerik:** ${message.content}`,
+            color: 0xfee75c
+        });
+    } else {
+        userData.linkUyari = 0;
+        userData.lastLinkTime = null;
+        saveDB(db);
+        await applyJail(message.member, message.guild, "İzinsiz Reklam / Yasaklı Link Paylaşımı");
+    }
+}
 function buildDashboardButtons(activeTab = 'home') {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('nav_panel_home').setLabel('Ana Rehber').setStyle(activeTab === 'home' ? ButtonStyle.Primary : ButtonStyle.Secondary),
@@ -598,76 +692,72 @@ function buildDashboardButtons(activeTab = 'home') {
     );
 }
 
-function buildHomeDashboard(guild) {
-    const embed = new EmbedBuilder()
-        .setTitle(`${guild.name} - Yönetim ve Rehber Paneli`)
-        .setDescription(
-            `Bu kontrol paneli üzerinden sunucunun tüm moderasyon, güvenlik, geçici ses odası, log ve destek (ticket) sistemlerini hiçbir komut ezberlemeden yapılandırabilirsiniz.\n\n` +
-            `**1. Sistem Ayarları Butonu**\n` +
-            `Yetkili, muaf, cezalı ve sicilli rollerini; geçici ses odası oluşturucu kanalını, yayın duyuru sistemini ve küfür/link engellerini buradan seçebilirsiniz.\n\n` +
-            `**2. Log Ayarları Butonu**\n` +
-            `Sunucuda gerçekleşen tüm olayları 6 ayrı kategoride (Ceza, Mesaj, Ses, Üye, Sunucu, Güvenlik) hangi kanallara raporlanacağını buradan belirleyebilirsiniz.\n\n` +
-            `**3. Ticket Kurulumu Butonu**\n` +
-            `İstediğiniz kanala özel destek veya başvuru kutusu kurmanızı sağlar. Üyeler butona bastığında karşılarına bir başvuru formu (Modal) çıkar; konu ve açıklamayı yazıp onayladıklarında özel kanal açılır.\n\n` +
-            `**4. Komutlar ve Yetki Dağılımı**\n` +
-            `- \`/panel\` : Bu yönetim ekranını açar (Sadece Sunucu Yöneticileri).\n` +
-            `- \`/yaz\` : Bot üzerinden kanala duyuru/mesaj yazar (Sadece Sunucu Yöneticileri).\n` +
-            `- \`/hapis\` : Kullanıcıyı belirtilen süreyle cezalıya atar (Yöneticiler ve Yetkili Rol).\n` +
-            `- \`/af\` : Kullanıcının cezasını ve sicilini temizler (Yöneticiler ve Yetkili Rol).\n` +
-            `- \`/sil\` : Kanaldaki mesajları toplu olarak temizler (Yöneticiler ve Yetkili Rol).`
-        )
-        .setColor(0x2b2d31)
-        .setTimestamp();
-
-    return { content: '', embeds: [embed], components: [buildDashboardButtons('home')] };
-}
-
 function buildAyarDashboard(guildDb) {
     const getRole = (id) => id ? `<@&${id}>` : 'Atanmamış';
     const getCh = (id) => id ? `<#${id}>` : 'Atanmamış';
     const trackerCount = Array.isArray(guildDb.trackers) ? guildDb.trackers.length : 0;
+    const customKufurCount = Array.isArray(guildDb.customKufurler) ? guildDb.customKufurler.length : 0;
+    const botWhitelistCount = Array.isArray(guildDb.botWhitelist) ? guildDb.botWhitelist.length : 0;
 
     const embed = new EmbedBuilder()
-        .setTitle('Sistem Ayarları ve Açıklamaları')
+        .setTitle('Sistem Ayarları ve Yönetim Merkezi')
         .setDescription(
-            `Aşağıdaki açılır menüden değiştirmek istediğiniz ayarı seçin. Seçtiğinizde hemen altında ilgili rol veya kanal seçme listesi belirecektir.\n\n` +
-            `**Rollerin Görevleri:**\n` +
-            `- **Yetkili Rolü:** \`/hapis\`, \`/af\`, \`/sil\` komutlarını kullanabilen ve açılan Ticket taleplerini yönetebilen tekil moderatör rolüdür.\n` +
-            `- **Muaf Rolü:** Küfür, link, büyük harf (Caps Lock) ve spam korumasından etkilenmeyecek üyelere verilen roldür.\n` +
-            `- **Cezalı (Jail) Rolü:** Ceza alan üyelere verilen roldür (Kanal izinlerinden bu rolün mesaj yazmasını kapatmanız önerilir).\n` +
-            `- **Sicilli Rolü:** 10 dakikadan uzun ceza alanlara veya kuralları sürekli ihlal edenlere kalıcı olarak verilen roldür.`
+            `Aşağıdaki butonlardan koruma filtrelerini doğrudan **açıp kapatabilir**, açılır menüden ise rol, kanal ve yayıncı yapılandırmalarını hızlıca yapabilirsiniz.\n\n` +
+            `**Rol Görevleri:**\n` +
+            `- **Yetkili Rolü:** \`/hapis\`, \`/af\`, \`/sil\` komutlarını ve destek taleplerini yöneten roldür.\n` +
+            `- **Muaf Rolü:** Küfür, link, spam ve caps lock denetiminden muaf tutulur.\n` +
+            `- **Cezalı (Jail) Rolü:** Ceza alan üyelere otomatik verilen kısıtlama rolüdür.\n` +
+            `- **Sicilli Rolü:** Sürekli kural ihlali yapanlara verilen kalıcı uyarı rolüdür.`
         )
         .setColor(0x2b2d31)
         .addFields(
-            { name: 'Mevcut Rol Ayarları', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
-            { name: 'Geçici Ses ve Yayın', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
-            { name: 'Koruma Filtreleri', value: `Link Engeli: **${guildDb.linkEngel ? 'Açık' : 'Kapalı'}**\nKüfür Engeli: **${guildDb.kufurEngel ? 'Açık' : 'Kapalı'}**\nOto-Cevap: **${guildDb.otoCevap !== false ? 'Açık' : 'Kapalı'}**`, inline: false }
+            { name: '👥 Rol Yapılandırması', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
+            { name: '🎙️ Ses ve Yayın', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
+            { name: '🛡️ Güvenlik ve Koruma Durumu', value: `Link/Reklam: **${guildDb.linkEngel ? '🟢 AÇIK' : '🔴 KAPALI'}**\nKüfür Koruması: **${guildDb.kufurEngel ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${customKufurCount} özel kelime)*\nİzinsiz Bot Engeli: **${guildDb.antiBot !== false ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${botWhitelistCount} beyaz listede)*\nOto-Cevap: **${guildDb.otoCevap !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**`, inline: false }
         );
+
+    // Hızlı Aç/Kapat Butonları (Tek Tıkla Kolay Yönetim)
+    const toggleRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('btn_quick_toggle_link')
+            .setLabel(guildDb.linkEngel ? 'Link: Açık (Kapat)' : 'Link: Kapalı (Aç)')
+            .setStyle(guildDb.linkEngel ? ButtonStyle.Success : ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('btn_quick_toggle_kufur')
+            .setLabel(guildDb.kufurEngel ? 'Küfür: Açık (Kapat)' : 'Küfür: Kapalı (Aç)')
+            .setStyle(guildDb.kufurEngel ? ButtonStyle.Success : ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId('btn_quick_toggle_antibot')
+            .setLabel(guildDb.antiBot !== false ? 'Bot Koruması: Açık' : 'Bot Koruması: Kapalı')
+            .setStyle(guildDb.antiBot !== false ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('btn_quick_toggle_oto')
+            .setLabel(guildDb.otoCevap !== false ? 'Oto-Cevap: Açık' : 'Oto-Cevap: Kapalı')
+            .setStyle(guildDb.otoCevap !== false ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
 
     const menuRow = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId('panel_ayar_sec')
-            .setPlaceholder('Yapılandırılacak sistem ayarını buradan seçin...')
+            .setPlaceholder('Yapılandırılacak ayarı listeden seçin...')
             .addOptions([
-                { label: 'Yetkili (Moderatör) Rolü Seç', description: 'Hapis, af, sil komutlarını ve ticket butonlarını kullanabilen rol.', value: 'yetkiliRol' },
-                { label: 'Muaf Rolü Seç', description: 'Küfür, link ve spam denetiminden muaf tutulacak rol.', value: 'muafRol' },
-                { label: 'Cezalı (Jail) Rolü Seç', description: 'Hapis cezası alan kullanıcılara verilecek kısıtlama rolü.', value: 'jailRol' },
-                { label: 'Sicilli Rolü Seç', description: 'Sicili bozulan kullanıcılara verilecek uyarı rolü.', value: 'sicilRol' },
-                { label: 'Geçici Oda Oluşturucu Ses Kanalı Seç', description: 'Üyelerin tıkladığında kendilerine özel oda açacağı ses kanalı.', value: 'odaKanal' },
-                { label: 'Geçici Oda Kategorisi Seç', description: 'Açılan özel ses odalarının altında toplanacağı kategori.', value: 'odaKategori' },
+                { label: 'Yetkili (Moderatör) Rolü Seç', description: 'Hapis, af, sil ve bilet yönetim yetkisine sahip rol.', value: 'yetkiliRol' },
+                { label: 'Muaf Rolü Seç', description: 'Küfür, link ve spam korumalarından muaf tutulan rol.', value: 'muafRol' },
+                { label: 'Cezalı (Jail) Rolü Seç', description: 'Hapis cezası alan üyelere verilen kısıtlama rolü.', value: 'jailRol' },
+                { label: 'Sicilli Rolü Seç', description: 'Sicili bozulan üyelere verilecek uyarı rolü.', value: 'sicilRol' },
+                { label: 'Geçici Oda Oluşturucu Ses Kanalı Seç', description: 'Üyelerin tıkladığında özel oda açacağı ses kanalı.', value: 'odaKanal' },
+                { label: 'Geçici Oda Kategorisi Seç', description: 'Açılan özel ses odalarının toplanacağı kategori.', value: 'odaKategori' },
                 { label: 'Yayın & İçerik Duyuru Kanalı Seç', description: 'YouTube, Kick ve Twitch bildirimlerinin paylaşılacağı metin kanalı.', value: 'duyuruKanal' },
                 { label: 'Duyuru Bildirim Rolü Seç', description: 'Duyurularda etiketlenecek rol (Atanmazsa @everyone).', value: 'duyuruRol' },
                 { label: 'Yayıncı / Kanal Ekle (YT, Kick, Twitch)', description: 'Otomatik takip edilecek kanal linkini girin.', value: 'add_stream_tracker' },
-                { label: 'Takip Edilen Kanalları Listele / Sil', description: 'Kayıtlı YouTube, Kick ve Twitch kanallarını inceleyin veya silin.', value: 'list_stream_trackers' },
-                { label: 'Link Engeli (Aç / Kapat)', description: `Dış link paylaşımını engeller. (Şu an: ${guildDb.linkEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_link' },
-                { label: 'Küfür Engeli (Aç / Kapat)', description: `Küfürleri siler, 3. uyarıda hapse atar. (Şu an: ${guildDb.kufurEngel ? 'Açık' : 'Kapalı'})`, value: 'toggle_kufur' },
-                { label: 'Özel Yasaklı Kelime Ekle', description: 'Sunucunuza özel engellenmesini istediğiniz kelime/argo ekleyin.', value: 'add_custom_kufur' },
+                { label: 'Takip Edilen Kanalları Listele / Sil', description: 'Kayıtlı yayıncı kanallarını listeleyin veya kaldırın.', value: 'list_stream_trackers' },
+                { label: 'Özel Yasaklı Kelime Ekle', description: 'Sunucunuza özel yasaklanacak kelime ekleyin.', value: 'add_custom_kufur' },
                 { label: 'Özel Yasaklı Kelimeleri Listele / Sil', description: 'Eklediğiniz özel yasaklı kelimeleri görün veya silin.', value: 'list_custom_kufur' },
-                { label: 'Otomatik Cevap (Aç / Kapat)', description: `Selamlaşmalara otomatik yanıt verir. (Şu an: ${guildDb.otoCevap !== false ? 'Açık' : 'Kapalı'})`, value: 'toggle_oto' }
+                { label: 'Bot Beyaz Listesi Ekle / Çıkar', description: 'Sunucuya bot ekleme izni olan bot ve üyeleri yönetin.', value: 'manage_bot_whitelist' }
             ])
     );
 
-    return { content: '', embeds: [embed], components: [buildDashboardButtons('ayar'), menuRow] };
+    return { content: '', embeds: [embed], components: [buildDashboardButtons('ayar'), toggleRow, menuRow] };
 }
 
 function buildLogDashboard(guildDb) {
@@ -907,6 +997,20 @@ client.once('ready', async () => {
 
         // Hayalet Geçici Oda Temizliği (Bot kapalıyken boşalmış odaları temizler)
         ensureGuildDB(db, guild.id);
+
+        // Mevcut botları ve sunucu sahibini otomatik olarak beyaz listeye ekle
+        if (!Array.isArray(db[guild.id].botWhitelist)) db[guild.id].botWhitelist = [];
+        guild.members.cache.filter(m => m.user?.bot).forEach(b => {
+            if (!db[guild.id].botWhitelist.includes(b.id)) {
+                db[guild.id].botWhitelist.push(b.id);
+                dbUpdated = true;
+            }
+        });
+        if (guild.ownerId && !db[guild.id].botWhitelist.includes(guild.ownerId)) {
+            db[guild.id].botWhitelist.push(guild.ownerId);
+            dbUpdated = true;
+        }
+
         const kategoriId = db[guild.id].odaKategori;
         const olusturucuId = db[guild.id].odaKanal;
 
@@ -1249,6 +1353,18 @@ client.on('interactionCreate', async interaction => {
                     return interaction.update(panelData);
                 }
 
+                if (secim === 'manage_bot_whitelist') {
+                    const userSelect = new ActionRowBuilder().addComponents(
+                        new UserSelectMenuBuilder()
+                            .setCustomId('select_bot_whitelist')
+                            .setPlaceholder('Beyaz listeye eklenecek veya kaldırılacak bot/üyeyi seçin...')
+                            .setMaxValues(1)
+                    );
+                    const panelData = buildAyarDashboard(db[guildId]);
+                    panelData.components.push(userSelect);
+                    return interaction.update(panelData);
+                }
+
                 // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği
                 const chTypeMap = {
                     'duyuruKanal': [ChannelType.GuildText, ChannelType.GuildAnnouncement],
@@ -1453,6 +1569,32 @@ client.on('interactionCreate', async interaction => {
             if (customId === 'nav_panel_info') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri yönetebilir.', ephemeral: true }).catch(() => { });
                 return interaction.update(buildInfoDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            // --- HIZLI AÇ/KAPAT TOGGLE BUTONLARI ---
+            if (customId === 'btn_quick_toggle_link') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
+                db[guildId].linkEngel = !db[guildId].linkEngel;
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
+            }
+            if (customId === 'btn_quick_toggle_kufur') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
+                db[guildId].kufurEngel = !db[guildId].kufurEngel;
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
+            }
+            if (customId === 'btn_quick_toggle_antibot') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
+                db[guildId].antiBot = db[guildId].antiBot === false ? true : false;
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
+            }
+            if (customId === 'btn_quick_toggle_oto') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
+                db[guildId].otoCevap = db[guildId].otoCevap === false ? true : false;
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
             }
 
             // --- GEÇİCİ ODA (TEMP VC) BUTONLARI ---
@@ -1873,6 +2015,20 @@ client.on('interactionCreate', async interaction => {
         // ------------------------------------------------------------------------
         if (interaction.isUserSelectMenu()) {
             const targetId = interaction.values[0];
+
+            if (interaction.customId === 'select_bot_whitelist') {
+                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                if (!Array.isArray(db[guildId].botWhitelist)) db[guildId].botWhitelist = [];
+                const idx = db[guildId].botWhitelist.indexOf(targetId);
+                if (idx !== -1) {
+                    db[guildId].botWhitelist.splice(idx, 1);
+                } else {
+                    db[guildId].botWhitelist.push(targetId);
+                }
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId]));
+            }
+
             const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
             if (!targetMember) return interaction.update({ content: 'Kullanıcı bulunamadı.', components: [] });
 
@@ -2000,13 +2156,14 @@ client.on('messageCreate', async message => {
 
     if (isProtected) return;
 
-    // Link Koruması
+    // Link / Reklam Koruması (Akıllı Whitelist, Sunucu Davet İstisnası ve 2. İhlalde Hapis)
     if (db[guildId].linkEngel) {
-        const isDiscordMedia = /(tenor\.com|giphy\.com|discordapp\.com\/attachments|discord\.com\/channels|cdn\.discordapp\.com)/i.test(message.content);
-        const hasLink = /(https?:\/\/[^\s]+|discord\.gg\/[^\s]+)/gi.test(message.content);
-        if (hasLink && !isDiscordMedia) {
-            await message.delete().catch(() => { });
-            await applyJail(message.member, message.guild, "Yasaklı Link Paylaşımı");
+        const cachedInv = invitesCache.get(guildId);
+        const currentGuildInvites = cachedInv ? Array.from(cachedInv.keys()) : [];
+        if (message.guild.vanityURLCode) currentGuildInvites.push(message.guild.vanityURLCode);
+
+        if (isForbiddenLink(message.content, currentGuildInvites)) {
+            await handleLinkViolation(message, db, guildId);
             return;
         }
     }
@@ -2140,11 +2297,12 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
                 return;
             }
             if (db[guildId].linkEngel) {
-                const isDiscordMedia = /(tenor\.com|giphy\.com|discordapp\.com\/attachments|discord\.com\/channels|cdn\.discordapp\.com)/i.test(newMessage.content);
-                const hasLink = /(https?:\/\/[^\s]+|discord\.gg\/[^\s]+)/gi.test(newMessage.content);
-                if (hasLink && !isDiscordMedia) {
-                    await newMessage.delete().catch(() => { });
-                    await applyJail(newMessage.member, newMessage.guild, "Yasaklı Link Paylaşımı (Düzenlenen Mesaj)");
+                const cachedInv = invitesCache.get(guildId);
+                const currentGuildInvites = cachedInv ? Array.from(cachedInv.keys()) : [];
+                if (newMessage.guild.vanityURLCode) currentGuildInvites.push(newMessage.guild.vanityURLCode);
+
+                if (isForbiddenLink(newMessage.content, currentGuildInvites)) {
+                    await handleLinkViolation(newMessage, db, guildId);
                     return;
                 }
             }
@@ -2354,11 +2512,38 @@ client.on('guildMemberAdd', async member => {
     ensureGuildDB(db, guildId);
 
     if (member.user.bot) {
+        if (!Array.isArray(db[guildId].botWhitelist)) db[guildId].botWhitelist = [];
+        const ownerId = member.guild.ownerId;
         const executor = await getAuditExecutor(member.guild, AuditLogEvent.BotAdd, member.id);
+
+        const isAllowedBot = db[guildId].botWhitelist.includes(member.id);
+        const isAllowedAdder = executor && (executor.id === ownerId || db[guildId].botWhitelist.includes(executor.id));
+
+        // Anti-Bot Koruması (İzinsiz Bot Engeli)
+        if (db[guildId].antiBot !== false) {
+            if (!isAllowedBot && !isAllowedAdder) {
+                let kickSuccess = false;
+                try {
+                    await member.kick('İzinsiz Bot Ekleme Koruması (Anti-Bot)');
+                    kickSuccess = true;
+                } catch (e) { }
+
+                return sendLog(member.guild, 'logGuvenlik', {
+                    title: '🚨 İZİNSİZ BOT TESPİT EDİLDİ VE ENGELLENDİ',
+                    desc: `**Eklenen Bot:** <@${member.id}> (\`${member.user.tag}\`)\n` +
+                        `**Ekleyen:** ${executor ? `<@${executor.id}> (\`${executor.tag}\`)` : 'Bilinmiyor'}\n` +
+                        `**Uygulanan İşlem:** ${kickSuccess ? '🚫 **Bot derhal sunucudan atıldı.**' : '⚠️ *Bot yetki yetersizliği sebebiyle atılamadı!*'}\n` +
+                        `**Güvenlik Notu:** Sunucuya bot ekleme izni sadece Sunucu Sahibine aittir. İzinli bot veya kişileri \`/panel\` üzerinden beyaz listeye ekleyebilirsiniz.`,
+                    color: 0xed4245,
+                    thumbnail: member.user.displayAvatarURL()
+                });
+            }
+        }
+
         return sendLog(member.guild, 'logGuvenlik', {
             title: 'Sunucuya Yeni Bir Bot Eklendi',
-            desc: `**Eklenen Bot:** <@${member.id}> (${member.user.tag})\n**Ekleyen Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}`,
-            color: 0xff0000,
+            desc: `**Eklenen Bot:** <@${member.id}> (${member.user.tag})\n**Ekleyen Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}\n**Durum:** Güvenli / Onaylı`,
+            color: 0x57f287,
             thumbnail: member.user.displayAvatarURL()
         });
     }
