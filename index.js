@@ -2031,8 +2031,13 @@ client.on('interactionCreate', async interaction => {
                 const chId = parts[0];
                 const catId = parts[1] || 'none';
 
-                const targetChannel = interaction.guild.channels.cache.get(chId);
+                let targetChannel = interaction.guild.channels.cache.get(chId);
+                if (!targetChannel) {
+                    targetChannel = await interaction.guild.channels.fetch(chId).catch(() => null);
+                }
                 if (!targetChannel) return interaction.reply({ content: 'Hedef kanal bulunamadı.', ephemeral: true });
+
+                await interaction.deferReply({ ephemeral: true });
 
                 const baslik = interaction.fields.getTextInputValue('t_baslik');
                 const aciklama = interaction.fields.getTextInputValue('t_aciklama');
@@ -2062,7 +2067,7 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await targetChannel.send({ embeds: [embed], components: [row] });
-                return interaction.reply({ content: `Ticket paneli <#${targetChannel.id}> kanalına başarıyla kuruldu.`, ephemeral: true });
+                return interaction.editReply({ content: `Ticket paneli <#${targetChannel.id}> kanalına başarıyla kuruldu.` });
             }
 
             // Kullanıcının Ön Formu Doldurup Ticket Açması
@@ -2074,6 +2079,8 @@ client.on('interactionCreate', async interaction => {
                 if (existingTicket && interaction.guild.channels.cache.has(existingTicket.channelId)) {
                     return interaction.reply({ content: `Bu birimde zaten açık bir talebiniz bulunuyor: <#${existingTicket.channelId}>`, ephemeral: true });
                 }
+
+                await interaction.deferReply({ ephemeral: true });
 
                 const konu = interaction.fields.getTextInputValue('t_user_konu').trim();
                 const detay = interaction.fields.getTextInputValue('t_user_detay').trim();
@@ -2144,9 +2151,9 @@ client.on('interactionCreate', async interaction => {
                         desc: `**Açan Kullanıcı:** <@${interaction.user.id}>\n**Kanal:** <#${ticketChannel.id}>\n**Birim:** ${panelTitle}\n**Konu:** ${konu}`,
                         color: 0x57f287
                     });
-                    return interaction.reply({ content: `Talebiniz başarıyla oluşturuldu: <#${ticketChannel.id}>`, ephemeral: true });
+                    return interaction.editReply({ content: `Talebiniz başarıyla oluşturuldu: <#${ticketChannel.id}>` });
                 } catch (e) {
-                    return interaction.reply({ content: 'Kanal oluşturulurken bir yetki veya kategori hatası oluştu.', ephemeral: true });
+                    return interaction.editReply({ content: 'Kanal oluşturulurken bir yetki veya kategori hatası oluştu.' });
                 }
             }
 
