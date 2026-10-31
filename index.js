@@ -134,6 +134,7 @@ function ensureGuildDB(db, guildId) {
     if (db[guildId].antiBot === undefined) db[guildId].antiBot = true;
     if (!db[guildId].levelRoles) db[guildId].levelRoles = {};
     if (!Array.isArray(db[guildId].marketRoles)) db[guildId].marketRoles = [];
+    if (!Array.isArray(db[guildId].tempUserRoles)) db[guildId].tempUserRoles = [];
     if (db[guildId].xpEnabled === undefined) db[guildId].xpEnabled = true;
     if (db[guildId].gamesEnabled === undefined) db[guildId].gamesEnabled = true;
     if (db[guildId].kickKanal && !db[guildId].duyuruKanal) {
@@ -482,9 +483,29 @@ function makeProgressBar(current, target, size = 10) {
     return `\`${'█'.repeat(filled)}${'░'.repeat(empty)}\` %${Math.round(percentage * 100)}`;
 }
 
+function formatDurationLabel(days) {
+    if (!days || days <= 0) return 'Kalıcı';
+    if (days === 7) return '<1 hafta>';
+    if (days === 14) return '<2 hafta>';
+    if (days === 30) return '<aylık>';
+    return `<${days} gün>`;
+}
+
+function formatDurationRemaining(ms) {
+    if (ms <= 0) return 'Süresi doldu';
+    const totalMinutes = Math.floor(ms / (1000 * 60));
+    const totalHours = Math.floor(totalMinutes / 60);
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    const mins = totalMinutes % 60;
+    if (days > 0) return `${days} gün ${hours} saat`;
+    if (hours > 0) return `${hours} saat ${mins} dakika`;
+    return `${mins} dakika`;
+}
+
 const voiceMinutesMap = new Map();
 
-// Ses Odası XP ve 5 Dakikada 1 Papel Kazanım Döngüsü (Her 60 saniyede bir kontrol eder)
+// Ses Odası XP ve 5 Dakikada 1 Papel Kazanım Döngüsü + Süreli Rol Kontrolü (Her 60 saniyede bir kontrol eder)
 setInterval(() => {
     if (!client.isReady || !client.isReady()) return;
     const db = getDB();
@@ -492,6 +513,24 @@ setInterval(() => {
 
     for (const guild of client.guilds.cache.values()) {
         ensureGuildDB(db, guild.id);
+
+        // Süreli Rol Kontrolü (Temp Roles Expiration)
+        if (Array.isArray(db[guild.id].tempUserRoles) && db[guild.id].tempUserRoles.length > 0) {
+            const now = Date.now();
+            const remainingRoles = [];
+            for (const item of db[guild.id].tempUserRoles) {
+                if (item.expiresAt <= now) {
+                    const mem = guild.members.cache.get(item.userId);
+                    if (mem) {
+                        mem.roles.remove(item.roleId).catch(() => { });
+                    }
+                    dbUpdated = true;
+                } else {
+                    remainingRoles.push(item);
+                }
+            }
+            db[guild.id].tempUserRoles = remainingRoles;
+        }
 
         guild.voiceStates.cache.forEach(vs => {
             const member = vs.member;
@@ -1073,7 +1112,7 @@ function buildEkonomiDashboard(guildDb) {
 
     let marketText = 'Henüz markete satılık bir rol eklenmedi.';
     if (marketRoles.length > 0) {
-        marketText = marketRoles.map((item, idx) => `**${idx + 1}.** <@&${item.roleId}> — **${item.price.toLocaleString('tr-TR')} Papel**`).join('\n');
+        marketText = marketRoles.map((item, idx) => `**${idx + 1}.** <@&${item.roleId}> — **${item.price.toLocaleString('tr-TR')} Papel** (${formatDurationLabel(item.durationDays)})`).join('\n');
     }
 
     const embed = new EmbedBuilder()
@@ -1083,6 +1122,7 @@ function buildEkonomiDashboard(guildDb) {
             `**Kazanım Oranları (Zorlu Ekonomi):**\n` +
             `• **Mesaj:** Her mesaj 20-35 XP | **Her 50 mesajda 1 Papel** *(%5 şansla ekstra damla)*\n` +
             `• **Ses Odası:** Her 1 dakika 40-70 XP *(Yayın/Kamera 1.5x)* | **Her 5 dakikada 1 Papel**\n` +
+            `• **Süreli Roller:** Markete süreli roller (örn: 2 hafta özel oda izni) eklenebilir. Süre bitince bot rolü otomatik kaldırır.\n` +
             `• **Günlük Maaş:** \`/gunluk\` 24 saatte bir **1 Papel** ile sınırlıdır.\n` +
             `• **Aktarım:** Sadece yöneticiler (\`/papel-ver\`, \`/papel-al\`) işlem yapabilir.`
         )
@@ -1106,12 +1146,146 @@ function buildEkonomiDashboard(guildDb) {
             .addOptions([
                 { label: 'Seviye Rol Ödülü Belirle (1-7)', description: 'Belirli bir seviyeye ulaşanlara otomatik verilecek rolü seçin.', value: 'set_level_role' },
                 { label: 'Seviye Rol Ödülü Kaldır', description: 'Atanmış bir seviye ödül rolünü sıfırlayın.', value: 'clear_level_role' },
-                { label: 'Markete Satılık Rol Ekle', description: 'Kullanıcıların Papel ile satın alabileceği bir rol ve fiyat belirleyin.', value: 'add_market_role' },
+                { label: 'Markete Satılık Rol Ekle (Süreli / Kalıcı)', description: 'Kullanıcıların Papel ile satın alabileceği rol, süre ve fiyat belirleyin.', value: 'add_market_role' },
                 { label: 'Marketten Rol Kaldır', description: 'Satışta olan bir rolü marketten kaldırın.', value: 'remove_market_role' }
             ])
     );
 
     return { content: '', embeds: [embed], components: [buildDashboardButtons('ekonomi'), toggleRow, menuRow] };
+}
+
+function buildMarketView(guild, guildDb, user) {
+    const uData = (guildDb.users && guildDb.users[user.id]) || {};
+    const userPapel = uData.papel || 0;
+    const marketRoles = guildDb.marketRoles || [];
+
+    let rolesAsciiTable = '';
+    const selectOptions = [];
+
+    if (marketRoles.length === 0) {
+        rolesAsciiTable = 'Henüz markete satışta olan bir rol eklenmedi.';
+    } else {
+        const lines = marketRoles.map((item, idx) => {
+            const role = guild.roles.cache.get(item.roleId);
+            const rName = role ? role.name : 'Silinmiş Rol';
+            const durTag = formatDurationLabel(item.durationDays);
+            const num = `${idx + 1}`.padEnd(2, ' ');
+            const tag = durTag === 'Kalıcı' ? '' : `${durTag} `;
+            const price = `${item.price.toLocaleString('tr-TR')} papel`.padStart(11, ' ');
+            const labelCombined = `${tag}${rName}`.slice(0, 24);
+            const dotsCount = Math.max(30 - labelCombined.length, 3);
+            const dots = '-'.repeat(dotsCount);
+
+            selectOptions.push({
+                label: `${durTag === 'Kalıcı' ? '' : `${durTag} `}${rName}`.slice(0, 100),
+                description: `${item.price.toLocaleString('tr-TR')} Papel — Süre: ${durTag}`,
+                value: item.roleId
+            });
+
+            return `${num} ${labelCombined} ${dots} ${price} 🎟️ (@${rName})`;
+        });
+
+        rolesAsciiTable = '```ansi\n' + lines.join('\n') + '\n```';
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('🛒 Sunucu Papel Marketi')
+        .setDescription(
+            `Mevcut Bakiyeniz: **${userPapel.toLocaleString('tr-TR')} Papel** 💵\n\n` +
+            `${rolesAsciiTable}\n` +
+            `👉 **Papel ne, Nasıl kasılır, Nasıl harcanır, Ne işe yarar?**\n` +
+            `• Sohbet kanallarında her **50 mesajda 1 Papel** *(%5 şansla ekstra damla)* kazanırsınız.\n` +
+            `• Ses odalarında her **5 dakikada 1 Papel** kazanırsınız *(Kamera/Yayın açana XP bonusu!)*.\n` +
+            `• Günde 1 kez \`/gunluk\` yazarak **1 Papel** alabilirsiniz.\n` +
+            `• Markette **"< >"** içinde süre yazıyorsa o rol o kadar süre profilinizde kalır. Süresi dolduğunda otomatik kaldırılır.`
+        )
+        .setColor(0x2b2d31)
+        .setFooter({ text: 'Not: Bu market ekranı ve işlemler sadece size özeldir.' })
+        .setTimestamp();
+
+    const components = [];
+    if (selectOptions.length > 0) {
+        components.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('user_buy_market_role')
+                .setPlaceholder('Ürün seç...')
+                .addOptions(selectOptions.slice(0, 25))
+        ));
+    }
+
+    components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('btn_market_my_profile').setLabel('Profilim').setStyle(ButtonStyle.Success).setEmoji('👤'),
+        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Çalışır?').setStyle(ButtonStyle.Secondary).setEmoji('❓')
+    ));
+
+    return { embeds: [embed], components, ephemeral: true };
+}
+
+function buildUserProfileCard(targetUser, guild, guildDb) {
+    const uData = (guildDb.users && guildDb.users[targetUser.id]) || {};
+    const xp = uData.xp || 0;
+    const papel = uData.papel || 0;
+    const spentPapel = uData.spentPapel || 0;
+    const level = calculateLevel(xp);
+    const nextLvl = getNextLevelInfo(xp);
+
+    // Sunucu sıralaması hesabı
+    const allUsers = Object.entries(guildDb.users || {})
+        .filter(([_, u]) => (u.xp || 0) > 0)
+        .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
+    const rankIndex = allUsers.findIndex(([uid]) => uid === targetUser.id);
+    const rankPos = rankIndex !== -1 ? rankIndex + 1 : (allUsers.length > 0 ? allUsers.length + 1 : 1);
+
+    // Sonraki seviye ve rol hedefi
+    let nextLevelText = '🏆 **Maksimum seviyeye ve unvana ulaştınız!**';
+    let progressDisplay = '`██████████` %100 (Tamamlandı)';
+    if (nextLvl) {
+        const prevXp = level > 0 ? XP_LEVELS.find(l => l.level === level)?.xp || 0 : 0;
+        const curInLvl = xp - prevXp;
+        const reqInLvl = nextLvl.xp - prevXp;
+        const remXp = (nextLvl.xp - xp).toLocaleString('tr-TR');
+        const targetRoleId = guildDb.levelRoles?.[String(nextLvl.level)];
+        const roleMention = targetRoleId ? `<@&${targetRoleId}>` : `**${nextLvl.title}**`;
+        nextLevelText = `${roleMention} rolüne ulaşmak için **${remXp} XP** daha kazanmalısın!`;
+        progressDisplay = `${makeProgressBar(curInLvl, reqInLvl, 12)} \`${xp.toLocaleString('tr-TR')} / ${nextLvl.xp.toLocaleString('tr-TR')}\``;
+    }
+
+    // Aktif süreli roller
+    const now = Date.now();
+    const userTempRoles = (guildDb.tempUserRoles || []).filter(tr => tr.userId === targetUser.id && tr.expiresAt > now);
+    let tempRolesText = '';
+    if (userTempRoles.length > 0) {
+        tempRolesText = userTempRoles.map(tr => `• <@&${tr.roleId}> — **Kalan:** \`${formatDurationRemaining(tr.expiresAt - now)}\``).join('\n');
+    }
+
+    const embed = new EmbedBuilder()
+        .setAuthor({ name: `${targetUser.username} Profili`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) })
+        .setColor(0x2b2d31)
+        .setDescription(
+            `*Haftalık kullanımlarını, seviye ilerlemeni ve papel bakiyeni buradan takip edebilirsin.*\n\n` +
+            `**🎯 SONRAKİ SEVİYE:**\n${nextLevelText}\n\n` +
+            `**📊 SEVİYE İLERLEMESİ:**\n${progressDisplay}`
+        )
+        .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }))
+        .addFields(
+            { name: '🏆 Sunucu Sıralaması', value: `\`#${rankPos.toLocaleString('tr-TR')}\``, inline: true },
+            { name: '🪙 Papel Bakiyesi', value: `**${papel.toLocaleString('tr-TR')} Papel**`, inline: true },
+            { name: '💸 Harcanan Papel', value: `**${spentPapel.toLocaleString('tr-TR')} Papel**`, inline: true }
+        );
+
+    if (tempRolesText) {
+        embed.addFields({ name: '⏳ Aktif Süreli Rolleriniz', value: tempRolesText, inline: false });
+    }
+
+    embed.setFooter({ text: 'Not: Bu profil kartı sadece size özel olarak görüntülenmektedir.' }).setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`btn_profile_refresh_${targetUser.id}`).setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄'),
+        new ButtonBuilder().setCustomId('btn_open_market_view').setLabel('Markete Git').setStyle(ButtonStyle.Success).setEmoji('🛒'),
+        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Çalışır?').setStyle(ButtonStyle.Secondary).setEmoji('❓')
+    );
+
+    return { embeds: [embed], components: [row], ephemeral: true };
 }
 
 // ============================================================================
@@ -1598,80 +1772,12 @@ client.on('interactionCreate', async interaction => {
             if (commandName === 'rank') {
                 const targetUser = interaction.options.getUser('kullanici') || interaction.user;
                 ensureGuildDB(db, guildId);
-                const uData = db[guildId].users[targetUser.id] || {};
-                const xp = uData.xp || 0;
-                const papel = uData.papel || 0;
-                const msgCount = uData.msgCount || 0;
-                const level = calculateLevel(xp);
-                const levelTitle = XP_LEVELS.find(l => l.level === level)?.title || 'Seviyesiz (Seviye 0)';
-                const nextLvl = getNextLevelInfo(xp);
-
-                let progressText = 'Maksimum Seviyeye Ulaşıldı! 🏆';
-                if (nextLvl) {
-                    const prevXp = level > 0 ? XP_LEVELS.find(l => l.level === level).xp : 0;
-                    const curInLvl = xp - prevXp;
-                    const reqInLvl = nextLvl.xp - prevXp;
-                    progressText = `${makeProgressBar(curInLvl, reqInLvl, 10)}\n**Kalan XP:** \`${(nextLvl.xp - xp).toLocaleString('tr-TR')} XP\` *(Hedef: ${nextLvl.title})*`;
-                }
-
-                const embed = new EmbedBuilder()
-                    .setAuthor({ name: `${targetUser.username} - Seviye ve Bakiye Kartı`, iconURL: targetUser.displayAvatarURL() })
-                    .setColor(0x2b2d31)
-                    .setThumbnail(targetUser.displayAvatarURL())
-                    .addFields(
-                        { name: '🎖️ Mevcut Rütbe / Seviye', value: `**${levelTitle}**`, inline: true },
-                        { name: '💵 Papel Bakiyesi', value: `**${papel.toLocaleString('tr-TR')} Papel**`, inline: true },
-                        { name: '💬 Toplam Mesaj', value: `\`${msgCount.toLocaleString('tr-TR')}\``, inline: true },
-                        { name: '⚡ Toplam Deneyim (XP)', value: `\`${xp.toLocaleString('tr-TR')} XP\``, inline: false },
-                        { name: '📊 Seviye İlerlemesi', value: progressText, inline: false }
-                    )
-                    .setFooter({ text: 'Not: Bu kart sadece size özel olarak görüntülenmektedir.' })
-                    .setTimestamp();
-
-                return interaction.reply({ embeds: [embed], ephemeral: true });
+                return interaction.reply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
             }
 
             if (commandName === 'market') {
                 ensureGuildDB(db, guildId);
-                const uData = db[guildId].users[interaction.user.id] || {};
-                const userPapel = uData.papel || 0;
-                const marketRoles = db[guildId].marketRoles || [];
-
-                let rolesDesc = 'Henüz markete satışta olan bir rol eklenmedi.';
-                const components = [];
-
-                if (marketRoles.length > 0) {
-                    rolesDesc = marketRoles.map((item, idx) => `**${idx + 1}.** <@&${item.roleId}> — **${item.price.toLocaleString('tr-TR')} Papel**`).join('\n');
-
-                    const selectOptions = marketRoles.slice(0, 25).map(item => {
-                        const role = interaction.guild.roles.cache.get(item.roleId);
-                        return {
-                            label: role ? role.name : `Rol: ${item.roleId}`,
-                            description: `Fiyat: ${item.price.toLocaleString('tr-TR')} Papel`,
-                            value: item.roleId
-                        };
-                    });
-
-                    components.push(new ActionRowBuilder().addComponents(
-                        new StringSelectMenuBuilder()
-                            .setCustomId('user_buy_market_role')
-                            .setPlaceholder('Satın almak istediğiniz rolü seçin...')
-                            .addOptions(selectOptions)
-                    ));
-                }
-
-                const embed = new EmbedBuilder()
-                    .setTitle('🛒 Sunucu Papel Marketi')
-                    .setDescription(
-                        `Mevcut Bakiyeniz: **${userPapel.toLocaleString('tr-TR')} Papel** 💵\n\n` +
-                        `**Satıştaki Roller:**\n${rolesDesc}\n\n` +
-                        `*Satın almak istediğiniz rolü aşağıdaki menüden seçebilirsiniz.*`
-                    )
-                    .setColor(0x2b2d31)
-                    .setFooter({ text: 'Not: Bu market ekranı ve işlemler sadece size özeldir.' })
-                    .setTimestamp();
-
-                return interaction.reply({ embeds: [embed], components, ephemeral: true });
+                return interaction.reply(buildMarketView(interaction.guild, db[guildId], interaction.user));
             }
 
             if (commandName === 'gunluk') {
@@ -2233,6 +2339,7 @@ client.on('interactionCreate', async interaction => {
                 }
                 const uData = db[guildId].users[interaction.user.id];
                 if (uData.papel === undefined) uData.papel = 0;
+                if (uData.spentPapel === undefined) uData.spentPapel = 0;
 
                 if (uData.papel < item.price) {
                     return interaction.reply({
@@ -2242,17 +2349,40 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 uData.papel -= item.price;
+                uData.spentPapel += item.price;
+
+                const isTemporary = item.durationDays && item.durationDays > 0;
+                let expiresAt = null;
+
+                if (isTemporary) {
+                    expiresAt = Date.now() + (item.durationDays * 24 * 60 * 60 * 1000);
+                    if (!Array.isArray(db[guildId].tempUserRoles)) db[guildId].tempUserRoles = [];
+                    // Varsa eski kaydı temizle
+                    db[guildId].tempUserRoles = db[guildId].tempUserRoles.filter(tr => !(tr.userId === interaction.user.id && tr.roleId === targetRoleId));
+                    db[guildId].tempUserRoles.push({
+                        userId: interaction.user.id,
+                        roleId: targetRoleId,
+                        expiresAt: expiresAt,
+                        purchasedAt: Date.now()
+                    });
+                }
+
                 saveDB(db);
 
                 try {
                     await interaction.member.roles.add(targetRoleId);
+                    const durText = isTemporary ? `\n⏳ **Süre:** **${formatDurationLabel(item.durationDays)}** (Süre bittiğinde otomatik kaldırılacaktır)` : '\n♾️ **Süre:** **Kalıcı**';
                     return interaction.reply({
-                        content: `🎉 Tebrikler! **${item.price.toLocaleString('tr-TR')} Papel** karşılığında <@&${targetRoleId}> rolünü başarıyla satın aldınız!\nKalan Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel** 💵`,
+                        content: `🎉 Tebrikler! **${item.price.toLocaleString('tr-TR')} Papel** karşılığında <@&${targetRoleId}> rolünü başarıyla satın aldınız!${durText}\n💵 Kalan Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
                         ephemeral: true
                     });
                 } catch (err) {
                     // Rol verilemezse bakiyeyi iade et
                     uData.papel += item.price;
+                    uData.spentPapel -= item.price;
+                    if (isTemporary && Array.isArray(db[guildId].tempUserRoles)) {
+                        db[guildId].tempUserRoles = db[guildId].tempUserRoles.filter(tr => !(tr.userId === interaction.user.id && tr.roleId === targetRoleId));
+                    }
                     saveDB(db);
                     return interaction.reply({
                         content: `❌ Rol verilirken bir hata oluştu (Yetki sırası hatası olabilir). Papel bakiyenizden düşülmedi. Hata: ${err.message}`,
@@ -2292,17 +2422,28 @@ client.on('interactionCreate', async interaction => {
 
                 const modal = new ModalBuilder()
                     .setCustomId(`modal_market_price_${selectedRoleId}`)
-                    .setTitle('Market Rolü Fiyatı Belirle');
+                    .setTitle('Market Rolü ve Süresi Belirle');
 
                 const priceInput = new TextInputBuilder()
                     .setCustomId('market_price_val')
                     .setLabel('Bu rol kaç Papel karşılığında satılsın?')
-                    .setPlaceholder('Örn: 25')
+                    .setPlaceholder('Örn: 250')
                     .setStyle(TextInputStyle.Short)
                     .setMaxLength(8)
                     .setRequired(true);
 
-                modal.addComponents(new ActionRowBuilder().addComponents(priceInput));
+                const durationInput = new TextInputBuilder()
+                    .setCustomId('market_duration_val')
+                    .setLabel('Süre (Gün: 14 = 2 hafta, 0/boş = Kalıcı)')
+                    .setPlaceholder('Örn: 14 (Kalıcı için 0 veya boş bırakın)')
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(5)
+                    .setRequired(false);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(priceInput),
+                    new ActionRowBuilder().addComponents(durationInput)
+                );
                 return interaction.showModal(modal);
             }
         }
@@ -2427,6 +2568,50 @@ client.on('interactionCreate', async interaction => {
                 db[guildId].gamesEnabled = db[guildId].gamesEnabled === false ? true : false;
                 saveDB(db);
                 return interaction.update(buildEkonomiDashboard(db[guildId])).catch(() => { });
+            }
+
+            // --- PROFİL VE MARKET BUTONLARI ---
+            if (customId === 'btn_market_my_profile') {
+                ensureGuildDB(db, guildId);
+                return interaction.reply(buildUserProfileCard(interaction.user, interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            if (customId === 'btn_open_market_view') {
+                ensureGuildDB(db, guildId);
+                return interaction.reply(buildMarketView(interaction.guild, db[guildId], interaction.user)).catch(() => { });
+            }
+
+            if (customId.startsWith('btn_profile_refresh_')) {
+                ensureGuildDB(db, guildId);
+                const targetUid = customId.replace('btn_profile_refresh_', '');
+                let targetUser = interaction.user;
+                if (targetUid !== interaction.user.id) {
+                    targetUser = client.users.cache.get(targetUid) || interaction.user;
+                }
+                return interaction.update(buildUserProfileCard(targetUser, interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            if (customId === 'btn_profile_how_it_works') {
+                const infoEmbed = new EmbedBuilder()
+                    .setTitle('ℹ️ Papel, XP ve Süreli Roller Nasıl Çalışır?')
+                    .setColor(0x2b2d31)
+                    .setDescription(
+                        `**⚡ Deneyim (XP) ve Seviyeler:**\n` +
+                        `• Sohbet kanallarında mesaj yazarak mesaj başına **20-35 XP** kazanırsınız (5 saniye bekleme süresi).\n` +
+                        `• Ses kanallarında her 1 dakika için **40-70 XP** kazanırsınız. Kamera veya yayın açtığınızda **1.5x bonus** verilir!\n` +
+                        `• Toplam 7 kademeli seviye bulunur (Çaylak'tan Hükümdar'a kadar). Seviye atladığınızda yöneticinin belirlediği ödül rolleri otomatik verilir.\n\n` +
+                        `**💵 Papel (Para) ve Market:**\n` +
+                        `• Her **50 mesajda 1 Papel** kazanırsınız *(%5 şansla 2-3 Papel şanslı damla)*.\n` +
+                        `• Ses odasında her **5 dakikada 1 Papel** kazanırsınız.\n` +
+                        `• Günde 1 defa \`/gunluk\` yazarak **1 Papel** maaş alabilirsiniz.\n` +
+                        `• Papellerinizi \`/market\` üzerinden roller satın almak için kullanabilirsiniz.\n\n` +
+                        `**⏳ Süreli Roller:**\n` +
+                        `• Markette süresi belirtilen roller (örn: \`<2 hafta>\` veya \`<aylık>\`) satın alındığında hemen başlar.\n` +
+                        `• Süre bittiğinde rolünüz bot tarafından otomatik olarak kaldırılır. Kalan sürenizi profil kartınızdan anlık takip edebilirsiniz.`
+                    )
+                    .setFooter({ text: 'Memur Hüsnü Ekonomi Sistemi' })
+                    .setTimestamp();
+                return interaction.reply({ embeds: [infoEmbed], ephemeral: true }).catch(() => { });
             }
             if (customId === 'btn_quick_toggle_link') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
@@ -2700,7 +2885,9 @@ client.on('interactionCreate', async interaction => {
                 if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
                 const roleId = interaction.customId.replace('modal_market_price_', '');
                 const priceStr = interaction.fields.getTextInputValue('market_price_val')?.trim();
+                const durationStr = interaction.fields.getTextInputValue('market_duration_val')?.trim() || '0';
                 const price = parseInt(priceStr, 10);
+                const durationDays = parseInt(durationStr, 10) || 0;
 
                 if (isNaN(price) || price < 1) {
                     return interaction.reply({ content: '❌ Geçersiz fiyat! Lütfen en az 1 veya daha yüksek bir tam sayı girin.', ephemeral: true });
@@ -2710,12 +2897,14 @@ client.on('interactionCreate', async interaction => {
                 const existingIdx = db[guildId].marketRoles.findIndex(r => r.roleId === roleId);
                 if (existingIdx !== -1) {
                     db[guildId].marketRoles[existingIdx].price = price;
+                    db[guildId].marketRoles[existingIdx].durationDays = durationDays;
                 } else {
-                    db[guildId].marketRoles.push({ roleId, price });
+                    db[guildId].marketRoles.push({ roleId, price, durationDays });
                 }
                 saveDB(db);
 
-                return interaction.reply({ content: `✅ <@&${roleId}> rolü **${price.toLocaleString('tr-TR')} Papel** fiyatıyla markete başarıyla eklendi!`, ephemeral: true });
+                const durLabel = formatDurationLabel(durationDays);
+                return interaction.reply({ content: `✅ <@&${roleId}> rolü **${price.toLocaleString('tr-TR')} Papel** fiyatıyla ve **${durLabel}** süresiyle markete başarıyla eklendi!`, ephemeral: true });
             }
 
             if (interaction.customId === 'modal_add_custom_kufur') {
