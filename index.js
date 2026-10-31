@@ -558,19 +558,18 @@ setInterval(() => {
             if (userData.level === undefined) userData.level = 0;
             if (userData.papel === undefined) userData.papel = 0;
 
-            // Her 1 dakikada 40-70 XP (Kamera veya Yayın açana 1.5x bonus)
-            let voiceXp = Math.floor(Math.random() * 31) + 40;
+            // Her 1 dakikada 10-20 XP (Kamera veya Yayın açana 1.5x bonus)
+            let voiceXp = Math.floor(Math.random() * 11) + 10;
             if (vs.streaming || vs.selfVideo) voiceXp = Math.floor(voiceXp * 1.5);
             userData.xp += voiceXp;
             dbUpdated = true;
 
-            // 5 dakikada 1 Papel kazanımı
-            if (currentMins % 5 === 0) {
+            // 10 dakikada 1 Papel kazanımı
+            if (currentMins % 10 === 0) {
                 let papelDrop = 1;
-                // Şansa bağlı artış: %5 şansla 2 veya 3 Papel
+                // Şansa bağlı artış: %2 şansla 2 Papel
                 const lucky = Math.random();
-                if (lucky < 0.02) papelDrop = 3;
-                else if (lucky < 0.05) papelDrop = 2;
+                if (lucky < 0.02) papelDrop = 2;
 
                 userData.papel += papelDrop;
                 dbUpdated = true;
@@ -1119,9 +1118,9 @@ function buildEkonomiDashboard(guildDb) {
         .setTitle('💵 Ekonomi, XP ve Seviye Yönetim Merkezi')
         .setDescription(
             `Sunucunun 7 kademeli XP seviye ödül rollerini, market ürünlerini ve ekonomi kurallarını buradan yönetebilirsiniz.\n\n` +
-            `**Kazanım Oranları (Zorlu Ekonomi):**\n` +
-            `• **Mesaj:** Her mesaj 20-35 XP | **Her 50 mesajda 1 Papel** *(%5 şansla ekstra damla)*\n` +
-            `• **Ses Odası:** Her 1 dakika 40-70 XP *(Yayın/Kamera 1.5x)* | **Her 5 dakikada 1 Papel**\n` +
+            `**Kazanım Oranları (Dengeli Zorlu Ekonomi):**\n` +
+            `• **Mesaj:** Her mesaj 5-12 XP | **Her 100 mesajda 1 Papel** *(%2 şansla ekstra damla)*\n` +
+            `• **Ses Odası:** Her 1 dakika 10-20 XP *(Yayın/Kamera 1.5x)* | **Her 10 dakikada 1 Papel**\n` +
             `• **Süreli Roller:** Markete süreli roller (örn: 2 hafta özel oda izni) eklenebilir. Süre bitince bot rolü otomatik kaldırır.\n` +
             `• **Günlük Maaş:** \`/gunluk\` 24 saatte bir **1 Papel** ile sınırlıdır.\n` +
             `• **Aktarım:** Sadece yöneticiler (\`/papel-ver\`, \`/papel-al\`) işlem yapabilir.`
@@ -1194,8 +1193,8 @@ function buildMarketView(guild, guildDb, user) {
             `Mevcut Bakiyeniz: **${userPapel.toLocaleString('tr-TR')} Papel** 💵\n\n` +
             `${rolesAsciiTable}\n` +
             `👉 **Papel ne, Nasıl kasılır, Nasıl harcanır, Ne işe yarar?**\n` +
-            `• Sohbet kanallarında her **50 mesajda 1 Papel** *(%5 şansla ekstra damla)* kazanırsınız.\n` +
-            `• Ses odalarında her **5 dakikada 1 Papel** kazanırsınız *(Kamera/Yayın açana XP bonusu!)*.\n` +
+            `• Sohbet kanallarında her **100 mesajda 1 Papel** *(%2 şansla ekstra damla)* kazanırsınız.\n` +
+            `• Ses odalarında her **10 dakikada 1 Papel** kazanırsınız *(Kamera/Yayın açana XP bonusu!)*.\n` +
             `• Günde 1 kez \`/gunluk\` yazarak **1 Papel** alabilirsiniz.\n` +
             `• Markette **"< >"** içinde süre yazıyorsa o rol o kadar süre profilinizde kalır. Süresi dolduğunda otomatik kaldırılır.`
         )
@@ -1558,6 +1557,13 @@ client.once('ready', async () => {
             ]
         },
         {
+            name: 'profil',
+            description: 'Kullanıcı profil kartınızı, seviyenizi ve papel bakiyenizi görüntüler (Kişiye Özel).',
+            options: [
+                { name: 'kullanici', type: 6, description: 'Profili incelenecek kullanıcı (Varsayılan: Siz)', required: false }
+            ]
+        },
+        {
             name: 'market',
             description: 'Sunucu Papel marketini ve satın alınabilir ayrıcalıkları listeler (Kişiye Özel).'
         },
@@ -1769,7 +1775,7 @@ client.on('interactionCreate', async interaction => {
             // ----------------------------------------------------------------
             // XP & PAPEL (EKONOMİ) KOMUTLARI (KİŞİYE ÖZEL / EPHEMERAL)
             // ----------------------------------------------------------------
-            if (commandName === 'rank') {
+            if (commandName === 'rank' || commandName === 'profil') {
                 const targetUser = interaction.options.getUser('kullanici') || interaction.user;
                 ensureGuildDB(db, guildId);
                 return interaction.reply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
@@ -2597,12 +2603,12 @@ client.on('interactionCreate', async interaction => {
                     .setColor(0x2b2d31)
                     .setDescription(
                         `**⚡ Deneyim (XP) ve Seviyeler:**\n` +
-                        `• Sohbet kanallarında mesaj yazarak mesaj başına **20-35 XP** kazanırsınız (5 saniye bekleme süresi).\n` +
-                        `• Ses kanallarında her 1 dakika için **40-70 XP** kazanırsınız. Kamera veya yayın açtığınızda **1.5x bonus** verilir!\n` +
+                        `• Sohbet kanallarında mesaj yazarak mesaj başına **5-12 XP** kazanırsınız (7 saniye bekleme süresi).\n` +
+                        `• Ses kanallarında her 1 dakika için **10-20 XP** kazanırsınız. Kamera veya yayın açtığınızda **1.5x bonus** verilir!\n` +
                         `• Toplam 7 kademeli seviye bulunur (Çaylak'tan Hükümdar'a kadar). Seviye atladığınızda yöneticinin belirlediği ödül rolleri otomatik verilir.\n\n` +
                         `**💵 Papel (Para) ve Market:**\n` +
-                        `• Her **50 mesajda 1 Papel** kazanırsınız *(%5 şansla 2-3 Papel şanslı damla)*.\n` +
-                        `• Ses odasında her **5 dakikada 1 Papel** kazanırsınız.\n` +
+                        `• Her **100 mesajda 1 Papel** kazanırsınız *(%2 şansla 2 Papel şanslı damla)*.\n` +
+                        `• Ses odasında her **10 dakikada 1 Papel** kazanırsınız.\n` +
                         `• Günde 1 defa \`/gunluk\` yazarak **1 Papel** maaş alabilirsiniz.\n` +
                         `• Papellerinizi \`/market\` üzerinden roller satın almak için kullanabilirsiniz.\n\n` +
                         `**⏳ Süreli Roller:**\n` +
@@ -3235,26 +3241,25 @@ client.on('messageCreate', async message => {
         if (uDataMsg.msgCount === undefined) uDataMsg.msgCount = 0;
         if (uDataMsg.lastMsgTime === undefined) uDataMsg.lastMsgTime = 0;
 
-        // Düşük düzey cooldown (5 saniye)
-        if (nowTime - uDataMsg.lastMsgTime >= 5000) {
+        // Düşük düzey cooldown (7 saniye)
+        if (nowTime - uDataMsg.lastMsgTime >= 7000) {
             uDataMsg.lastMsgTime = nowTime;
             uDataMsg.msgCount += 1;
 
-            // Mesaj başı 20-35 XP
-            const earnedXp = Math.floor(Math.random() * 16) + 20;
+            // Mesaj başı 5-12 XP
+            const earnedXp = Math.floor(Math.random() * 8) + 5;
             uDataMsg.xp += earnedXp;
 
-            // Her 50 mesajda 1 Papel kazanımı
-            if (uDataMsg.msgCount % 50 === 0) {
+            // Her 100 mesajda 1 Papel kazanımı
+            if (uDataMsg.msgCount % 100 === 0) {
                 let papelGain = 1;
-                // Şansa bağlı papel artışı (%5 şansla 2 veya 3 Papel)
+                // Şansa bağlı papel artışı (%2 şansla 2 Papel)
                 const luckyRoll = Math.random();
-                if (luckyRoll < 0.02) papelGain = 3;
-                else if (luckyRoll < 0.05) papelGain = 2;
+                if (luckyRoll < 0.02) papelGain = 2;
 
                 uDataMsg.papel += papelGain;
                 const extraNote = papelGain > 1 ? ` *(Şanslı Damla: +${papelGain} Papel!)*` : '';
-                message.channel.send(`💵 Tebrikler <@${message.author.id}>, 50 mesajı tamamlayarak **+${papelGain} Papel** kazandınız!${extraNote}`).then(m => setTimeout(() => m.delete().catch(() => { }), 6000)).catch(() => { });
+                message.channel.send(`💵 Tebrikler <@${message.author.id}>, 100 mesajı tamamlayarak **+${papelGain} Papel** kazandınız!${extraNote}`).then(m => setTimeout(() => m.delete().catch(() => { }), 6000)).catch(() => { });
             }
 
             // Seviye Atlama Kontrolü (7 Seviye)
