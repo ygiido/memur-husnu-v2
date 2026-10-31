@@ -438,6 +438,111 @@ async function fetchAllMessages(channel, maxMessages = 1000) {
 }
 
 // ============================================================================
+// XP VE PAPEL (EKONOMİ) SİSTEMİ ALTYAPISI
+// ============================================================================
+const XP_LEVELS = [
+    { level: 1, xp: 50000, title: 'Çaylak (Seviye 1)' },
+    { level: 2, xp: 150000, title: 'Gezgin (Seviye 2)' },
+    { level: 3, xp: 400000, title: 'Kıdemli (Seviye 3)' },
+    { level: 4, xp: 900000, title: 'Usta (Seviye 4)' },
+    { level: 5, xp: 1600000, title: 'Şampiyon (Seviye 5)' },
+    { level: 6, xp: 2300000, title: 'Efsane (Seviye 6)' },
+    { level: 7, xp: 3000000, title: 'Hükümdar (Seviye 7 - Maksimum)' }
+];
+
+function calculateLevel(xp) {
+    let currentLevel = 0;
+    for (let i = XP_LEVELS.length - 1; i >= 0; i--) {
+        if (xp >= XP_LEVELS[i].xp) {
+            currentLevel = XP_LEVELS[i].level;
+            break;
+        }
+    }
+    return currentLevel;
+}
+
+function getNextLevelInfo(xp) {
+    for (const lvl of XP_LEVELS) {
+        if (xp < lvl.xp) {
+            return lvl;
+        }
+    }
+    return null;
+}
+
+function makeProgressBar(current, target, size = 10) {
+    if (target <= 0) return '`██████████` %100';
+    const percentage = Math.min(Math.max(current / target, 0), 1);
+    const filled = Math.round(size * percentage);
+    const empty = size - filled;
+    return `\`${'█'.repeat(filled)}${'░'.repeat(empty)}\` %${Math.round(percentage * 100)}`;
+}
+
+const voiceMinutesMap = new Map();
+
+// Ses Odası XP ve 5 Dakikada 1 Papel Kazanım Döngüsü (Her 60 saniyede bir kontrol eder)
+setInterval(() => {
+    if (!client.isReady || !client.isReady()) return;
+    const db = getDB();
+    let dbUpdated = false;
+
+    for (const guild of client.guilds.cache.values()) {
+        ensureGuildDB(db, guild.id);
+
+        guild.voiceStates.cache.forEach(vs => {
+            const member = vs.member;
+            if (!member || member.user.bot || !vs.channelId) return;
+
+            // AFK kanalındaysa veya hem kulaklık hem mikrofon kapalıysa (Self-Deaf + Self-Mute) XP/Papel sayma
+            if (guild.afkChannelId && vs.channelId === guild.afkChannelId) return;
+            if (vs.selfDeaf && vs.selfMute) return;
+
+            const channel = vs.channel;
+            if (!channel) return;
+
+            const vKey = `${guild.id}-${member.id}`;
+            const currentMins = (voiceMinutesMap.get(vKey) || 0) + 1;
+            voiceMinutesMap.set(vKey, currentMins);
+
+            if (!db[guild.id].users[member.id]) {
+                db[guild.id].users[member.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+            }
+            const userData = db[guild.id].users[member.id];
+            if (userData.xp === undefined) userData.xp = 0;
+            if (userData.level === undefined) userData.level = 0;
+            if (userData.papel === undefined) userData.papel = 0;
+
+            // Her 1 dakikada 40-70 XP (Kamera veya Yayın açana 1.5x bonus)
+            let voiceXp = Math.floor(Math.random() * 31) + 40;
+            if (vs.streaming || vs.selfVideo) voiceXp = Math.floor(voiceXp * 1.5);
+            userData.xp += voiceXp;
+            dbUpdated = true;
+
+            // 5 dakikada 1 Papel kazanımı
+            if (currentMins % 5 === 0) {
+                let papelDrop = 1;
+                // Şansa bağlı artış: %5 şansla 2 veya 3 Papel
+                const lucky = Math.random();
+                if (lucky < 0.02) papelDrop = 3;
+                else if (lucky < 0.05) papelDrop = 2;
+
+                userData.papel += papelDrop;
+                dbUpdated = true;
+            }
+
+            // Seviye kontrolü
+            const newLevel = calculateLevel(userData.xp);
+            if (newLevel > userData.level) {
+                userData.level = newLevel;
+                dbUpdated = true;
+            }
+        });
+    }
+
+    if (dbUpdated) saveDB(db);
+}, 60000);
+
+// ============================================================================
 // GELİŞMİŞ KÜFÜR VE ARGO TESPİT MOTORU (ANTI-BYPASS & BAĞLAM KORUMALI)
 // ============================================================================
 function kufurTespitEt(metin, customList = []) {
@@ -1206,6 +1311,59 @@ client.once('ready', async () => {
             options: [
                 { name: 'mesaj', type: 3, description: 'Botun oynuyor durumunda görünecek metin (Sıfırlamak için boş bırakın)', required: false }
             ]
+        },
+        {
+            name: 'rank',
+            description: 'Seviyenizi, XP durumunuzu ve Papel bakiyenizi gösterir (Kişiye Özel).',
+            options: [
+                { name: 'kullanici', type: 6, description: 'Profili incelenecek kullanıcı (Varsayılan: Siz)', required: false }
+            ]
+        },
+        {
+            name: 'market',
+            description: 'Sunucu Papel marketini ve satın alınabilir ayrıcalıkları listeler (Kişiye Özel).'
+        },
+        {
+            name: 'gunluk',
+            description: '24 saatlik günlük 1 Papel ödülünüzü toplar (Kişiye Özel).'
+        },
+        {
+            name: 'yazitura',
+            description: 'Papel ile yazı-tura oynayın (Kişiye Özel).',
+            options: [
+                { name: 'miktar', type: 4, description: 'Bahse gireceğiniz Papel miktarı', required: true },
+                {
+                    name: 'secim', type: 3, description: 'Tahmininiz', required: true, choices: [
+                        { name: 'Yazı', value: 'yazi' },
+                        { name: 'Tura', value: 'tura' }
+                    ]
+                }
+            ]
+        },
+        {
+            name: 'slot',
+            description: 'Papel ile slot makinesini çevirin (Kişiye Özel).',
+            options: [
+                { name: 'miktar', type: 4, description: 'Bahse gireceğiniz Papel miktarı', required: true }
+            ]
+        },
+        {
+            name: 'papel-ver',
+            description: 'Belirtilen kullanıcıya Papel hediye eder (Sadece Yöneticiler).',
+            default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
+            options: [
+                { name: 'kullanici', type: 6, description: 'Papel verilecek üye', required: true },
+                { name: 'miktar', type: 4, description: 'Verilecek Papel miktarı', required: true }
+            ]
+        },
+        {
+            name: 'papel-al',
+            description: 'Belirtilen kullanıcıdan Papel keser (Sadece Yöneticiler).',
+            default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
+            options: [
+                { name: 'kullanici', type: 6, description: 'Papel kesilecek üye', required: true },
+                { name: 'miktar', type: 4, description: 'Kesilecek Papel miktarı', required: true }
+            ]
         }
     ];
 
@@ -1368,6 +1526,251 @@ client.on('interactionCreate', async interaction => {
                     saveDB(db);
                     return interaction.editReply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.' });
                 }
+            }
+
+            // ----------------------------------------------------------------
+            // XP & PAPEL (EKONOMİ) KOMUTLARI (KİŞİYE ÖZEL / EPHEMERAL)
+            // ----------------------------------------------------------------
+            if (commandName === 'rank') {
+                const targetUser = interaction.options.getUser('kullanici') || interaction.user;
+                ensureGuildDB(db, guildId);
+                const uData = db[guildId].users[targetUser.id] || {};
+                const xp = uData.xp || 0;
+                const papel = uData.papel || 0;
+                const msgCount = uData.msgCount || 0;
+                const level = calculateLevel(xp);
+                const levelTitle = XP_LEVELS.find(l => l.level === level)?.title || 'Seviyesiz (Seviye 0)';
+                const nextLvl = getNextLevelInfo(xp);
+
+                let progressText = 'Maksimum Seviyeye Ulaşıldı! 🏆';
+                if (nextLvl) {
+                    const prevXp = level > 0 ? XP_LEVELS.find(l => l.level === level).xp : 0;
+                    const curInLvl = xp - prevXp;
+                    const reqInLvl = nextLvl.xp - prevXp;
+                    progressText = `${makeProgressBar(curInLvl, reqInLvl, 10)}\n**Kalan XP:** \`${(nextLvl.xp - xp).toLocaleString('tr-TR')} XP\` *(Hedef: ${nextLvl.title})*`;
+                }
+
+                const embed = new EmbedBuilder()
+                    .setAuthor({ name: `${targetUser.username} - Seviye ve Bakiye Kartı`, iconURL: targetUser.displayAvatarURL() })
+                    .setColor(0x2b2d31)
+                    .setThumbnail(targetUser.displayAvatarURL())
+                    .addFields(
+                        { name: '🎖️ Mevcut Rütbe / Seviye', value: `**${levelTitle}**`, inline: true },
+                        { name: '💵 Papel Bakiyesi', value: `**${papel.toLocaleString('tr-TR')} Papel**`, inline: true },
+                        { name: '💬 Toplam Mesaj', value: `\`${msgCount.toLocaleString('tr-TR')}\``, inline: true },
+                        { name: '⚡ Toplam Deneyim (XP)', value: `\`${xp.toLocaleString('tr-TR')} XP\``, inline: false },
+                        { name: '📊 Seviye İlerlemesi', value: progressText, inline: false }
+                    )
+                    .setFooter({ text: 'Not: Bu kart sadece size özel olarak görüntülenmektedir.' })
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
+            if (commandName === 'market') {
+                ensureGuildDB(db, guildId);
+                const uData = db[guildId].users[interaction.user.id] || {};
+                const userPapel = uData.papel || 0;
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🛒 Sunucu Papel Marketi')
+                    .setDescription(
+                        `Mevcut Bakiyeniz: **${userPapel.toLocaleString('tr-TR')} Papel** 💵\n\n` +
+                        `Sunucuda sohbet ederek *(her 50 mesajda 1 Papel)*, seste vakit geçirerek *(her 5 dakikada 1 Papel)* ve günlük ödülünüzü alarak Papel biriktirebilirsiniz.\n\n` +
+                        `*Market ürünleri, özel roller ve takaslar yönetici paneli üzerinden yapılandırılmaktadır.*`
+                    )
+                    .setColor(0x2b2d31)
+                    .setFooter({ text: 'Not: Bu market ekranı sadece size özeldir.' })
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], ephemeral: true });
+            }
+
+            if (commandName === 'gunluk') {
+                ensureGuildDB(db, guildId);
+                if (!db[guildId].users[interaction.user.id]) {
+                    db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                }
+                const uData = db[guildId].users[interaction.user.id];
+                if (uData.papel === undefined) uData.papel = 0;
+                if (uData.lastDaily === undefined) uData.lastDaily = 0;
+
+                const now = Date.now();
+                const cooldown = 24 * 60 * 60 * 1000;
+
+                if (uData.lastDaily && (now - uData.lastDaily < cooldown)) {
+                    const remainingMs = cooldown - (now - uData.lastDaily);
+                    const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
+                    const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+                    return interaction.reply({
+                        content: `⏳ Günlük papel ödülünü zaten aldınız! Tekrar alabilmek için **${remHours} saat ${remMins} dakika** beklemelisiniz. *(Günlük papel alımı günde 1 adetle sınırlıdır)*`,
+                        ephemeral: true
+                    });
+                }
+
+                uData.lastDaily = now;
+                uData.papel += 1;
+                saveDB(db);
+
+                return interaction.reply({
+                    content: `🎉 Tebrikler! 24 saatlik günlük **1 Papel** 💵 ödülünüzü aldınız.\nGüncel Bakiyeniz: **${uData.papel} Papel**`,
+                    ephemeral: true
+                });
+            }
+
+            if (commandName === 'yazitura') {
+                const miktar = interaction.options.getInteger('miktar');
+                const secim = interaction.options.getString('secim');
+
+                if (miktar < 1) return interaction.reply({ content: 'Bahis miktarı en az **1 Papel** olmalıdır.', ephemeral: true });
+
+                ensureGuildDB(db, guildId);
+                if (!db[guildId].users[interaction.user.id]) {
+                    db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                }
+                const uData = db[guildId].users[interaction.user.id];
+                if (uData.papel === undefined) uData.papel = 0;
+
+                if (uData.papel < miktar) {
+                    return interaction.reply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel} Papel**.`, ephemeral: true });
+                }
+
+                const roll = Math.random() * 100;
+                let outcome = '';
+                let win = false;
+
+                if (roll < 45) {
+                    outcome = 'yazi';
+                    win = (secim === 'yazi');
+                } else if (roll < 90) {
+                    outcome = 'tura';
+                    win = (secim === 'tura');
+                } else {
+                    outcome = 'dik';
+                    win = false;
+                }
+
+                const secimText = secim === 'yazi' ? 'Yazı' : 'Tura';
+                const outcomeText = outcome === 'dik' ? 'Para dik geldi! 🪙 (Kasa Kazandı)' : (outcome === 'yazi' ? 'Yazı 🪙' : 'Tura 🪙');
+
+                if (win) {
+                    uData.papel += miktar;
+                    saveDB(db);
+                    return interaction.reply({
+                        content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n🎉 **Tebrikler, kazandınız!** +${miktar} Papel kazandınız.\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
+                        ephemeral: true
+                    });
+                } else {
+                    uData.papel -= miktar;
+                    saveDB(db);
+                    return interaction.reply({
+                        content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n💀 **Maalesef kaybettiniz!** -${miktar} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
+                        ephemeral: true
+                    });
+                }
+            }
+
+            if (commandName === 'slot') {
+                const miktar = interaction.options.getInteger('miktar');
+                if (miktar < 1) return interaction.reply({ content: 'Bahis miktarı en az **1 Papel** olmalıdır.', ephemeral: true });
+
+                ensureGuildDB(db, guildId);
+                if (!db[guildId].users[interaction.user.id]) {
+                    db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                }
+                const uData = db[guildId].users[interaction.user.id];
+                if (uData.papel === undefined) uData.papel = 0;
+
+                if (uData.papel < miktar) {
+                    return interaction.reply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel} Papel**.`, ephemeral: true });
+                }
+
+                const symbols = ['🍒', '🍋', '🍇', '🔔', '💎', '7️⃣'];
+                const roll = Math.random() * 100;
+                let s1, s2, s3;
+                let winMultiplier = 0;
+
+                if (roll < 4) {
+                    const chosen = symbols[Math.floor(Math.random() * symbols.length)];
+                    s1 = s2 = s3 = chosen;
+                    winMultiplier = 5;
+                } else if (roll < 20) {
+                    const chosen = symbols[Math.floor(Math.random() * symbols.length)];
+                    const remaining = symbols.filter(s => s !== chosen);
+                    const diff = remaining[Math.floor(Math.random() * remaining.length)];
+                    s1 = chosen; s2 = chosen; s3 = diff;
+                    winMultiplier = 1.5;
+                } else {
+                    const shuffled = [...symbols].sort(() => 0.5 - Math.random());
+                    s1 = shuffled[0]; s2 = shuffled[1]; s3 = shuffled[2];
+                    winMultiplier = 0;
+                }
+
+                const slotVisual = `╔══════════════╗\n║  ${s1}  │  ${s2}  │  ${s3}  ║\n╚══════════════╝`;
+
+                if (winMultiplier > 0) {
+                    const kazanilan = Math.floor(miktar * winMultiplier);
+                    const netKar = kazanilan - miktar;
+                    uData.papel += netKar;
+                    saveDB(db);
+                    return interaction.reply({
+                        content: `🎰 **Slot Makinesi Çevrildi:**\n\`\`\`\n${slotVisual}\n\`\`\`\n🎉 **Tebrikler! (${winMultiplier}x Kazanç)**\n+${netKar} Papel kazandınız!\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
+                        ephemeral: true
+                    });
+                } else {
+                    uData.papel -= miktar;
+                    saveDB(db);
+                    return interaction.reply({
+                        content: `🎰 **Slot Makinesi Çevrildi:**\n\`\`\`\n${slotVisual}\n\`\`\`\n💀 **Maalesef kaybettiniz!**\n-${miktar} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
+                        ephemeral: true
+                    });
+                }
+            }
+
+            if (commandName === 'papel-ver') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                const targetUser = interaction.options.getUser('kullanici');
+                const miktar = interaction.options.getInteger('miktar');
+                if (miktar < 1) return interaction.reply({ content: 'Lütfen en az 1 Papel girin.', ephemeral: true });
+
+                ensureGuildDB(db, guildId);
+                if (!db[guildId].users[targetUser.id]) {
+                    db[guildId].users[targetUser.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                }
+                const uData = db[guildId].users[targetUser.id];
+                if (uData.papel === undefined) uData.papel = 0;
+
+                uData.papel += miktar;
+                saveDB(db);
+
+                addLiveLog(`[PAPEL VERİLDİ] ${interaction.user.tag} -> ${targetUser.tag}: +${miktar} Papel`);
+                return interaction.reply({
+                    content: `✅ <@${targetUser.id}> adlı kullanıcıya **+${miktar.toLocaleString('tr-TR')} Papel** 💵 hediye edildi.\nKullanıcının Yeni Bakiyesi: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                    ephemeral: true
+                });
+            }
+
+            if (commandName === 'papel-al') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                const targetUser = interaction.options.getUser('kullanici');
+                const miktar = interaction.options.getInteger('miktar');
+                if (miktar < 1) return interaction.reply({ content: 'Lütfen en az 1 Papel girin.', ephemeral: true });
+
+                ensureGuildDB(db, guildId);
+                if (!db[guildId].users[targetUser.id]) {
+                    db[guildId].users[targetUser.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                }
+                const uData = db[guildId].users[targetUser.id];
+                if (uData.papel === undefined) uData.papel = 0;
+
+                uData.papel = Math.max(0, uData.papel - miktar);
+                saveDB(db);
+
+                addLiveLog(`[PAPEL KESİLDİ] ${interaction.user.tag} -> ${targetUser.tag}: -${miktar} Papel`);
+                return interaction.reply({
+                    content: `✅ <@${targetUser.id}> adlı kullanıcıdan **-${miktar.toLocaleString('tr-TR')} Papel** 💵 kesildi.\nKullanıcının Kalan Bakiyesi: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                    ephemeral: true
+                });
             }
         }
 
@@ -2292,6 +2695,54 @@ client.on('messageCreate', async message => {
     if (!db[guildId]) return;
 
     if (message.author.bot || !message.member) return;
+
+    // ========================================================================
+    // XP VE PAPEL SİSTEMİ (MESAJ BAŞI XP & HER 50 MESAJDA 1 PAPEL)
+    // ========================================================================
+    const nowTime = Date.now();
+    ensureGuildDB(db, guildId);
+    if (!db[guildId].users[message.author.id]) {
+        db[guildId].users[message.author.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+    }
+    const uDataMsg = db[guildId].users[message.author.id];
+    if (uDataMsg.xp === undefined) uDataMsg.xp = 0;
+    if (uDataMsg.level === undefined) uDataMsg.level = 0;
+    if (uDataMsg.papel === undefined) uDataMsg.papel = 0;
+    if (uDataMsg.msgCount === undefined) uDataMsg.msgCount = 0;
+    if (uDataMsg.lastMsgTime === undefined) uDataMsg.lastMsgTime = 0;
+
+    // Düşük düzey cooldown (5 saniye)
+    if (nowTime - uDataMsg.lastMsgTime >= 5000) {
+        uDataMsg.lastMsgTime = nowTime;
+        uDataMsg.msgCount += 1;
+
+        // Mesaj başı 20-35 XP
+        const earnedXp = Math.floor(Math.random() * 16) + 20;
+        uDataMsg.xp += earnedXp;
+
+        // Her 50 mesajda 1 Papel kazanımı
+        if (uDataMsg.msgCount % 50 === 0) {
+            let papelGain = 1;
+            // Şansa bağlı papel artışı (%5 şansla 2 veya 3 Papel)
+            const luckyRoll = Math.random();
+            if (luckyRoll < 0.02) papelGain = 3;
+            else if (luckyRoll < 0.05) papelGain = 2;
+
+            uDataMsg.papel += papelGain;
+            const extraNote = papelGain > 1 ? ` *(Şanslı Damla: +${papelGain} Papel!)*` : '';
+            message.channel.send(`💵 Tebrikler <@${message.author.id}>, 50 mesajı tamamlayarak **+${papelGain} Papel** kazandınız!${extraNote}`).then(m => setTimeout(() => m.delete().catch(() => { }), 6000)).catch(() => { });
+        }
+
+        // Seviye Atlama Kontrolü (7 Seviye)
+        const newLvl = calculateLevel(uDataMsg.xp);
+        if (newLvl > uDataMsg.level) {
+            uDataMsg.level = newLvl;
+            const lvlObj = XP_LEVELS.find(l => l.level === newLvl);
+            message.channel.send(`🎉 Tebrikler <@${message.author.id}>! **${lvlObj ? lvlObj.title : `Seviye ${newLvl}`}** mertebesine yükseldin! 🎖️`).then(m => setTimeout(() => m.delete().catch(() => { }), 8000)).catch(() => { });
+        }
+
+        saveDB(db);
+    }
 
     const isMuaf = Boolean(db[guildId].muafRol && message.member.roles.cache.has(db[guildId].muafRol));
     const isYetkili = Boolean(db[guildId].yetkiliRol && message.member.roles.cache.has(db[guildId].yetkiliRol));
