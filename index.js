@@ -13,6 +13,9 @@ const {
 } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
+const { execFile } = require('child_process');
+const util = require('util');
+const execFileAsync = util.promisify(execFile);
 require('dotenv').config();
 
 // Canlı Durum ve Tanı Kayıtları
@@ -222,28 +225,54 @@ async function checkTwitch(slug) {
 }
 
 async function checkKick(slug) {
-    const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json'
-    };
     try {
         let data = null;
-        // 1. Önce v2 dene
+
+        // 1. Cloudflare TLS korumasını aşmak için curl ile v2 API çağrısı
         try {
-            const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, { headers });
-            if (res.ok) data = await res.json();
+            const { stdout } = await execFileAsync('curl', [
+                '-s',
+                '--compressed',
+                '-m', '10',
+                '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                `https://kick.com/api/v2/channels/${slug}`
+            ]);
+            if (stdout && stdout.trim().startsWith('{')) {
+                data = JSON.parse(stdout);
+            }
         } catch (e) { }
 
-        // 2. v2 başarısızsa v1 dene
+        // 2. curl v2 başarısız olursa curl ile v1 API dene
         if (!data || !data.user) {
             try {
-                const resV1 = await fetch(`https://kick.com/api/v1/channels/${slug}`, { headers });
-                if (resV1.ok) data = await resV1.json();
+                const { stdout } = await execFileAsync('curl', [
+                    '-s',
+                    '--compressed',
+                    '-m', '10',
+                    '-A', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    `https://kick.com/api/v1/channels/${slug}`
+                ]);
+                if (stdout && stdout.trim().startsWith('{')) {
+                    data = JSON.parse(stdout);
+                }
             } catch (e) { }
         }
 
-        if (!data) {
-            addLiveLog(`[KICK KONTROL] ${slug} verisi alınamadı (HTTP status veya Cloudflare).`);
+        // 3. curl çalışmazsa yedek olarak standart fetch dene
+        if (!data || !data.user) {
+            try {
+                const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                });
+                if (res.ok) data = await res.json();
+            } catch (e) { }
+        }
+
+        if (!data || !data.user) {
+            addLiveLog(`[KICK KONTROL] ${slug} verisi alınamadı (Cloudflare veya API engeli).`);
             return null;
         }
 
