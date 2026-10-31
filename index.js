@@ -1008,7 +1008,10 @@ client.once('ready', async () => {
 
     const db = getDB();
     if (db.botStatus) {
-        client.user.setActivity(db.botStatus, { type: ActivityType.Playing });
+        client.user.setPresence({
+            activities: [{ name: db.botStatus, type: ActivityType.Playing }],
+            status: 'online'
+        });
     }
     let dbUpdated = false;
 
@@ -1284,19 +1287,22 @@ client.on('interactionCreate', async interaction => {
 
             if (commandName === 'durum') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
-                const yeniDurum = interaction.options.getString('mesaj');
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
+                const yeniDurum = interaction.options.getString('mesaj')?.trim() || '';
 
-                if (yeniDurum && yeniDurum.trim().length > 0) {
-                    const temizDurum = yeniDurum.trim();
-                    client.user.setActivity(temizDurum, { type: ActivityType.Playing });
-                    db.botStatus = temizDurum;
+                if (yeniDurum.length > 0) {
+                    client.user.setPresence({
+                        activities: [{ name: yeniDurum, type: ActivityType.Playing }],
+                        status: 'online'
+                    });
+                    db.botStatus = yeniDurum;
                     saveDB(db);
-                    return interaction.reply({ content: `✅ Botun durumu başarıyla **"${temizDurum}"** *(Oynuyor)* olarak güncellendi.`, ephemeral: true });
+                    return interaction.editReply({ content: `✅ Botun durumu başarıyla **"${yeniDurum}"** *(Oynuyor)* olarak güncellendi.` });
                 } else {
-                    client.user.setActivity(null);
+                    client.user.setPresence({ activities: [] });
                     delete db.botStatus;
                     saveDB(db);
-                    return interaction.reply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.', ephemeral: true });
+                    return interaction.editReply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.' });
                 }
             }
         }
@@ -1892,17 +1898,22 @@ client.on('interactionCreate', async interaction => {
         if (interaction.isModalSubmit()) {
             if (interaction.customId === 'modal_set_bot_status') {
                 if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
-                const statusVal = interaction.fields.getTextInputValue('status_val').trim();
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
+                const statusVal = interaction.fields.getTextInputValue('status_val')?.trim() || '';
+
                 if (statusVal.length > 0) {
-                    client.user.setActivity(statusVal, { type: ActivityType.Playing });
+                    client.user.setPresence({
+                        activities: [{ name: statusVal, type: ActivityType.Playing }],
+                        status: 'online'
+                    });
                     db.botStatus = statusVal;
                     saveDB(db);
-                    return interaction.reply({ content: `✅ Botun durumu başarıyla **"${statusVal}"** *(Oynuyor)* olarak güncellendi.`, ephemeral: true });
+                    return interaction.editReply({ content: `✅ Botun durumu başarıyla **"${statusVal}"** *(Oynuyor)* olarak güncellendi.` });
                 } else {
-                    client.user.setActivity(null);
+                    client.user.setPresence({ activities: [] });
                     delete db.botStatus;
                     saveDB(db);
-                    return interaction.reply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.', ephemeral: true });
+                    return interaction.editReply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.' });
                 }
             }
 
