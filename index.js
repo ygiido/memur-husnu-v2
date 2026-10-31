@@ -503,9 +503,9 @@ function formatDurationRemaining(ms) {
     return `${mins} dakika`;
 }
 
-const voiceMinutesMap = new Map();
+const voiceSecondsMap = new Map();
 
-// Ses Odası XP ve 5 Dakikada 1 Papel Kazanım Döngüsü + Süreli Rol Kontrolü (Her 60 saniyede bir kontrol eder)
+// Ses Odası XP ve Papel Kazanım Döngüsü + Süreli Rol Kontrolü (Her 30 saniyede bir kontrol eder)
 setInterval(() => {
     if (!client.isReady || !client.isReady()) return;
     const db = getDB();
@@ -547,8 +547,8 @@ setInterval(() => {
             if (db[guild.id].xpEnabled === false) return;
 
             const vKey = `${guild.id}-${member.id}`;
-            const currentMins = (voiceMinutesMap.get(vKey) || 0) + 1;
-            voiceMinutesMap.set(vKey, currentMins);
+            const currentSecs = (voiceSecondsMap.get(vKey) || 0) + 30;
+            voiceSecondsMap.set(vKey, currentSecs);
 
             if (!db[guild.id].users[member.id]) {
                 db[guild.id].users[member.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
@@ -557,15 +557,20 @@ setInterval(() => {
             if (userData.xp === undefined) userData.xp = 0;
             if (userData.level === undefined) userData.level = 0;
             if (userData.papel === undefined) userData.papel = 0;
+            if (userData.lastVoiceXp === undefined) userData.lastVoiceXp = 0;
 
-            // Her 1 dakikada 10-20 XP (Kamera veya Yayın açana 1.5x bonus)
-            let voiceXp = Math.floor(Math.random() * 11) + 10;
-            if (vs.streaming || vs.selfVideo) voiceXp = Math.floor(voiceXp * 1.5);
-            userData.xp += voiceXp;
-            dbUpdated = true;
+            const nowTime = Date.now();
+            // Seste XP aldıktan sonra en az 90 saniye (1 dk ses + 30 sn soğuma süresi) boyunca tekrar XP kazanamaz
+            if (nowTime - userData.lastVoiceXp >= 90000) {
+                userData.lastVoiceXp = nowTime;
+                let voiceXp = Math.floor(Math.random() * 11) + 10;
+                if (vs.streaming || vs.selfVideo) voiceXp = Math.floor(voiceXp * 1.5);
+                userData.xp += voiceXp;
+                dbUpdated = true;
+            }
 
-            // 10 dakikada 1 Papel kazanımı
-            if (currentMins % 10 === 0) {
+            // 10 dakikada (600 saniye seste durunca) 1 Papel kazanımı
+            if (currentSecs % 600 === 0) {
                 let papelDrop = 1;
                 // Şansa bağlı artış: %2 şansla 2 Papel
                 const lucky = Math.random();
@@ -589,7 +594,7 @@ setInterval(() => {
     }
 
     if (dbUpdated) saveDB(db);
-}, 60000);
+}, 30000);
 
 // ============================================================================
 // GELİŞMİŞ KÜFÜR VE ARGO TESPİT MOTORU (ANTI-BYPASS & BAĞLAM KORUMALI)
@@ -1119,8 +1124,8 @@ function buildEkonomiDashboard(guildDb) {
         .setDescription(
             `Sunucunun 7 kademeli XP seviye ödül rollerini, market ürünlerini ve ekonomi kurallarını buradan yönetebilirsiniz.\n\n` +
             `**Kazanım Oranları (Dengeli Zorlu Ekonomi):**\n` +
-            `• **Mesaj:** Her mesaj 5-12 XP | **Her 100 mesajda 1 Papel** *(%2 şansla ekstra damla)*\n` +
-            `• **Ses Odası:** Her 1 dakika 10-20 XP *(Yayın/Kamera 1.5x)* | **Her 10 dakikada 1 Papel**\n` +
+            `• **Mesaj:** Her mesaj 5-12 XP (45 sn cooldown) | **Her 100 mesajda 1 Papel** *(%2 şansla ekstra damla)*\n` +
+            `• **Ses Odası:** Her 1.5 dakika 10-20 XP (30 sn soğuma süresi, Yayın/Kamera 1.5x) | **Her 10 dakikada 1 Papel**\n` +
             `• **Süreli Roller:** Markete süreli roller (örn: 2 hafta özel oda izni) eklenebilir. Süre bitince bot rolü otomatik kaldırır.\n` +
             `• **Günlük Maaş:** \`/gunluk\` 24 saatte bir **1 Papel** ile sınırlıdır.\n` +
             `• **Aktarım:** Sadece yöneticiler (\`/papel-ver\`, \`/papel-al\`) işlem yapabilir.`
@@ -2603,8 +2608,8 @@ client.on('interactionCreate', async interaction => {
                     .setColor(0x2b2d31)
                     .setDescription(
                         `**⚡ Deneyim (XP) ve Seviyeler:**\n` +
-                        `• Sohbet kanallarında mesaj yazarak mesaj başına **5-12 XP** kazanırsınız (7 saniye bekleme süresi).\n` +
-                        `• Ses kanallarında her 1 dakika için **10-20 XP** kazanırsınız. Kamera veya yayın açtığınızda **1.5x bonus** verilir!\n` +
+                        `• Sohbet kanallarında mesaj yazarak mesaj başına **5-12 XP** kazanırsınız (45 saniye bekleme süresi).\n` +
+                        `• Ses kanallarında her 1.5 dakika için **10-20 XP** kazanırsınız (XP sonrası 30 sn soğuma süresi). Kamera veya yayın açtığınızda **1.5x bonus** verilir!\n` +
                         `• Toplam 7 kademeli seviye bulunur (Çaylak'tan Hükümdar'a kadar). Seviye atladığınızda yöneticinin belirlediği ödül rolleri otomatik verilir.\n\n` +
                         `**💵 Papel (Para) ve Market:**\n` +
                         `• Her **100 mesajda 1 Papel** kazanırsınız *(%2 şansla 2 Papel şanslı damla)*.\n` +
@@ -3241,8 +3246,8 @@ client.on('messageCreate', async message => {
         if (uDataMsg.msgCount === undefined) uDataMsg.msgCount = 0;
         if (uDataMsg.lastMsgTime === undefined) uDataMsg.lastMsgTime = 0;
 
-        // Düşük düzey cooldown (7 saniye)
-        if (nowTime - uDataMsg.lastMsgTime >= 7000) {
+        // Mesaj Cooldown (45 saniye)
+        if (nowTime - uDataMsg.lastMsgTime >= 45000) {
             uDataMsg.lastMsgTime = nowTime;
             uDataMsg.msgCount += 1;
 
