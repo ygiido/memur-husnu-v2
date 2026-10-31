@@ -2809,33 +2809,267 @@ client.on('guildBanRemove', async ban => {
     });
 });
 
+const channelPermNames = {
+    ViewChannel: 'Kanalı Görüntüle',
+    SendMessages: 'Mesaj Gönder',
+    SendMessagesInThreads: 'Alt Başlıklarda Mesaj Gönder',
+    CreatePublicThreads: 'Herkese Açık Alt Başlık Oluştur',
+    CreatePrivateThreads: 'Özel Alt Başlık Oluştur',
+    EmbedLinks: 'Bağlantı Yerleştir',
+    AttachFiles: 'Dosya Ekle',
+    AddReactions: 'Tepki Ekle',
+    UseExternalEmojis: 'Harici Emoji Kullan',
+    UseExternalStickers: 'Harici Çıkartma Kullan',
+    MentionEveryone: '@everyone ve Rolleri Etiketle',
+    ManageMessages: 'Mesajları Yönet',
+    ManageThreads: 'Alt Başlıkları Yönet',
+    ReadMessageHistory: 'Geçmişi Oku',
+    SendTTSMessages: 'Metin Okuma Mesajları Gönder',
+    UseApplicationCommands: 'Uygulama Komutlarını Kullan',
+    Connect: 'Bağlan (Sese Gir)',
+    Speak: 'Konuş',
+    Stream: 'Yayın Aç (Ekran Paylaş)',
+    UseEmbeddedActivities: 'Aktivite Başlat',
+    UseVAD: 'Ses Eylemini Kullan',
+    PrioritySpeaker: 'Öncelikli Konuşmacı',
+    MuteMembers: 'Üyeleri Sustur',
+    DeafenMembers: 'Üyeleri Sağırlaştır',
+    MoveMembers: 'Üyeleri Taşı',
+    ManageChannels: 'Kanalı Yönet',
+    ManageRoles: 'İzinleri Yönet',
+    ManageWebhooks: 'Webhookları Yönet'
+};
+
+function getChannelTypeName(type) {
+    switch (type) {
+        case ChannelType.GuildText: return 'Metin Kanalı';
+        case ChannelType.GuildVoice: return 'Ses Kanalı';
+        case ChannelType.GuildCategory: return 'Kategori';
+        case ChannelType.GuildAnnouncement: return 'Duyuru Kanalı';
+        case ChannelType.GuildStageVoice: return 'Sahne (Stage) Kanalı';
+        case ChannelType.GuildForum: return 'Forum Kanalı';
+        case ChannelType.PublicThread: return 'Herkese Açık Alt Başlık';
+        case ChannelType.PrivateThread: return 'Özel Alt Başlık';
+        default: return 'Kanal';
+    }
+}
+
 client.on('channelCreate', async channel => {
     if (!channel.guild) return;
+    const db = getDB();
+    if (db[channel.guild.id]?.tempRooms && db[channel.guild.id].tempRooms[channel.id]) return;
+
     const executor = await getAuditExecutor(channel.guild, AuditLogEvent.ChannelCreate, channel.id);
-    sendLog(channel.guild, 'logSunucu', { title: 'Yeni Kanal Açıldı', desc: `**Kanal:** <#${channel.id}> (\`${channel.name}\`)\n**Açan Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}`, color: 0x57f287 });
+    const parentName = channel.parent ? channel.parent.name : 'Kategorisiz';
+    const typeName = getChannelTypeName(channel.type);
+
+    sendLog(channel.guild, 'logSunucu', {
+        title: 'Yeni Kanal Açıldı',
+        desc: `**Kanal:** <#${channel.id}> (\`${channel.name}\`)\n` +
+            `**Tür:** ${typeName}\n` +
+            `**Kategori:** 📁 \`${parentName}\`\n` +
+            `**Açan Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}`,
+        color: 0x57f287
+    });
 });
 
 client.on('channelDelete', async channel => {
     if (!channel.guild) return;
+    const db = getDB();
+    if (db[channel.guild.id]?.tempRooms && db[channel.guild.id].tempRooms[channel.id]) return;
+
     const executor = await getAuditExecutor(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
-    sendLog(channel.guild, 'logSunucu', { title: 'Kanal Silindi', desc: `**Silinen Kanal:** \`${channel.name}\`\n**Silen Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}`, color: 0xed4245 });
+    const parentName = channel.parent ? channel.parent.name : 'Kategorisiz';
+    const typeName = getChannelTypeName(channel.type);
+
+    sendLog(channel.guild, 'logSunucu', {
+        title: 'Kanal Silindi',
+        desc: `**Silinen Kanal:** \`${channel.name}\`\n` +
+            `**Tür:** ${typeName}\n` +
+            `**Bulunduğu Kategori:** 📁 \`${parentName}\`\n` +
+            `**Silen Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}`,
+        color: 0xed4245
+    });
 });
 
 client.on('channelUpdate', async (oldChannel, newChannel) => {
     if (!newChannel.guild) return;
+    const db = getDB();
+    if (db[newChannel.guild.id]?.tempRooms && db[newChannel.guild.id].tempRooms[newChannel.id]) return;
+
     const executor = await getAuditExecutor(newChannel.guild, AuditLogEvent.ChannelUpdate, newChannel.id);
     const yetkili = executor ? `<@${executor.id}>` : 'Bilinmiyor';
 
+    // 1. Kanal Adı Değişimi
     if (oldChannel.name !== newChannel.name) {
-        sendLog(newChannel.guild, 'logSunucu', { title: 'Kanal Adı Değiştirildi', desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski Adı:** \`${oldChannel.name}\`\n**Yeni Adı:** \`${newChannel.name}\``, color: 0x3498db });
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: 'Kanal Adı Değiştirildi',
+            desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski Adı:** \`${oldChannel.name}\`\n**Yeni Adı:** \`${newChannel.name}\``,
+            color: 0x3498db
+        });
     }
-    if (oldChannel.topic !== newChannel.topic) {
-        const eskiTopic = oldChannel.topic ? oldChannel.topic : 'Yok';
-        const yeniTopic = newChannel.topic ? newChannel.topic : 'Yok';
-        sendLog(newChannel.guild, 'logSunucu', { title: 'Kanal Açıklaması (Topic) Değişti', desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski:** ${eskiTopic}\n**Yeni:** ${yeniTopic}`, color: 0x3498db });
+
+    // 2. Kategori Değişimi (Taşıma)
+    if (oldChannel.parentId !== newChannel.parentId) {
+        const oldParent = oldChannel.parent ? oldChannel.parent.name : 'Kategorisiz';
+        const newParent = newChannel.parent ? newChannel.parent.name : 'Kategorisiz';
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: 'Kanal Kategorisi Değiştirildi',
+            desc: `**Kanal:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Yetkili:** ${yetkili}\n**Eski Kategori:** 📁 \`${oldParent}\`\n**Yeni Kategori:** 📁 \`${newParent}\``,
+            color: 0x3498db
+        });
     }
-    if (oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser) {
-        sendLog(newChannel.guild, 'logSunucu', { title: 'Kanal Yavaş Mod (Slowmode) Değişti', desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski Süre:** ${oldChannel.rateLimitPerUser} sn\n**Yeni Süre:** ${newChannel.rateLimitPerUser} sn`, color: 0xfee75c });
+
+    // 3. Kanal Açıklaması (Topic) Değişimi
+    if ('topic' in oldChannel && 'topic' in newChannel && oldChannel.topic !== newChannel.topic) {
+        const eskiTopic = oldChannel.topic ? oldChannel.topic : '*Yok*';
+        const yeniTopic = newChannel.topic ? newChannel.topic : '*Yok*';
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: 'Kanal Açıklaması (Topic) Değişti',
+            desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski:** ${eskiTopic}\n**Yeni:** ${yeniTopic}`,
+            color: 0x3498db
+        });
+    }
+
+    // 4. Kanal Yavaş Mod (Slowmode) Değişimi
+    if ('rateLimitPerUser' in oldChannel && 'rateLimitPerUser' in newChannel && oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser) {
+        const eskiSure = oldChannel.rateLimitPerUser ? `${oldChannel.rateLimitPerUser} saniye` : 'Kapalı';
+        const yeniSure = newChannel.rateLimitPerUser ? `${newChannel.rateLimitPerUser} saniye` : 'Kapalı';
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: 'Kanal Yavaş Mod (Slowmode) Değişti',
+            desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski Süre:** \`${eskiSure}\`\n**Yeni Süre:** \`${yeniSure}\``,
+            color: 0xfee75c
+        });
+    }
+
+    // 5. Yaş Sınırı (+18 / NSFW) Değişimi
+    if ('nsfw' in oldChannel && 'nsfw' in newChannel && oldChannel.nsfw !== newChannel.nsfw) {
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: newChannel.nsfw ? '🔞 Kanal Yaş Sınırı (+18 / NSFW) Açıldı' : '🛡️ Kanal Yaş Sınırı (+18 / NSFW) Kapatıldı',
+            desc: `**Kanal:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Yetkili:** ${yetkili}\n**Durum:** Kanal ${newChannel.nsfw ? '**+18 (NSFW) olarak işaretlendi.**' : '**standart kanala dönüştürüldü.**'}`,
+            color: newChannel.nsfw ? 0xed4245 : 0x57f287
+        });
+    }
+
+    // 6. Ses Kanalı Kullanıcı Limiti Değişimi
+    if ('userLimit' in oldChannel && 'userLimit' in newChannel && oldChannel.userLimit !== newChannel.userLimit) {
+        const eskiLimit = oldChannel.userLimit === 0 ? 'Sınırsız' : `${oldChannel.userLimit} Kişi`;
+        const yeniLimit = newChannel.userLimit === 0 ? 'Sınırsız' : `${newChannel.userLimit} Kişi`;
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: 'Ses Kanalı Kişi Limiti Değişti',
+            desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski Limit:** \`${eskiLimit}\`\n**Yeni Limit:** \`${yeniLimit}\``,
+            color: 0x3498db
+        });
+    }
+
+    // 7. Ses Kanalı Kalitesi (Bitrate) Değişimi
+    if ('bitrate' in oldChannel && 'bitrate' in newChannel && oldChannel.bitrate !== newChannel.bitrate) {
+        const eskiBitrate = Math.round(oldChannel.bitrate / 1000);
+        const yeniBitrate = Math.round(newChannel.bitrate / 1000);
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: 'Ses Kanalı Kalitesi (Bitrate) Değişti',
+            desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski Kalite:** \`${eskiBitrate} kbps\`\n**Yeni Kalite:** \`${yeniBitrate} kbps\``,
+            color: 0x3498db
+        });
+    }
+
+    // 8. Ses Kanalı Bölgesi (RTC Region) Değişimi
+    if ('rtcRegion' in oldChannel && 'rtcRegion' in newChannel && oldChannel.rtcRegion !== newChannel.rtcRegion) {
+        const eskiRegion = oldChannel.rtcRegion ? oldChannel.rtcRegion : 'Otomatik';
+        const yeniRegion = newChannel.rtcRegion ? newChannel.rtcRegion : 'Otomatik';
+        sendLog(newChannel.guild, 'logSunucu', {
+            title: 'Ses Kanalı Bölgesi (Region) Değişti',
+            desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Eski Bölge:** \`${eskiRegion}\`\n**Yeni Bölge:** \`${yeniRegion}\``,
+            color: 0x3498db
+        });
+    }
+
+    // 9. Kanal İzin Değişiklikleri (Permission Overwrite Karşılaştırması & Kilit Tespiti)
+    const oldOverwrites = oldChannel.permissionOverwrites?.cache;
+    const newOverwrites = newChannel.permissionOverwrites?.cache;
+
+    if (oldOverwrites && newOverwrites) {
+        for (const [id, newOw] of newOverwrites) {
+            const oldOw = oldOverwrites.get(id);
+            const targetType = newOw.type === 0 ? 'Rol' : 'Üye';
+            const targetMention = newOw.type === 0 ? `<@&${id}>` : `<@${id}>`;
+            const isEveryone = id === newChannel.guild.id;
+
+            if (!oldOw) {
+                const allowedList = newOw.allow.toArray().map(p => channelPermNames[p] || p);
+                const deniedList = newOw.deny.toArray().map(p => channelPermNames[p] || p);
+                let desc = `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Hedef:** ${targetMention} (${targetType})\n`;
+                if (allowedList.length > 0) desc += `**Açılan İzinler (🟢):** ${allowedList.join(', ')}\n`;
+                if (deniedList.length > 0) desc += `**Kapatılan İzinler (🔴):** ${deniedList.join(', ')}`;
+
+                sendLog(newChannel.guild, 'logSunucu', {
+                    title: 'Kanal Özel İzni Eklendi',
+                    desc,
+                    color: 0x57f287
+                });
+            } else {
+                const oldAllow = oldOw.allow.bitfield;
+                const newAllow = newOw.allow.bitfield;
+                const oldDeny = oldOw.deny.bitfield;
+                const newDeny = newOw.deny.bitfield;
+
+                if (oldAllow !== newAllow || oldDeny !== newDeny) {
+                    // Özel Durum: @everyone için SendMessages kontrolü (Kilit Tespiti)
+                    if (isEveryone) {
+                        const oldSendDenied = oldOw.deny.has(PermissionsBitField.Flags.SendMessages);
+                        const newSendDenied = newOw.deny.has(PermissionsBitField.Flags.SendMessages);
+
+                        if (!oldSendDenied && newSendDenied) {
+                            sendLog(newChannel.guild, 'logSunucu', {
+                                title: '🔒 Kanal Yazmaya Kapatıldı (Kilitlendi)',
+                                desc: `**Kanal:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Yetkili:** ${yetkili}\n**Durum:** \`@everyone\` rolünün mesaj gönderme izni kapatıldı.`,
+                                color: 0xed4245
+                            });
+                        } else if (oldSendDenied && !newSendDenied) {
+                            sendLog(newChannel.guild, 'logSunucu', {
+                                title: '🔓 Kanal Yazmaya Açıldı (Kilit Kaldırıldı)',
+                                desc: `**Kanal:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Yetkili:** ${yetkili}\n**Durum:** \`@everyone\` rolünün mesaj gönderme izni tekrar açıldı.`,
+                                color: 0x57f287
+                            });
+                        }
+                    }
+
+                    // Detaylı İzin Değişimi Raporu
+                    const newlyAllowed = newOw.allow.toArray().filter(p => !oldOw.allow.has(p)).map(p => channelPermNames[p] || p);
+                    const newlyDenied = newOw.deny.toArray().filter(p => !oldOw.deny.has(p)).map(p => channelPermNames[p] || p);
+                    const newlyCleared = [
+                        ...oldOw.allow.toArray().filter(p => !newOw.allow.has(p)),
+                        ...oldOw.deny.toArray().filter(p => !newOw.deny.has(p))
+                    ].map(p => channelPermNames[p] || p);
+
+                    if (newlyAllowed.length > 0 || newlyDenied.length > 0 || newlyCleared.length > 0) {
+                        let desc = `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Hedef:** ${targetMention} (${targetType})\n`;
+                        if (newlyAllowed.length > 0) desc += `**Açılan İzinler (🟢):** ${newlyAllowed.join(', ')}\n`;
+                        if (newlyDenied.length > 0) desc += `**Kapatılan İzinler (🔴):** ${newlyDenied.join(', ')}\n`;
+                        if (newlyCleared.length > 0) desc += `**Sıfırlanan İzinler (⚪):** ${newlyCleared.join(', ')}\n`;
+
+                        sendLog(newChannel.guild, 'logSunucu', {
+                            title: 'Kanal İzinleri Güncellendi',
+                            desc,
+                            color: 0xfee75c
+                        });
+                    }
+                }
+            }
+        }
+
+        // Silinen Özel İzinler
+        for (const [id, oldOw] of oldOverwrites) {
+            if (!newOverwrites.has(id)) {
+                const targetType = oldOw.type === 0 ? 'Rol' : 'Üye';
+                const targetMention = oldOw.type === 0 ? `<@&${id}>` : `<@${id}>`;
+                sendLog(newChannel.guild, 'logSunucu', {
+                    title: 'Kanal Özel İzni Kaldırıldı',
+                    desc: `**Kanal:** <#${newChannel.id}>\n**Yetkili:** ${yetkili}\n**Kaldırılan Hedef:** ${targetMention} (${targetType})\nBu hedefin kanaldaki tüm özel izinleri kaldırıldı (varsayılana döndü).`,
+                    color: 0xe67e22
+                });
+            }
+        }
     }
 });
 
