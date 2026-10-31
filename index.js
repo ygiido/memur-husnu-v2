@@ -9,7 +9,7 @@ const {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
     RoleSelectMenuBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder,
-    AttachmentBuilder, ChannelType, AuditLogEvent
+    AttachmentBuilder, ChannelType, AuditLogEvent, ActivityType
 } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
@@ -778,7 +778,8 @@ function buildAyarDashboard(guildDb) {
                 { label: 'Takip Edilen Kanalları Listele / Sil', description: 'Kayıtlı yayıncı kanallarını listeleyin veya kaldırın.', value: 'list_stream_trackers' },
                 { label: 'Özel Yasaklı Kelime Ekle', description: 'Sunucunuza özel yasaklanacak kelime ekleyin.', value: 'add_custom_kufur' },
                 { label: 'Özel Yasaklı Kelimeleri Listele / Sil', description: 'Eklediğiniz özel yasaklı kelimeleri görün veya silin.', value: 'list_custom_kufur' },
-                { label: 'Bot Beyaz Listesi Ekle / Çıkar', description: 'Sunucuya bot ekleme izni olan bot ve üyeleri yönetin.', value: 'manage_bot_whitelist' }
+                { label: 'Bot Beyaz Listesi Ekle / Çıkar', description: 'Sunucuya bot ekleme izni olan bot ve üyeleri yönetin.', value: 'manage_bot_whitelist' },
+                { label: 'Bot Durum Mesajı Ayarla (Oynuyor)', description: 'Bot profilinde görünecek "Oynuyor..." yazısını düzenleyin.', value: 'set_bot_status' }
             ])
     );
 
@@ -1006,6 +1007,9 @@ client.once('ready', async () => {
     addLiveLog(`🎉 Sistem aktif: ${client.user.tag} giriş yaptı! (${client.guilds.cache.size} sunucu)`);
 
     const db = getDB();
+    if (db.botStatus) {
+        client.user.setActivity(db.botStatus, { type: ActivityType.Playing });
+    }
     let dbUpdated = false;
 
     for (const guild of client.guilds.cache.values()) {
@@ -1126,6 +1130,14 @@ client.once('ready', async () => {
             description: 'Bulunduğunuz kanaldaki mesajları belirtilen miktarda toplu olarak siler.',
             options: [
                 { name: 'miktar', type: 4, description: 'Silinecek mesaj sayısı (1 ile 100 arasında bir sayı girin)', required: true }
+            ]
+        },
+        {
+            name: 'durum',
+            description: 'Botun profilde görünen "Oynuyor" durum mesajını düzenler (Sadece Yöneticiler).',
+            default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
+            options: [
+                { name: 'mesaj', type: 3, description: 'Botun oynuyor durumunda görünecek metin (Sıfırlamak için boş bırakın)', required: false }
             ]
         }
     ];
@@ -1269,6 +1281,24 @@ client.on('interactionCreate', async interaction => {
                     return interaction.reply({ content: `**${count}** adet mesaj silindi.`, ephemeral: true });
                 }
             }
+
+            if (commandName === 'durum') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                const yeniDurum = interaction.options.getString('mesaj');
+
+                if (yeniDurum && yeniDurum.trim().length > 0) {
+                    const temizDurum = yeniDurum.trim();
+                    client.user.setActivity(temizDurum, { type: ActivityType.Playing });
+                    db.botStatus = temizDurum;
+                    saveDB(db);
+                    return interaction.reply({ content: `✅ Botun durumu başarıyla **"${temizDurum}"** *(Oynuyor)* olarak güncellendi.`, ephemeral: true });
+                } else {
+                    client.user.setActivity(null);
+                    delete db.botStatus;
+                    saveDB(db);
+                    return interaction.reply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.', ephemeral: true });
+                }
+            }
         }
 
         // ------------------------------------------------------------------------
@@ -1388,6 +1418,22 @@ client.on('interactionCreate', async interaction => {
                     const panelData = buildAyarDashboard(db[guildId]);
                     panelData.components.push(userSelect);
                     return interaction.update(panelData);
+                }
+
+                if (secim === 'set_bot_status') {
+                    const modal = new ModalBuilder()
+                        .setCustomId('modal_set_bot_status')
+                        .setTitle('Bot Durum Mesajı (Oynuyor)');
+                    const input = new TextInputBuilder()
+                        .setCustomId('status_val')
+                        .setLabel('Botun "Oynuyor" Durum Yazısı')
+                        .setPlaceholder('Örn: Sunucuyu Denetliyor... (Boş = Sıfırlar)')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(false)
+                        .setMaxLength(120);
+                    if (db.botStatus) input.setValue(db.botStatus);
+                    modal.addComponents(new ActionRowBuilder().addComponents(input));
+                    return interaction.showModal(modal);
                 }
 
                 // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği
@@ -1844,6 +1890,22 @@ client.on('interactionCreate', async interaction => {
         // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA, YAYINCI EKLEME & TEMP VC)
         // ------------------------------------------------------------------------
         if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'modal_set_bot_status') {
+                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                const statusVal = interaction.fields.getTextInputValue('status_val').trim();
+                if (statusVal.length > 0) {
+                    client.user.setActivity(statusVal, { type: ActivityType.Playing });
+                    db.botStatus = statusVal;
+                    saveDB(db);
+                    return interaction.reply({ content: `✅ Botun durumu başarıyla **"${statusVal}"** *(Oynuyor)* olarak güncellendi.`, ephemeral: true });
+                } else {
+                    client.user.setActivity(null);
+                    delete db.botStatus;
+                    saveDB(db);
+                    return interaction.reply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.', ephemeral: true });
+                }
+            }
+
             if (interaction.customId === 'modal_add_custom_kufur') {
                 if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
                 const newWord = interaction.fields.getTextInputValue('kufur_word').trim().toLowerCase();
