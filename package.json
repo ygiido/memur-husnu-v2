@@ -1,7 +1,7 @@
 {
   "name": "memur-husnu",
-  "version": "2.1.1",
-  "description": "Memur Hüsnü v2.1.1 - Gelişmiş moderasyon, akıllı link/küfür koruması, çoklu yayın duyurusu, izinsiz bot engeli, log ve geçici ses odası botu.",
+  "version": "2.1.2",
+  "description": "Memur Hüsnü v2.1.2 - Gelişmiş moderasyon, akıllı link/küfür koruması, detaylı kanal izin logları, çoklu yayın duyurusu, izinsiz bot engeli, log ve geçici ses odası botu.",
   "main": "index.js",
   "scripts": {
     "start": "node --dns-result-order=ipv4first index.js"

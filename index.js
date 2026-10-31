@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
     }
 
     const statusData = {
-        versiyon: 'v2.1.1',
+        versiyon: 'v2.1.2',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
