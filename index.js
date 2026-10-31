@@ -113,7 +113,91 @@ const getDB = () => {
     try { return JSON.parse(fs.readFileSync(dbPath, 'utf8')); }
     catch (e) { return {}; }
 };
-const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
+
+// Render Yeniden Başlatma & Dağıtım Sıfırlanma Koruması (Discord Otomatik Bulut Yedekleme)
+const SYNC_CHANNEL_NAME = 'memur-db-yedek';
+let dbSyncTimeout = null;
+
+async function syncDatabaseToDiscord(data) {
+    try {
+        if (!client.isReady || !client.isReady()) return;
+        const guild = client.guilds.cache.get('1538928601951633599') || client.guilds.cache.first();
+        if (!guild) return;
+
+        let channel = guild.channels.cache.find(c => c.name === SYNC_CHANNEL_NAME);
+        if (!channel) {
+            channel = await guild.channels.create({
+                name: SYNC_CHANNEL_NAME,
+                type: ChannelType.GuildText,
+                permissionOverwrites: [
+                    { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles] }
+                ]
+            }).catch(() => null);
+        }
+        if (!channel) return;
+
+        const buffer = Buffer.from(JSON.stringify(data, null, 2), 'utf-8');
+        const file = new AttachmentBuilder(buffer, { name: 'database.json' });
+        await channel.send({ content: `[OTOMATİK BULUT YEDEK] ${new Date().toLocaleString('tr-TR')}`, files: [file] });
+
+        // Kanalda sadece son 2 yedeği tut, eskileri sil
+        const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+        if (messages && messages.size > 2) {
+            const msgsArray = Array.from(messages.values());
+            for (let i = 2; i < msgsArray.length; i++) {
+                await msgsArray[i].delete().catch(() => { });
+            }
+        }
+    } catch (e) {
+        addLiveLog(`[DB SYNC HATA]: ${e.message}`);
+    }
+}
+
+async function restoreDatabaseFromDiscord() {
+    try {
+        if (!client.isReady || !client.isReady()) return false;
+        const guild = client.guilds.cache.get('1538928601951633599') || client.guilds.cache.first();
+        if (!guild) return false;
+
+        let channel = guild.channels.cache.find(c => c.name === SYNC_CHANNEL_NAME);
+        if (!channel) {
+            channel = await guild.channels.fetch().then(cs => cs.find(c => c && c.name === SYNC_CHANNEL_NAME)).catch(() => null);
+        }
+        if (!channel) return false;
+
+        const messages = await channel.messages.fetch({ limit: 1 }).catch(() => null);
+        if (!messages || messages.size === 0) return false;
+
+        const lastMsg = messages.first();
+        const attachment = lastMsg.attachments.find(a => a.name === 'database.json');
+        if (!attachment) return false;
+
+        const res = await fetch(attachment.url);
+        if (!res.ok) return false;
+        const cloudData = await res.json();
+        if (cloudData && typeof cloudData === 'object') {
+            const currentDb = getDB();
+            const merged = { ...currentDb, ...cloudData };
+            fs.writeFileSync(dbPath, JSON.stringify(merged, null, 4));
+            addLiveLog(`[DB SYNC] Veritabanı Discord bulut yedeğinden başarıyla geri yüklendi!`);
+            return true;
+        }
+    } catch (e) {
+        addLiveLog(`[DB RESTORE HATA]: ${e.message}`);
+    }
+    return false;
+}
+
+const saveDB = (data) => {
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
+    if (client && client.isReady && client.isReady()) {
+        if (dbSyncTimeout) clearTimeout(dbSyncTimeout);
+        dbSyncTimeout = setTimeout(() => {
+            syncDatabaseToDiscord(data);
+        }, 4000);
+    }
+};
 
 // Geçici Hafıza Haritaları (Spam, Davet, Ses Süresi ve Cooldown Takibi)
 const spamMap = new Map();
@@ -1058,6 +1142,9 @@ setInterval(() => {
 // ============================================================================
 client.once('ready', async () => {
     addLiveLog(`🎉 Sistem aktif: ${client.user.tag} giriş yaptı! (${client.guilds.cache.size} sunucu)`);
+
+    // Bulut yedeği varsa önce veritabanını geri yükle
+    await restoreDatabaseFromDiscord();
 
     const db = getDB();
     if (db.botStatus) {
