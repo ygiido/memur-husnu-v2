@@ -222,21 +222,39 @@ async function checkTwitch(slug) {
 }
 
 async function checkKick(slug) {
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+    };
     try {
-        const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json'
-            }
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
+        let data = null;
+        // 1. Önce v2 dene
+        try {
+            const res = await fetch(`https://kick.com/api/v2/channels/${slug}`, { headers });
+            if (res.ok) data = await res.json();
+        } catch (e) { }
+
+        // 2. v2 başarısızsa v1 dene
+        if (!data || !data.user) {
+            try {
+                const resV1 = await fetch(`https://kick.com/api/v1/channels/${slug}`, { headers });
+                if (resV1.ok) data = await resV1.json();
+            } catch (e) { }
+        }
+
+        if (!data) {
+            addLiveLog(`[KICK KONTROL] ${slug} verisi alınamadı (HTTP status veya Cloudflare).`);
+            return null;
+        }
+
         const user = data.user;
         const livestream = data.livestream;
         const name = user?.username || slug;
         const avatar = user?.profile_pic || null;
 
-        if (!livestream) return { isLive: false, name, avatar };
+        if (!livestream || livestream.is_live === false) {
+            return { isLive: false, name, avatar };
+        }
 
         return {
             isLive: true,
@@ -249,6 +267,7 @@ async function checkKick(slug) {
             color: 0x53FC18
         };
     } catch (e) {
+        addLiveLog(`[KICK HATA] ${slug}: ${e.message}`);
         return null;
     }
 }
@@ -288,59 +307,64 @@ async function checkAllStreamTrackers() {
         const guildDb = db[guild.id];
         if (!guildDb || !guildDb.duyuruKanal || !Array.isArray(guildDb.trackers) || guildDb.trackers.length === 0) continue;
 
-        const targetChannel = guild.channels.cache.get(guildDb.duyuruKanal);
-        if (!targetChannel) continue;
+        let targetChannel = guild.channels.cache.get(guildDb.duyuruKanal);
+        if (!targetChannel) {
+            targetChannel = await guild.channels.fetch(guildDb.duyuruKanal).catch(() => null);
+        }
+        if (!targetChannel) {
+            addLiveLog(`[DUYURU HATA] #${guildDb.duyuruKanal} kanalı bulunamadı veya erişilemedi (${guild.name}).`);
+            continue;
+        }
 
         const mention = guildDb.duyuruRol ? `<@&${guildDb.duyuruRol}>` : '@everyone';
 
         for (const tracker of guildDb.trackers) {
-            let info = null;
-            if (tracker.platform === 'twitch') info = await checkTwitch(tracker.slug);
-            else if (tracker.platform === 'kick') info = await checkKick(tracker.slug);
-            else if (tracker.platform === 'youtube') info = await checkYouTube(tracker.channelId);
+            try {
+                let info = null;
+                if (tracker.platform === 'twitch') info = await checkTwitch(tracker.slug);
+                else if (tracker.platform === 'kick') info = await checkKick(tracker.slug);
+                else if (tracker.platform === 'youtube') info = await checkYouTube(tracker.channelId);
 
-            if (!info) continue;
+                if (!info) continue;
 
-            if (info.isLive) {
-                // Eğer bu yayın/video henüz duyurulmadıysa
-                if (tracker.lastSeenId !== info.id) {
-                    // İlk eklemede eski videoyu spamlamamak için sadece ID kaydedip geç
-                    if (tracker.lastSeenId === undefined && tracker.platform === 'youtube') {
+                if (info.isLive) {
+                    // Eğer bu yayın/video henüz duyurulmadıysa
+                    if (tracker.lastSeenId !== info.id) {
                         tracker.lastSeenId = info.id;
                         dbUpdated = true;
-                        continue;
+
+                        const embed = new EmbedBuilder()
+                            .setAuthor({ name: info.name, iconURL: info.avatar || undefined, url: info.url })
+                            .setTitle(info.title)
+                            .setURL(info.url)
+                            .setColor(info.color)
+                            .setTimestamp();
+
+                        if (info.image) embed.setImage(info.image);
+
+                        const isVideo = tracker.platform === 'youtube';
+                        const btnLabel = isVideo ? 'Videoyu İzle' : 'Yayını İzle';
+                        const contentMsg = isVideo
+                            ? `${mention} **${info.name}** yeni bir içerik yayınladı!`
+                            : `${mention} **${info.name}** yayında!`;
+
+                        const row = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setLabel(btnLabel).setStyle(ButtonStyle.Link).setURL(info.url)
+                        );
+
+                        await targetChannel.send({ content: contentMsg, embeds: [embed], components: [row] });
+                        addLiveLog(`[YAYIN DUYURUSU BAŞARILI] ${info.name} (${tracker.platform}) -> #${targetChannel.name} (${guild.name})`);
                     }
-
-                    tracker.lastSeenId = info.id;
-                    dbUpdated = true;
-
-                    const embed = new EmbedBuilder()
-                        .setAuthor({ name: info.name, iconURL: info.avatar || undefined, url: info.url })
-                        .setTitle(info.title)
-                        .setURL(info.url)
-                        .setImage(info.image)
-                        .setColor(info.color)
-                        .setTimestamp();
-
-                    const isVideo = tracker.platform === 'youtube';
-                    const btnLabel = isVideo ? 'Videoyu İzle' : 'Yayını İzle';
-                    const contentMsg = isVideo
-                        ? `${mention} **${info.name}** yeni bir içerik yayınladı!`
-                        : `${mention} **${info.name}** yayında!`;
-
-                    const row = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setLabel(btnLabel).setStyle(ButtonStyle.Link).setURL(info.url)
-                    );
-
-                    await targetChannel.send({ content: contentMsg, embeds: [embed], components: [row] }).catch(() => { });
-                    addLiveLog(`[YAYIN DUYURUSU] ${info.name} (${tracker.platform}) duyuruldu.`);
+                } else {
+                    // Yayın kapandıysa bir sonraki yayında tekrar duyurabilmek için sıfırla
+                    if (tracker.platform !== 'youtube' && tracker.lastSeenId) {
+                        tracker.lastSeenId = null;
+                        dbUpdated = true;
+                        addLiveLog(`[YAYIN BİTTİ] ${tracker.name || tracker.slug} (${tracker.platform}) yayını sonlandı.`);
+                    }
                 }
-            } else {
-                // Yayın kapandıysa bir sonraki yayında tekrar duyurabilmek için sıfırla
-                if (tracker.platform !== 'youtube' && tracker.lastSeenId) {
-                    tracker.lastSeenId = null;
-                    dbUpdated = true;
-                }
+            } catch (err) {
+                addLiveLog(`[YAYIN DUYURU HATA] ${tracker.name || tracker.slug}: ${err.message}`);
             }
         }
     }
@@ -348,8 +372,8 @@ async function checkAllStreamTrackers() {
     if (dbUpdated) saveDB(db);
 }
 
-// 2 dakikada bir otomatik kontrol döngüsü
-setInterval(checkAllStreamTrackers, 120000);
+// 1 dakikada bir otomatik kontrol döngüsü
+setInterval(checkAllStreamTrackers, 60000);
 
 function formatDuration(ms) {
     const totalSeconds = Math.floor(ms / 1000);
@@ -1089,6 +1113,11 @@ client.once('ready', async () => {
     }
 
     if (dbUpdated) saveDB(db);
+
+    // Bot açıldıktan 5 saniye sonra yayın kontrollerini anında başlat
+    setTimeout(() => {
+        checkAllStreamTrackers().catch(e => addLiveLog(`[YAYIN KONTROL HATA]: ${e.message}`));
+    }, 5000);
 
     const commands = [
         {
@@ -1958,7 +1987,13 @@ client.on('interactionCreate', async interaction => {
                 saveDB(db);
 
                 addLiveLog(`[YAYINCI EKLENDİ] ${resolved.name} (${resolved.platform}) - ${interaction.guild.name}`);
-                return interaction.editReply({ content: `✅ **${resolved.name}** (${resolved.platform.toUpperCase()}) başarıyla takip listesine eklendi!\nYayın açıldığında veya yeni video yayınlandığında duyuru kanalına otomatik olarak gönderilecek.` });
+
+                // Yeni yayıncı eklenir eklenmez hemen kontrol et ve canlıysa anında duyur
+                setTimeout(() => {
+                    checkAllStreamTrackers().catch(e => addLiveLog(`[YAYIN KONTROL HATA]: ${e.message}`));
+                }, 1000);
+
+                return interaction.editReply({ content: `✅ **${resolved.name}** (${resolved.platform.toUpperCase()}) başarıyla takip listesine eklendi!\nYayın açıksa birkaç saniye içinde duyuru kanalına gönderilecek.` });
             }
 
             // Yöneticinin Ticket Paneli Kurma Formu

@@ -21,7 +21,15 @@
         "muafRol": "1558956324728082486",
         "sicilRol": "1557759397969789083",
         "duyuruKanal": "1538929283593011252",
-        "trackers": [],
+        "trackers": [
+            {
+                "platform": "kick",
+                "slug": "martianderox",
+                "name": "martianderox",
+                "url": "https://kick.com/martianderox",
+                "lastSeenId": null
+            }
+        ],
         "linkEngel": true,
         "kufurEngel": true,
         "yetkiliRol": "1545835991053631639",
