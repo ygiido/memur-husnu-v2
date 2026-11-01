@@ -177,7 +177,9 @@ async function initMongoDB() {
             addLiveLog('✅ [MONGODB]: İlk kurulum - Mevcut veriler MongoDB bulutuna yüklendi.');
         }
     } catch (err) {
-        addLiveLog(`⚠️ [MONGODB BAĞLANTI HATASI]: ${err.message} (Yerel JSON ile devam ediliyor)`);
+        isMongoConnected = false;
+        addLiveLog(`⚠️ [MONGODB BAĞLANTI HATASI]: ${err.message} (15 sn sonra tekrar denenecek)`);
+        setTimeout(initMongoDB, 15000);
     }
 }
 
