@@ -57,6 +57,7 @@ const server = http.createServer((req, res) => {
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
+        mongoDurumu: isMongoConnected ? 'BAĞLI (MongoDB Atlas Bulut)' : 'YEREL (JSON Fallback)',
         tokenTanimliMi: Boolean(process.env.TOKEN),
         canliGunlukler: liveLogs
     };
@@ -106,14 +107,79 @@ client.on('debug', msg => {
     addLiveLog(`[DEBUG] ${msg}`);
 });
 
-// Veritabanı (JSON) Okuma ve Kaydetme Fonksiyonları
+// ============================================================================
+// MONGODB ATLAS BULUT VERİTABANI VE YEREL ÖNBELLEK SİSTEMİ
+// ============================================================================
+const { MongoClient } = require('mongodb');
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://myk33glstn_db_user:ZiggXTF2FK7FUtUv@cluster0.n8kybmj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+
+let mongoClient = null;
+let mongoCollection = null;
+let isMongoConnected = false;
+
 const dbPath = './database.json';
 if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({}));
-const getDB = () => {
-    try { return JSON.parse(fs.readFileSync(dbPath, 'utf8')); }
-    catch (e) { return {}; }
+
+let memoryDB = {};
+try {
+    memoryDB = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+} catch (e) {
+    memoryDB = {};
+}
+
+const getDB = () => memoryDB;
+
+let mongoSyncTimeout = null;
+async function pushToMongo(data) {
+    if (!isMongoConnected || !mongoCollection) return;
+    try {
+        await mongoCollection.updateOne(
+            { _id: 'server_database' },
+            { $set: { data: data, updatedAt: new Date() } },
+            { upsert: true }
+        );
+    } catch (err) {
+        addLiveLog(`[MONGODB KAYIT HATASI]: ${err.message}`);
+    }
+}
+
+const saveDB = (data) => {
+    memoryDB = data;
+    try {
+        fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
+    } catch (e) { }
+
+    if (mongoSyncTimeout) clearTimeout(mongoSyncTimeout);
+    mongoSyncTimeout = setTimeout(() => {
+        pushToMongo(memoryDB);
+    }, 1000);
 };
-const saveDB = (data) => fs.writeFileSync(dbPath, JSON.stringify(data, null, 4));
+
+async function initMongoDB() {
+    try {
+        addLiveLog('MongoDB Atlas bağlantısı kuruluyor...');
+        mongoClient = new MongoClient(MONGO_URI);
+        await mongoClient.connect();
+        const db = mongoClient.db('memur_husnu');
+        mongoCollection = db.collection('bot_data');
+        isMongoConnected = true;
+        addLiveLog('✅ [MONGODB]: Atlas bulut veritabanına başarıyla bağlanıldı!');
+
+        const remoteDoc = await mongoCollection.findOne({ _id: 'server_database' });
+        if (remoteDoc && remoteDoc.data && Object.keys(remoteDoc.data).length > 0) {
+            memoryDB = remoteDoc.data;
+            try {
+                fs.writeFileSync(dbPath, JSON.stringify(memoryDB, null, 4));
+            } catch (e) { }
+            addLiveLog('✅ [MONGODB]: Buluttaki güncel veriler (XP, Papel, Roller) yerel hafızaya aktarıldı.');
+        } else {
+            await pushToMongo(memoryDB);
+            addLiveLog('✅ [MONGODB]: İlk kurulum - Mevcut veriler MongoDB bulutuna yüklendi.');
+        }
+    } catch (err) {
+        addLiveLog(`⚠️ [MONGODB BAĞLANTI HATASI]: ${err.message} (Yerel JSON ile devam ediliyor)`);
+    }
+}
 
 // Geçici Hafıza Haritaları (Spam, Davet, Ses Süresi ve Cooldown Takibi)
 const spamMap = new Map();
@@ -4357,6 +4423,7 @@ if (!botToken) {
         if (isLoggingIn || (client.isReady && client.isReady())) return;
         isLoggingIn = true;
         try {
+            await initMongoDB();
             addLiveLog('Discord Gateway bağlantısı başlatılıyor...');
             await client.login(botToken);
             addLiveLog('✅ client.login() başarıyla tamamlandı.');
