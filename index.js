@@ -633,7 +633,7 @@ setInterval(() => {
 
             const nowTime = Date.now();
             // Seste XP aldıktan sonra en az 90 saniye (1 dk ses + 30 sn soğuma süresi) boyunca tekrar XP kazanamaz
-            if (nowTime - userData.lastVoiceXp >= 90000) {
+            if (!userData.xpDisabled && nowTime - userData.lastVoiceXp >= 90000) {
                 userData.lastVoiceXp = nowTime;
                 let voiceXp = Math.floor(Math.random() * 11) + 10;
                 if (vs.streaming || vs.selfVideo) voiceXp = Math.floor(voiceXp * 1.5);
@@ -653,14 +653,16 @@ setInterval(() => {
             }
 
             // Seviye kontrolü
-            const newLevel = calculateLevel(userData.xp);
-            if (newLevel > userData.level) {
-                userData.level = newLevel;
-                const roleId = db[guild.id]?.levelRoles?.[String(newLevel)];
-                if (roleId) {
-                    member.roles.add(roleId).catch(() => { });
+            if (!userData.xpDisabled) {
+                const newLevel = calculateLevel(userData.xp);
+                if (newLevel > userData.level) {
+                    userData.level = newLevel;
+                    const roleId = db[guild.id]?.levelRoles?.[String(newLevel)];
+                    if (roleId) {
+                        member.roles.add(roleId).catch(() => { });
+                    }
+                    dbUpdated = true;
                 }
-                dbUpdated = true;
             }
         });
     }
@@ -1305,20 +1307,24 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
     const xp = uData.xp || 0;
     const papel = uData.papel || 0;
     const spentPapel = uData.spentPapel || 0;
+    const isOptedOut = Boolean(uData.xpDisabled);
     const level = calculateLevel(xp);
     const nextLvl = getNextLevelInfo(xp);
 
-    // Sunucu sıralaması hesabı
+    // Sunucu sıralaması hesabı (sistemden çıkanlar sıralamaya dahil edilmez)
     const allUsers = Object.entries(guildDb.users || {})
-        .filter(([_, u]) => (u.xp || 0) > 0)
+        .filter(([_, u]) => (u.xp || 0) > 0 && !u.xpDisabled)
         .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
     const rankIndex = allUsers.findIndex(([uid]) => uid === targetUser.id);
-    const rankPos = rankIndex !== -1 ? rankIndex + 1 : (allUsers.length > 0 ? allUsers.length + 1 : 1);
+    const rankPos = isOptedOut ? 'Devre Dışı' : (rankIndex !== -1 ? rankIndex + 1 : (allUsers.length > 0 ? allUsers.length + 1 : 1));
 
     // Sonraki seviye ve rol hedefi
     let nextLevelText = '🏆 **Maksimum seviyeye ve unvana ulaştınız!**';
     let progressDisplay = '`██████████` %100 (Tamamlandı)';
-    if (nextLvl) {
+    if (isOptedOut) {
+        nextLevelText = '⏸️ *Seviye sistemi devre dışı bırakıldığı için XP ve rol kazanımı duraklatıldı.*';
+        progressDisplay = '`░░░░░░░░░░` (Devre Dışı)';
+    } else if (nextLvl) {
         const prevXp = level > 0 ? XP_LEVELS.find(l => l.level === level)?.xp || 0 : 0;
         const curInLvl = xp - prevXp;
         const reqInLvl = nextLvl.xp - prevXp;
@@ -1337,17 +1343,22 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
         tempRolesText = userTempRoles.map(tr => `• <@&${tr.roleId}> — **Kalan:** \`${formatDurationRemaining(tr.expiresAt - now)}\``).join('\n');
     }
 
+    let statusWarning = '';
+    if (isOptedOut) {
+        statusWarning = '\n\n⛔ **Seviye Sistemi Devre Dışı:** Seviye sisteminden çıktığınız için seviye rolleriniz kaldırıldı. Aşağıdaki butondan dilediğiniz zaman tekrar katılabilir ve hak ettiğiniz seviye rollerini anında geri alabilirsiniz.';
+    }
+
     const embed = new EmbedBuilder()
         .setAuthor({ name: `${targetUser.username} Profili`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) })
-        .setColor(0x2b2d31)
+        .setColor(isOptedOut ? 0xed4245 : 0x2b2d31)
         .setDescription(
-            `*Haftalık kullanımlarını, seviye ilerlemeni ve papel bakiyeni buradan takip edebilirsin.*\n\n` +
+            `*Haftalık kullanımlarını, seviye ilerlemeni ve papel bakiyeni buradan takip edebilirsin.*${statusWarning}\n\n` +
             `**🎯 SONRAKİ SEVİYE:**\n${nextLevelText}\n\n` +
             `**📊 SEVİYE İLERLEMESİ:**\n${progressDisplay}`
         )
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }))
         .addFields(
-            { name: '🏆 Sunucu Sıralaması', value: `\`#${rankPos.toLocaleString('tr-TR')}\``, inline: true },
+            { name: '🏆 Sunucu Sıralaması', value: typeof rankPos === 'number' ? `\`#${rankPos.toLocaleString('tr-TR')}\`` : `\`${rankPos}\``, inline: true },
             { name: '🪙 Papel Bakiyesi', value: `**${papel.toLocaleString('tr-TR')} Papel**`, inline: true },
             { name: '💸 Harcanan Papel', value: `**${spentPapel.toLocaleString('tr-TR')} Papel**`, inline: true }
         );
@@ -1361,7 +1372,10 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`btn_profile_refresh_${targetUser.id}`).setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄'),
         new ButtonBuilder().setCustomId('btn_open_market_view').setLabel('Markete Git').setStyle(ButtonStyle.Success).setEmoji('🛒'),
-        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Çalışır?').setStyle(ButtonStyle.Secondary).setEmoji('❓')
+        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Çalışır?').setStyle(ButtonStyle.Secondary).setEmoji('❓'),
+        isOptedOut
+            ? new ButtonBuilder().setCustomId('btn_toggle_user_xp').setLabel('Sisteme Katıl').setStyle(ButtonStyle.Success).setEmoji('🟢')
+            : new ButtonBuilder().setCustomId('btn_toggle_user_xp').setLabel('Devre Dışı Bırak').setStyle(ButtonStyle.Danger).setEmoji('🔴')
     );
 
     return { embeds: [embed], components: [row], ephemeral: true };
@@ -2699,6 +2713,40 @@ client.on('interactionCreate', async interaction => {
                     .setTimestamp();
                 return interaction.reply({ embeds: [infoEmbed], ephemeral: true }).catch(() => { });
             }
+            if (customId === 'btn_toggle_user_xp') {
+                ensureGuildDB(db, guildId);
+                if (!db[guildId].users[interaction.user.id]) {
+                    db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                }
+                const uData = db[guildId].users[interaction.user.id];
+                const isCurrentlyDisabled = Boolean(uData.xpDisabled);
+
+                if (!isCurrentlyDisabled) {
+                    // Kullanıcı seviye sisteminden çıkıyor
+                    uData.xpDisabled = true;
+                    // Seviye ödül rollerini kullanıcıdan geri al
+                    const levelRoleIds = Object.values(db[guildId].levelRoles || {});
+                    for (const rId of levelRoleIds) {
+                        if (rId && interaction.member.roles.cache.has(rId)) {
+                            await interaction.member.roles.remove(rId).catch(() => { });
+                        }
+                    }
+                    saveDB(db);
+                    return interaction.update(buildUserProfileCard(interaction.user, interaction.guild, db[guildId])).catch(() => { });
+                } else {
+                    // Kullanıcı seviye sistemine geri katılıyor
+                    uData.xpDisabled = false;
+                    // Mevcut seviyesine karşılık gelen seviye rolünü tekrar ver
+                    const curLevel = calculateLevel(uData.xp || 0);
+                    const targetRoleId = db[guildId].levelRoles?.[String(curLevel)];
+                    if (targetRoleId && !interaction.member.roles.cache.has(targetRoleId)) {
+                        await interaction.member.roles.add(targetRoleId).catch(() => { });
+                    }
+                    saveDB(db);
+                    return interaction.update(buildUserProfileCard(interaction.user, interaction.guild, db[guildId])).catch(() => { });
+                }
+            }
+
             if (customId === 'btn_quick_toggle_link') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
                 db[guildId].linkEngel = !db[guildId].linkEngel;
@@ -3326,9 +3374,26 @@ client.on('messageCreate', async message => {
             uDataMsg.lastMsgTime = nowTime;
             uDataMsg.msgCount += 1;
 
-            // Mesaj başı 5-12 XP
-            const earnedXp = Math.floor(Math.random() * 8) + 5;
-            uDataMsg.xp += earnedXp;
+            // Seviye sisteminden çıkmamışsa XP ve Seviye kazanır
+            if (!uDataMsg.xpDisabled) {
+                // Mesaj başı 5-12 XP
+                const earnedXp = Math.floor(Math.random() * 8) + 5;
+                uDataMsg.xp += earnedXp;
+
+                // Seviye Atlama Kontrolü (7 Seviye)
+                const newLvl = calculateLevel(uDataMsg.xp);
+                if (newLvl > uDataMsg.level) {
+                    uDataMsg.level = newLvl;
+                    const lvlObj = XP_LEVELS.find(l => l.level === newLvl);
+                    const roleId = db[guildId]?.levelRoles?.[String(newLvl)];
+                    let roleNote = '';
+                    if (roleId) {
+                        message.member.roles.add(roleId).catch(() => { });
+                        roleNote = ` ve <@&${roleId}> rolünü kazandın`;
+                    }
+                    message.channel.send(`🎉 Tebrikler <@${message.author.id}>! **${lvlObj ? lvlObj.title : `Seviye ${newLvl}`}** mertebesine yükseldin${roleNote}! 🎖️`).then(m => setTimeout(() => m.delete().catch(() => { }), 8000)).catch(() => { });
+                }
+            }
 
             // Her 100 mesajda 1 Papel kazanımı
             if (uDataMsg.msgCount % 100 === 0) {
@@ -3340,20 +3405,6 @@ client.on('messageCreate', async message => {
                 uDataMsg.papel += papelGain;
                 const extraNote = papelGain > 1 ? ` *(Şanslı Damla: +${papelGain} Papel!)*` : '';
                 message.channel.send(`💵 Tebrikler <@${message.author.id}>, 100 mesajı tamamlayarak **+${papelGain} Papel** kazandınız!${extraNote}`).then(m => setTimeout(() => m.delete().catch(() => { }), 6000)).catch(() => { });
-            }
-
-            // Seviye Atlama Kontrolü (7 Seviye)
-            const newLvl = calculateLevel(uDataMsg.xp);
-            if (newLvl > uDataMsg.level) {
-                uDataMsg.level = newLvl;
-                const lvlObj = XP_LEVELS.find(l => l.level === newLvl);
-                const roleId = db[guildId]?.levelRoles?.[String(newLvl)];
-                let roleNote = '';
-                if (roleId) {
-                    message.member.roles.add(roleId).catch(() => { });
-                    roleNote = ` ve <@&${roleId}> rolünü kazandın`;
-                }
-                message.channel.send(`🎉 Tebrikler <@${message.author.id}>! **${lvlObj ? lvlObj.title : `Seviye ${newLvl}`}** mertebesine yükseldin${roleNote}! 🎖️`).then(m => setTimeout(() => m.delete().catch(() => { }), 8000)).catch(() => { });
             }
 
             saveDB(db);
