@@ -1,3 +1,7 @@
+const crypto = require('crypto');
+if (!global.crypto) global.crypto = crypto;
+if (!globalThis.crypto) globalThis.crypto = crypto;
+
 const dns = require('dns');
 // Bulut sunucularda (Render, Fly vb.) IPv6 kaynaklı Gateway donmasını önlemek için IPv4 önceliği
 if (dns.setDefaultResultOrder) {
