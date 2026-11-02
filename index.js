@@ -187,6 +187,29 @@ async function initMongoDB() {
     }
 }
 
+// Graceful Shutdown (Render yeniden başlatmalarında veya kapanırken verilerin eksiksiz MongoDB'ye kaydedilmesi)
+let isShuttingDown = false;
+async function handleShutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    addLiveLog(`[SHUTDOWN] ${signal} sinyali alındı. Veriler buluta aktarılıyor...`);
+    if (mongoSyncTimeout) {
+        clearTimeout(mongoSyncTimeout);
+        mongoSyncTimeout = null;
+    }
+    if (isMongoConnected && mongoCollection) {
+        try {
+            await pushToMongo(memoryDB);
+            addLiveLog('✅ [SHUTDOWN] Tüm veriler başarıyla MongoDB Atlas bulutuna kaydedildi.');
+        } catch (e) {
+            console.error('[SHUTDOWN] Hata:', e.message);
+        }
+    }
+    process.exit(0);
+}
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
 // Geçici Hafıza Haritaları (Spam, Davet, Ses Süresi ve Cooldown Takibi)
 const spamMap = new Map();
 const invitesCache = new Map();
@@ -578,7 +601,7 @@ function formatDurationRemaining(ms) {
 const voiceSecondsMap = new Map();
 
 // Ses Odası XP ve Papel Kazanım Döngüsü + Süreli Rol Kontrolü (Her 30 saniyede bir kontrol eder)
-setInterval(() => {
+setInterval(async () => {
     if (!client.isReady || !client.isReady()) return;
     const db = getDB();
     let dbUpdated = false;
@@ -586,15 +609,15 @@ setInterval(() => {
     for (const guild of client.guilds.cache.values()) {
         ensureGuildDB(db, guild.id);
 
-        // Süreli Rol Kontrolü (Temp Roles Expiration)
+        // Süreli Rol Kontrolü (Temp Roles Expiration - Önbellek dışı üyeleri de sunucudan çeker)
         if (Array.isArray(db[guild.id].tempUserRoles) && db[guild.id].tempUserRoles.length > 0) {
             const now = Date.now();
             const remainingRoles = [];
             for (const item of db[guild.id].tempUserRoles) {
                 if (item.expiresAt <= now) {
-                    const mem = guild.members.cache.get(item.userId);
+                    const mem = guild.members.cache.get(item.userId) || await guild.members.fetch(item.userId).catch(() => null);
                     if (mem) {
-                        mem.roles.remove(item.roleId).catch(() => { });
+                        await mem.roles.remove(item.roleId).catch(() => { });
                     }
                     dbUpdated = true;
                 } else {
@@ -1028,22 +1051,26 @@ function buildAyarDashboard(guildDb) {
         .addFields(
             { name: '👥 Rol Yapılandırması', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
             { name: '🎙️ Ses ve Yayın', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
-            { name: '🛡️ Güvenlik ve Koruma Durumu', value: `Link/Reklam: **${guildDb.linkEngel ? '🟢 AÇIK' : '🔴 KAPALI'}**\nKüfür Koruması: **${guildDb.kufurEngel ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${customKufurCount} özel kelime)*\nİzinsiz Bot Engeli: **${guildDb.antiBot !== false ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${botWhitelistCount} beyaz listede)*\nOto-Cevap: **${guildDb.otoCevap !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**`, inline: false }
+            { name: '🛡️ Güvenlik ve Koruma Durumu', value: `Link/Reklam: **${guildDb.linkEngel ? '🟢 AÇIK' : '🔴 KAPALI'}**\nKüfür Koruması: **${guildDb.kufurEngel ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${customKufurCount} özel kelime)*\nCaps Lock: **${guildDb.capsEngel !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**\nİzinsiz Bot Engeli: **${guildDb.antiBot !== false ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${botWhitelistCount} beyaz listede)*\nOto-Cevap: **${guildDb.otoCevap !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**`, inline: false }
         );
 
     // Hızlı Aç/Kapat Butonları (Tek Tıkla Kolay Yönetim)
     const toggleRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('btn_quick_toggle_link')
-            .setLabel(guildDb.linkEngel ? 'Link: Açık (Kapat)' : 'Link: Kapalı (Aç)')
-            .setStyle(guildDb.linkEngel ? ButtonStyle.Success : ButtonStyle.Danger),
+            .setLabel(guildDb.linkEngel ? 'Link: Açık' : 'Link: Kapalı')
+            .setStyle(guildDb.linkEngel ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId('btn_quick_toggle_kufur')
-            .setLabel(guildDb.kufurEngel ? 'Küfür: Açık (Kapat)' : 'Küfür: Kapalı (Aç)')
-            .setStyle(guildDb.kufurEngel ? ButtonStyle.Success : ButtonStyle.Danger),
+            .setLabel(guildDb.kufurEngel ? 'Küfür: Açık' : 'Küfür: Kapalı')
+            .setStyle(guildDb.kufurEngel ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('btn_quick_toggle_caps')
+            .setLabel(guildDb.capsEngel !== false ? 'Caps: Açık' : 'Caps: Kapalı')
+            .setStyle(guildDb.capsEngel !== false ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId('btn_quick_toggle_antibot')
-            .setLabel(guildDb.antiBot !== false ? 'Bot Koruması: Açık' : 'Bot Koruması: Kapalı')
+            .setLabel(guildDb.antiBot !== false ? 'Anti-Bot: Açık' : 'Anti-Bot: Kapalı')
             .setStyle(guildDb.antiBot !== false ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder()
             .setCustomId('btn_quick_toggle_oto')
@@ -1314,6 +1341,8 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
     const isOptedOut = Boolean(uData.xpDisabled);
     const level = calculateLevel(xp);
     const nextLvl = getNextLevelInfo(xp);
+    const currentTitle = XP_LEVELS.find(l => l.level === level)?.title || 'Gezgin';
+    const currentRoleId = guildDb.levelRoles?.[String(level)];
 
     // Sunucu sıralaması hesabı (sistemden çıkanlar sıralamaya dahil edilmez)
     const allUsers = Object.entries(guildDb.users || {})
@@ -1322,12 +1351,21 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
     const rankIndex = allUsers.findIndex(([uid]) => uid === targetUser.id);
     const rankPos = isOptedOut ? 'Devre Dışı' : (rankIndex !== -1 ? rankIndex + 1 : (allUsers.length > 0 ? allUsers.length + 1 : 1));
 
-    // Sonraki seviye ve rol hedefi
-    let nextLevelText = '🏆 **Maksimum seviyeye ve unvana ulaştınız!**';
-    let progressDisplay = '`██████████` %100 (Tamamlandı)';
+    // Sıralama rozeti (Top 3 için taç/madalya)
+    let rankBadge = '🎖️';
+    if (rankPos === 1) rankBadge = '👑 #1 (Sunucu Lideri)';
+    else if (rankPos === 2) rankBadge = '🥈 #2 (İkinci)';
+    else if (rankPos === 3) rankBadge = '🥉 #3 (Üçüncü)';
+    else if (typeof rankPos === 'number') rankBadge = `#${rankPos.toLocaleString('tr-TR')}`;
+    else rankBadge = '⛔ Devre Dışı';
+
+    // İlerleme ve hedef
+    let targetText = '';
+    let barDisplay = '';
+
     if (isOptedOut) {
-        nextLevelText = '⏸️ *Seviye sistemi devre dışı bırakıldığı için XP ve rol kazanımı duraklatıldı.*';
-        progressDisplay = '`░░░░░░░░░░` (Devre Dışı)';
+        targetText = '⏸️ *Seviye sistemi devre dışı bırakıldı. Katılmak için aşağıdaki butonu kullanabilirsiniz.*';
+        barDisplay = '`░░░░░░░░░░░░` *(Sistem Donduruldu)*';
     } else if (nextLvl) {
         const prevXp = level > 0 ? XP_LEVELS.find(l => l.level === level)?.xp || 0 : 0;
         const curInLvl = xp - prevXp;
@@ -1335,8 +1373,13 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
         const remXp = (nextLvl.xp - xp).toLocaleString('tr-TR');
         const targetRoleId = guildDb.levelRoles?.[String(nextLvl.level)];
         const roleMention = targetRoleId ? `<@&${targetRoleId}>` : `**${nextLvl.title}**`;
-        nextLevelText = `${roleMention} rolüne ulaşmak için **${remXp} XP** daha kazanmalısın!`;
-        progressDisplay = `${makeProgressBar(curInLvl, reqInLvl, 12)} \`${xp.toLocaleString('tr-TR')} / ${nextLvl.xp.toLocaleString('tr-TR')}\``;
+        const percentage = Math.min(100, Math.floor((curInLvl / reqInLvl) * 100));
+
+        barDisplay = `${makeProgressBar(curInLvl, reqInLvl, 12)} **%${percentage}**\n> 📈 **XP:** \`${xp.toLocaleString('tr-TR')}\` / \`${nextLvl.xp.toLocaleString('tr-TR')}\``;
+        targetText = `🎯 **Hedef:** ${roleMention} rolüne ulaşmak için **${remXp} XP** kaldı!`;
+    } else {
+        barDisplay = '`████████████` **%100 (Maksimum Seviye)**';
+        targetText = '🏆 **Tebrikler! Sunucudaki en yüksek seviyeye ve unvana ulaştınız.**';
     }
 
     // Aktif süreli roller
@@ -1344,34 +1387,48 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
     const userTempRoles = (guildDb.tempUserRoles || []).filter(tr => tr.userId === targetUser.id && tr.expiresAt > now);
     let tempRolesText = '';
     if (userTempRoles.length > 0) {
-        tempRolesText = userTempRoles.map(tr => `• <@&${tr.roleId}> — **Kalan:** \`${formatDurationRemaining(tr.expiresAt - now)}\``).join('\n');
+        tempRolesText = userTempRoles.map(tr => `> • <@&${tr.roleId}> ➔ **Kalan:** \`${formatDurationRemaining(tr.expiresAt - now)}\``).join('\n');
     }
+
+    // Seviyeye göre dinamik parıldayan renkler
+    const levelColors = [0x95a5a6, 0x3498db, 0x2ecc71, 0x9b59b6, 0xe67e22, 0xe74c3c, 0xf1c40f, 0x00ffff];
+    const embedColor = isOptedOut ? 0xed4245 : (levelColors[level] || 0x5865f2);
 
     let statusWarning = '';
     if (isOptedOut) {
-        statusWarning = '\n\n⛔ **Seviye Sistemi Devre Dışı:** Seviye sisteminden çıktığınız için seviye rolleriniz kaldırıldı. Aşağıdaki butondan dilediğiniz zaman tekrar katılabilir ve hak ettiğiniz seviye rollerini anında geri alabilirsiniz.';
+        statusWarning = `\n> ⛔ **BİLGİ:** Seviye sistemi devre dışı. Seviye rolleriniz geri alındı ve XP kazanımı donduruldu. Aşağıdaki butondan dilediğiniz zaman tekrar katılarak hak ettiğiniz tüm rolleri anında geri alabilirsiniz.\n`;
     }
+
+    const roleDisplay = currentRoleId ? `<@&${currentRoleId}>` : `\`${currentTitle}\``;
 
     const embed = new EmbedBuilder()
-        .setAuthor({ name: `${targetUser.username} Profili`, iconURL: targetUser.displayAvatarURL({ dynamic: true }) })
-        .setColor(isOptedOut ? 0xed4245 : 0x2b2d31)
+        .setAuthor({
+            name: `${targetUser.username} — Resmi Üye Profili`,
+            iconURL: targetUser.displayAvatarURL({ dynamic: true })
+        })
+        .setColor(embedColor)
         .setDescription(
-            `*Haftalık kullanımlarını, seviye ilerlemeni ve papel bakiyeni buradan takip edebilirsin.*${statusWarning}\n\n` +
-            `**🎯 SONRAKİ SEVİYE:**\n${nextLevelText}\n\n` +
-            `**📊 SEVİYE İLERLEMESİ:**\n${progressDisplay}`
+            `### 🌟 ${targetUser.displayName} Profili\n` +
+            `*MARTIANS #Yükseliş topluluğundaki seviye ilerlemen, papel cüzdanın ve başarımların.*\n` +
+            statusWarning + '\n' +
+            `**🎖️ RÜTBE & UNVAN BİLGİLERİ**\n` +
+            `> 🔰 **Mevcut Seviye:** \`Seviye ${level}\` — **${currentTitle}**\n` +
+            `> 🏷️ **Kazanılan Rol:** ${roleDisplay}\n` +
+            `> 🏆 **Sunucu Sıralaması:** \`${rankBadge}\`\n\n` +
+            `**📊 SEVİYE & TECRÜBE İLERLEMESİ**\n` +
+            `> ${barDisplay}\n` +
+            `> ${targetText}\n\n` +
+            `**💰 PAPEL CÜZDANI & EKONOMİ**\n` +
+            `> 💵 **Mevcut Bakiye:** **${papel.toLocaleString('tr-TR')} Papel**\n` +
+            `> 💸 **Toplam Harcanan:** \`${spentPapel.toLocaleString('tr-TR')} Papel\`\n` +
+            (tempRolesText ? `\n**⏳ AKTİF SÜRELİ ROLLERİNİZ**\n${tempRolesText}\n` : '')
         )
         .setThumbnail(targetUser.displayAvatarURL({ dynamic: true, size: 256 }))
-        .addFields(
-            { name: '🏆 Sunucu Sıralaması', value: typeof rankPos === 'number' ? `\`#${rankPos.toLocaleString('tr-TR')}\`` : `\`${rankPos}\``, inline: true },
-            { name: '🪙 Papel Bakiyesi', value: `**${papel.toLocaleString('tr-TR')} Papel**`, inline: true },
-            { name: '💸 Harcanan Papel', value: `**${spentPapel.toLocaleString('tr-TR')} Papel**`, inline: true }
-        );
-
-    if (tempRolesText) {
-        embed.addFields({ name: '⏳ Aktif Süreli Rolleriniz', value: tempRolesText, inline: false });
-    }
-
-    embed.setFooter({ text: 'Not: Bu profil kartı sadece size özel olarak görüntülenmektedir.' }).setTimestamp();
+        .setFooter({
+            text: `MARTIANS Ekonomi & Seviye Sistemi • ${targetUser.id}`,
+            iconURL: guild.iconURL({ dynamic: true }) || undefined
+        })
+        .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`btn_profile_refresh_${targetUser.id}`).setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄'),
@@ -2015,8 +2072,8 @@ client.on('interactionCreate', async interaction => {
                 const slotVisual = `╔══════════════╗\n║  ${s1}  │  ${s2}  │  ${s3}  ║\n╚══════════════╝`;
 
                 if (winMultiplier > 0) {
-                    const kazanilan = Math.floor(miktar * winMultiplier);
-                    const netKar = kazanilan - miktar;
+                    const kazanilan = Math.ceil(miktar * winMultiplier);
+                    const netKar = Math.max(1, kazanilan - miktar);
                     uData.papel += netKar;
                     saveDB(db);
                     return interaction.reply({
@@ -2763,6 +2820,12 @@ client.on('interactionCreate', async interaction => {
                 saveDB(db);
                 return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
             }
+            if (customId === 'btn_quick_toggle_caps') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
+                db[guildId].capsEngel = db[guildId].capsEngel === false ? true : false;
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
+            }
             if (customId === 'btn_quick_toggle_antibot') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu ayarı sadece Sunucu Yöneticileri değiştirebilir.', ephemeral: true }).catch(() => { });
                 db[guildId].antiBot = db[guildId].antiBot === false ? true : false;
@@ -3465,14 +3528,17 @@ client.on('messageCreate', async message => {
         }
     }
 
-    // Caps Lock Koruması
-    const lettersOnly = message.content.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ]/g, "");
-    if (lettersOnly.length > 5) {
-        const upperCount = lettersOnly.replace(/[^A-ZĞÜŞİÖÇ]/g, "").length;
-        if ((upperCount / lettersOnly.length) >= 0.75) {
-            await message.delete().catch(() => { });
-            message.channel.send(`${message.member}, lütfen tamamı büyük harf (Caps Lock) içeren mesajlar yazmayalım.`).then(m => setTimeout(() => m.delete().catch(() => { }), 4000));
-            sendLog(message.guild, 'logCeza', { title: 'Büyük Harf (Caps Lock) Uyarısı', desc: `**Kullanıcı:** <@${message.author.id}>\n**Kanal:** <#${message.channel.id}>\n**Mesaj:** ${message.content}`, color: 0xfee75c });
+    // Caps Lock Koruması (Linkler hariç tutulur ve panel ayarına bağlıdır)
+    if (db[guildId].capsEngel !== false) {
+        const textWithoutUrls = message.content.replace(/https?:\/\/[^\s]+/gi, '');
+        const lettersOnly = textWithoutUrls.replace(/[^a-zA-ZğüşıöçĞÜŞİÖÇ]/g, "");
+        if (lettersOnly.length > 5) {
+            const upperCount = lettersOnly.replace(/[^A-ZĞÜŞİÖÇ]/g, "").length;
+            if ((upperCount / lettersOnly.length) >= 0.75) {
+                await message.delete().catch(() => { });
+                message.channel.send(`${message.member}, lütfen tamamı büyük harf (Caps Lock) içeren mesajlar yazmayalım.`).then(m => setTimeout(() => m.delete().catch(() => { }), 4000));
+                sendLog(message.guild, 'logCeza', { title: 'Büyük Harf (Caps Lock) Uyarısı', desc: `**Kullanıcı:** <@${message.author.id}>\n**Kanal:** <#${message.channel.id}>\n**Mesaj:** ${message.content}`, color: 0xfee75c });
+            }
         }
     }
 
@@ -4148,7 +4214,15 @@ client.on('channelCreate', async channel => {
 client.on('channelDelete', async channel => {
     if (!channel.guild) return;
     const db = getDB();
-    if (db[channel.guild.id]?.tempRooms && db[channel.guild.id].tempRooms[channel.id]) return;
+    const guildId = channel.guild.id;
+
+    // Geçici ses odası elle silindiyse veritabanından ve önbellekten temizle
+    if (db[guildId]?.tempRooms && db[guildId].tempRooms[channel.id]) {
+        delete db[guildId].tempRooms[channel.id];
+        renameCooldownMap.delete(channel.id);
+        saveDB(db);
+        return;
+    }
 
     const executor = await getAuditExecutor(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
     const parentName = channel.parent ? channel.parent.name : 'Kategorisiz';
