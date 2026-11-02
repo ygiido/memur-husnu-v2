@@ -676,7 +676,11 @@ setInterval(() => {
 function kufurTespitEt(metin, customList = []) {
     if (!metin) return false;
 
-    let text = metin.toLocaleLowerCase('tr-TR');
+    // Discord etiketlerini (kullanıcı, rol, kanal ve emoji ID'leri) küfür kontrolünden önce temizle
+    // (Böylece ID numaralarının harf dönüşümünden hatalı küfür uyarısı çıkması engellenir)
+    const cleanMetin = metin.replace(/<@!?\d+>|<@&\d+>|<#\d+>|<a?:\w+:\d+>/g, ' ');
+
+    let text = cleanMetin.toLocaleLowerCase('tr-TR');
 
     const charMap = {
         '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '9': 'g',
