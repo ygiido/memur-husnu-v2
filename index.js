@@ -570,12 +570,12 @@ function getNextLevelInfo(xp) {
     return null;
 }
 
-function makeProgressBar(current, target, size = 10) {
-    if (target <= 0) return '`██████████` %100';
+function makeProgressBar(current, target, size = 12) {
+    if (target <= 0) return `\`${'█'.repeat(size)}\``;
     const percentage = Math.min(Math.max(current / target, 0), 1);
     const filled = Math.round(size * percentage);
     const empty = size - filled;
-    return `\`${'█'.repeat(filled)}${'░'.repeat(empty)}\` %${Math.round(percentage * 100)}`;
+    return `\`${'█'.repeat(filled)}${'░'.repeat(empty)}\``;
 }
 
 function formatDurationLabel(days) {
