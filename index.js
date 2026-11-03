@@ -21,8 +21,8 @@ const { spawn, execFile } = require('child_process');
 const util = require('util');
 const execFileAsync = util.promisify(execFile);
 const {
-    joinVoiceChannel, createAudioPlayer, createAudioResource,
-    AudioPlayerStatus, VoiceConnectionStatus, StreamType,
+    joinVoiceChannel, getVoiceConnection, createAudioPlayer, createAudioResource,
+    AudioPlayerStatus, VoiceConnectionStatus, StreamType, NoSubscriberBehavior,
     entersState
 } = require('@discordjs/voice');
 const ffmpegPath = require('ffmpeg-static');
@@ -360,21 +360,34 @@ async function playRadio(guild, voiceChannel, station) {
             try { existing.process.kill(); } catch (e) { }
         }
         if (existing.player) {
-            existing.player.stop();
+            try { existing.player.stop(true); } catch (e) { }
         }
     }
 
-    const connection = joinVoiceChannel({
-        channelId: voiceChannel.id,
-        guildId: guild.id,
-        adapterCreator: guild.voiceAdapterCreator
-    });
+    let connection = getVoiceConnection(guild.id);
+    const needNewConnection = !connection ||
+        connection.state.status === VoiceConnectionStatus.Destroyed ||
+        connection.state.status === VoiceConnectionStatus.Disconnected ||
+        connection.joinConfig.channelId !== voiceChannel.id;
 
-    try {
-        await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
-    } catch (err) {
-        connection.destroy();
-        throw new Error(`Ses kanalına bağlanılamadı: ${err.message}`);
+    if (needNewConnection) {
+        if (connection && connection.state.status !== VoiceConnectionStatus.Destroyed) {
+            try { connection.destroy(); } catch (e) { }
+        }
+        connection = joinVoiceChannel({
+            channelId: voiceChannel.id,
+            guildId: guild.id,
+            adapterCreator: guild.voiceAdapterCreator,
+            selfDeaf: false,
+            selfMute: false
+        });
+
+        try {
+            await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+        } catch (err) {
+            try { connection.destroy(); } catch (e) { }
+            throw new Error(`Ses kanalına bağlanılamadı: ${err.message}`);
+        }
     }
 
     const ffmpegProcess = spawn(ffmpegPath, [
@@ -382,21 +395,42 @@ async function playRadio(guild, voiceChannel, station) {
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '5',
         '-i', station.url,
-        '-analyzeduration', '0',
-        '-loglevel', '0',
-        '-ac', '2',
+        '-c:a', 'libopus',
+        '-b:a', '96k',
         '-ar', '48000',
-        '-f', 's16le',
+        '-ac', '2',
+        '-f', 'opus',
         'pipe:1'
-    ], { stdio: ['ignore', 'pipe', 'ignore'] });
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-    const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.Raw });
-    const player = createAudioPlayer();
-    player.play(resource);
+    ffmpegProcess.stderr.on('data', chunk => {
+        const text = chunk.toString();
+        if (text.includes('404') || text.includes('Connection refused') || text.includes('Server returned 4')) {
+            addLiveLog(`[FFMPEG UYARI] (${station.name}): ${text.trim().slice(0, 150)}`);
+        }
+    });
+
+    ffmpegProcess.on('error', err => {
+        addLiveLog(`[FFMPEG HATA] (${station.name}): ${err.message}`);
+    });
+
+    const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.OggOpus });
+    const player = createAudioPlayer({
+        behaviors: {
+            noSubscriber: NoSubscriberBehavior.Play,
+            maxMissedFrames: 250
+        }
+    });
+
     connection.subscribe(player);
+    player.play(resource);
+
+    player.on('stateChange', (oldState, newState) => {
+        addLiveLog(`[RADYO DURUM] (${station.name}): ${oldState.status} -> ${newState.status}`);
+    });
 
     player.on('error', error => {
-        addLiveLog(`[RADYO HATASI] (${station.name}): ${error.message}`);
+        addLiveLog(`[RADYO OYNATICI HATASI] (${station.name}): ${error.message}`);
     });
 
     radioPlayers.set(guild.id, {
@@ -412,18 +446,22 @@ async function playRadio(guild, voiceChannel, station) {
 
 function stopRadio(guildId) {
     const radio = radioPlayers.get(guildId);
-    if (!radio) return;
-
-    if (radio.process) {
-        try { radio.process.kill(); } catch (e) { }
+    if (radio) {
+        if (radio.process) {
+            try { radio.process.kill(); } catch (e) { }
+        }
+        if (radio.player) {
+            try { radio.player.stop(true); } catch (e) { }
+        }
+        if (radio.connection && radio.connection.state.status !== VoiceConnectionStatus.Destroyed) {
+            try { radio.connection.destroy(); } catch (e) { }
+        }
+        radioPlayers.delete(guildId);
     }
-    if (radio.player) {
-        try { radio.player.stop(); } catch (e) { }
+    const conn = getVoiceConnection(guildId);
+    if (conn && conn.state.status !== VoiceConnectionStatus.Destroyed) {
+        try { conn.destroy(); } catch (e) { }
     }
-    if (radio.connection) {
-        try { radio.connection.destroy(); } catch (e) { }
-    }
-    radioPlayers.delete(guildId);
     addLiveLog(`[RADYO DURDURULDU] Guild ID: ${guildId}`);
 }
 
