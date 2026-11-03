@@ -404,10 +404,22 @@ async function playRadio(guild, voiceChannel, station) {
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
     ffmpegProcess.stderr.on('data', chunk => {
-        const text = chunk.toString();
-        if (text.includes('404') || text.includes('Connection refused') || text.includes('Server returned 4')) {
-            addLiveLog(`[FFMPEG UYARI] (${station.name}): ${text.trim().slice(0, 150)}`);
+        const text = chunk.toString().trim();
+        if (text) {
+            addLiveLog(`[FFMPEG STDERR] ${text.slice(0, 200)}`);
         }
+    });
+
+    ffmpegProcess.on('close', (code, sig) => {
+        addLiveLog(`[FFMPEG ÇIKIŞ] kod: ${code}, sinyal: ${sig}`);
+    });
+
+    resource.playStream.on('error', err => {
+        addLiveLog(`[STREAM HATA] ${err.message}`);
+    });
+
+    resource.playStream.on('end', () => {
+        addLiveLog(`[STREAM BİTTİ (END)]`);
     });
 
     ffmpegProcess.on('error', err => {
