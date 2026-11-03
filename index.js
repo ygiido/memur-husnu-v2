@@ -17,9 +17,15 @@ const {
 } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
-const { execFile } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const util = require('util');
 const execFileAsync = util.promisify(execFile);
+const {
+    joinVoiceChannel, createAudioPlayer, createAudioResource,
+    AudioPlayerStatus, VoiceConnectionStatus, StreamType,
+    entersState
+} = require('@discordjs/voice');
+const ffmpegPath = require('ffmpeg-static');
 require('dotenv').config();
 
 // Canlı Durum ve Tanı Kayıtları
@@ -193,6 +199,9 @@ async function handleShutdown(signal) {
     if (isShuttingDown) return;
     isShuttingDown = true;
     addLiveLog(`[SHUTDOWN] ${signal} sinyali alındı. Veriler buluta aktarılıyor...`);
+    for (const guildId of Array.from(radioPlayers.keys())) {
+        try { stopRadio(guildId); } catch (e) { }
+    }
     if (mongoSyncTimeout) {
         clearTimeout(mongoSyncTimeout);
         mongoSyncTimeout = null;
@@ -239,6 +248,183 @@ function ensureGuildDB(db, guildId) {
     if (db[guildId].kickBot) {
         delete db[guildId].kickBot;
     }
+}
+
+// ============================================================================
+// 7/24 KESİNTİSİZ CANLI TÜRKÇE RADYO SİSTEMİ (MÜZİK & HABER KATEGORİLERİ)
+// ============================================================================
+const RADIO_STATIONS = {
+    muzik: [
+        { id: 'cem_radyo', name: 'Cem Radyo', desc: 'Halk & Özgün Müzik (İstanbul 96.4)', emoji: '📻', url: 'https://erzincan.80.yayin.com.tr/stream' },
+        { id: 'trt_fm', name: 'TRT FM', desc: 'Türkçe Pop & Karışık Müzik', emoji: '📻', url: 'https://rd-trtfm.medya.trt.com.tr/master_128.m3u8' },
+        { id: 'trt_turku', name: 'TRT Türkü', desc: 'Türk Halk Müziği & Bozlak', emoji: '📻', url: 'https://rd-trtturku.medya.trt.com.tr/master_128.m3u8' },
+        { id: 'power_turk', name: 'Power Türk', desc: 'Türkçe Pop & En Çok Dinlenenler', emoji: '🔥', url: 'https://listen.powerapp.com.tr/powerturk/mpeg/icecast.audio' },
+        { id: 'power_fm', name: 'Power FM', desc: 'Yabancı Hit & Pop Müzik', emoji: '🎵', url: 'https://listen.powerapp.com.tr/powerfm/mpeg/icecast.audio' },
+        { id: 'slow_turk', name: 'Slow Türk', desc: 'Duygusal & Türkçe Aşk Şarkıları', emoji: '❤️', url: 'https://radyo.duhnet.tv/slowturk' },
+        { id: 'kral_pop', name: 'Kral Pop', desc: 'Türkçe Pop Müziğin Zirvesi', emoji: '👑', url: 'https://moondigitalmaster.radyotvonline.net/kralpop/playlist.m3u8' },
+        { id: 'kral_fm', name: 'Kral FM', desc: 'İlaç Gibi Radyo (Arabesk & Damar)', emoji: '👑', url: 'https://moondigitalmaster.radyotvonline.net/kralfm/playlist.m3u8' },
+        { id: 'alem_fm', name: 'Alem FM', desc: 'Cümle Alem Burada (Pop & Eğlence)', emoji: '🎉', url: 'https://turkmedya.radyotvonline.net/alemfmaac' },
+        { id: 'pal_fm', name: 'Pal FM', desc: 'Müziğin Kalbi Burada Atıyor', emoji: '✨', url: 'https://moondigitaledge.radyotvonline.net/palfm/playlist.m3u8' },
+        { id: 'radyo_viva', name: 'Radyo Viva', desc: 'Türkçe Pop & Nostalji Klasikleri', emoji: '🎶', url: 'https://moondigitaledge.radyotvonline.net/radyoviva/playlist.m3u8' }
+    ],
+    haber: [
+        { id: 'trt_radyo1', name: 'TRT Radyo 1', desc: 'Haber, Kültür & Edebiyat', emoji: '📰', url: 'https://rd-trtradyo1.medya.trt.com.tr/master_128.m3u8' },
+        { id: 'ntv_radyo', name: 'NTV Radyo', desc: 'Haberin Doğru Adresi & Gündem', emoji: '🎙️', url: 'http://ntvrdwmp.radyotvonline.com/' },
+        { id: 'cnn_turk', name: 'CNN Türk Radyo', desc: 'İlk Bilen Siz Olun (Canlı Yayın)', emoji: '📺', url: 'https://moondigitaledge2.radyotvonline.net/cnnturk/playlist.m3u8' },
+        { id: 'a_haber', name: 'A Haber Radyo', desc: 'Türkiye ve Dünya Gündemi', emoji: '🔴', url: 'https://trkvz-radyolar.ercdn.net/ahaberradyo/playlist.m3u8' },
+        { id: 'haberturk', name: 'Habertürk Radyo', desc: 'Doğru Haber & Tarafsız Yorum', emoji: '📰', url: 'https://moondigitalmaster.radyotvonline.net/haberturkradyo/playlist.m3u8' },
+        { id: 'a_spor', name: 'A Spor Radyo', desc: 'Canlı Maç Anlatımı & Spor Haberleri', emoji: '⚽', url: 'https://trkvz-radyolar.ercdn.net/asporradyo/playlist.m3u8' },
+        { id: 'diyanet_radyo', name: 'Diyanet Radyo', desc: 'İyiliğin ve Doğruluğun Sesi', emoji: '🕌', url: 'https://eustr73.mediatriple.net/videoonlylive/mtikoimxnztxlive/broadcast_5e3c1171d7d2a.smil/playlist.m3u8' }
+    ]
+};
+
+const radioPlayers = new Map();
+
+function buildRadioView(guild, voiceChannelId, activeStation = null) {
+    const radioData = radioPlayers.get(guild.id);
+    const currentPlaying = activeStation || (radioData ? radioData.station : null);
+
+    const embed = new EmbedBuilder()
+        .setAuthor({
+            name: 'Memur Hüsnü — Canlı Radyo Yayını',
+            iconURL: client.user ? client.user.displayAvatarURL({ dynamic: true }) : undefined
+        })
+        .setColor(currentPlaying ? 0x57f287 : 0x2b2d31)
+        .setDescription(
+            `### 📻 Canlı Radyo Kontrol Masası\n` +
+            `*Bulunduğunuz ses odasında 7/24 kesintisiz canlı radyo dinleyebilirsiniz.*\n\n` +
+            `> 🔊 **Bağlı Ses Odası:** ${voiceChannelId ? `<#${voiceChannelId}>` : '*Bağlı değil*'}\n` +
+            `> 📡 **Şu An Çalan:** ${currentPlaying ? `**${currentPlaying.emoji} ${currentPlaying.name}**\n> 📝 *${currentPlaying.desc}*` : '*Henüz bir radyo istasyonu seçilmedi. Aşağıdaki menülerden seçim yapabilirsiniz.*'}\n` +
+            `> ⚡ **Yayın Durumu:** ${currentPlaying ? '🟢 **Canlı Yayında (Çalıyor)**' : '⚪ **Beklemede**'}\n\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `Aşağıdaki menülerden **Müzik** veya **Haber & Spor** kategorisindeki hazır radyolardan dilediğinizi seçebilirsiniz:`
+        )
+        .setFooter({ text: 'Not: Ses odasında kimse kalmadığında bot yayını otomatik kapatır ve ayrılır.' })
+        .setTimestamp();
+
+    if (currentPlaying && client.user) {
+        embed.setThumbnail(client.user.displayAvatarURL({ dynamic: true }));
+    }
+
+    const musicOptions = RADIO_STATIONS.muzik.map(s => ({
+        label: s.name,
+        description: s.desc.slice(0, 100),
+        value: s.id,
+        emoji: s.emoji,
+        default: Boolean(currentPlaying && currentPlaying.id === s.id)
+    }));
+
+    const newsOptions = RADIO_STATIONS.haber.map(s => ({
+        label: s.name,
+        description: s.desc.slice(0, 100),
+        value: s.id,
+        emoji: s.emoji,
+        default: Boolean(currentPlaying && currentPlaying.id === s.id)
+    }));
+
+    const musicRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('select_radio_muzik')
+            .setPlaceholder('🎵 Müzik Radyoları (Cem Radyo, TRT FM, Kral, Power...)')
+            .addOptions(musicOptions)
+    );
+
+    const newsRow = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('select_radio_haber')
+            .setPlaceholder('📰 Haber & Spor Radyoları (TRT 1, NTV, CNN Türk, A Spor...)')
+            .addOptions(newsOptions)
+    );
+
+    const btnRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('btn_radio_stop')
+            .setLabel('Radyoyu Kapat & Ayrıl')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('⏹️')
+            .setDisabled(!Boolean(currentPlaying)),
+        new ButtonBuilder()
+            .setCustomId(`btn_radio_refresh_${voiceChannelId || 'none'}`)
+            .setLabel('Yenile')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('🔄')
+    );
+
+    return { embeds: [embed], components: [musicRow, newsRow, btnRow] };
+}
+
+async function playRadio(guild, voiceChannel, station) {
+    const existing = radioPlayers.get(guild.id);
+    if (existing) {
+        if (existing.process) {
+            try { existing.process.kill(); } catch (e) { }
+        }
+        if (existing.player) {
+            existing.player.stop();
+        }
+    }
+
+    const connection = joinVoiceChannel({
+        channelId: voiceChannel.id,
+        guildId: guild.id,
+        adapterCreator: guild.voiceAdapterCreator
+    });
+
+    try {
+        await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+    } catch (err) {
+        connection.destroy();
+        throw new Error(`Ses kanalına bağlanılamadı: ${err.message}`);
+    }
+
+    const ffmpegProcess = spawn(ffmpegPath, [
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5',
+        '-i', station.url,
+        '-analyzeduration', '0',
+        '-loglevel', '0',
+        '-ac', '2',
+        '-ar', '48000',
+        '-f', 's16le',
+        'pipe:1'
+    ], { stdio: ['ignore', 'pipe', 'ignore'] });
+
+    const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.Raw });
+    const player = createAudioPlayer();
+    player.play(resource);
+    connection.subscribe(player);
+
+    player.on('error', error => {
+        addLiveLog(`[RADYO HATASI] (${station.name}): ${error.message}`);
+    });
+
+    radioPlayers.set(guild.id, {
+        connection,
+        player,
+        process: ffmpegProcess,
+        station,
+        channelId: voiceChannel.id
+    });
+
+    addLiveLog(`[RADYO BAŞLADI] ${station.name} -> ${guild.name} / ${voiceChannel.name}`);
+}
+
+function stopRadio(guildId) {
+    const radio = radioPlayers.get(guildId);
+    if (!radio) return;
+
+    if (radio.process) {
+        try { radio.process.kill(); } catch (e) { }
+    }
+    if (radio.player) {
+        try { radio.player.stop(); } catch (e) { }
+    }
+    if (radio.connection) {
+        try { radio.connection.destroy(); } catch (e) { }
+    }
+    radioPlayers.delete(guildId);
+    addLiveLog(`[RADYO DURDURULDU] Guild ID: ${guildId}`);
 }
 
 // ============================================================================
@@ -1762,6 +1948,22 @@ client.once('ready', async () => {
                 { name: 'kullanici', type: 6, description: 'Papel kesilecek üye', required: true },
                 { name: 'miktar', type: 4, description: 'Kesilecek Papel miktarı', required: true }
             ]
+        },
+        {
+            name: 'radyo',
+            description: 'Ses odasında 7/24 kesintisiz canlı Türkçe radyo istasyonlarını dinleyin.',
+            options: [
+                {
+                    name: 'islem',
+                    type: 3,
+                    description: 'İşlem seçin (Boş bırakırsanız radyo menüsü açılır)',
+                    required: false,
+                    choices: [
+                        { name: 'Radyo Menüsünü Aç', value: 'menu' },
+                        { name: 'Radyoyu Kapat / Ayrıl', value: 'kapat' }
+                    ]
+                }
+            ]
         }
     ];
 
@@ -2133,6 +2335,34 @@ client.on('interactionCreate', async interaction => {
                     content: `✅ <@${targetUser.id}> adlı kullanıcıdan **-${miktar.toLocaleString('tr-TR')} Papel** 💵 kesildi.\nKullanıcının Kalan Bakiyesi: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
                     ephemeral: true
                 });
+            }
+
+            if (commandName === 'radyo') {
+                const voiceChannel = interaction.member?.voice?.channel;
+                const islem = interaction.options.getString('islem');
+
+                if (islem === 'kapat') {
+                    if (!radioPlayers.has(guildId)) {
+                        return interaction.reply({
+                            content: '📻 Zaten şu anda bu sunucuda çalan aktif bir radyo yayını bulunmuyor.',
+                            ephemeral: true
+                        });
+                    }
+                    stopRadio(guildId);
+                    return interaction.reply({
+                        content: '⏹️ Canlı radyo yayını sonlandırıldı ve ses odasından ayrılındı.',
+                        ephemeral: false
+                    });
+                }
+
+                if (!voiceChannel) {
+                    return interaction.reply({
+                        content: '⚠️ Radyo dinleyebilmek için lütfen önce herhangi bir **ses kanalına** katılın.',
+                        ephemeral: true
+                    });
+                }
+
+                return interaction.reply(buildRadioView(interaction.guild, voiceChannel.id));
             }
         }
 
@@ -2550,6 +2780,36 @@ client.on('interactionCreate', async interaction => {
                     });
                 }
             }
+
+            if (interaction.customId === 'select_radio_muzik' || interaction.customId === 'select_radio_haber') {
+                const voiceChannel = interaction.member?.voice?.channel;
+                if (!voiceChannel) {
+                    return interaction.reply({
+                        content: '⚠️ Radyo çalabilmek için lütfen bir **ses kanalında** bulunun.',
+                        ephemeral: true
+                    });
+                }
+
+                const stationId = interaction.values[0];
+                const allStations = [...RADIO_STATIONS.muzik, ...RADIO_STATIONS.haber];
+                const station = allStations.find(s => s.id === stationId);
+
+                if (!station) {
+                    return interaction.reply({ content: '❌ Seçilen radyo istasyonu bulunamadı.', ephemeral: true });
+                }
+
+                await interaction.deferUpdate().catch(() => { });
+
+                try {
+                    await playRadio(interaction.guild, voiceChannel, station);
+                    return interaction.editReply(buildRadioView(interaction.guild, voiceChannel.id, station)).catch(() => { });
+                } catch (err) {
+                    return interaction.followUp({
+                        content: `❌ Radyo bağlantısı kurulurken hata oluştu: ${err.message}`,
+                        ephemeral: true
+                    }).catch(() => { });
+                }
+            }
         }
 
         // ------------------------------------------------------------------------
@@ -2689,6 +2949,23 @@ client.on('interactionCreate', async interaction => {
         // ------------------------------------------------------------------------
         if (interaction.isButton()) {
             const customId = interaction.customId;
+
+            // --- CANLI RADYO BUTONLARI ---
+            if (customId === 'btn_radio_stop') {
+                const voiceChannel = interaction.member?.voice?.channel;
+                if (!radioPlayers.has(guildId)) {
+                    return interaction.reply({ content: '📻 Şu anda çalan aktif bir radyo bulunmuyor.', ephemeral: true });
+                }
+                stopRadio(guildId);
+                return interaction.update(buildRadioView(interaction.guild, voiceChannel ? voiceChannel.id : null)).catch(() => { });
+            }
+
+            if (customId.startsWith('btn_radio_refresh_')) {
+                const voiceChannel = interaction.member?.voice?.channel;
+                const paramChId = customId.replace('btn_radio_refresh_', '');
+                const chId = (paramChId && paramChId !== 'none') ? paramChId : (voiceChannel ? voiceChannel.id : null);
+                return interaction.update(buildRadioView(interaction.guild, chId)).catch(() => { });
+            }
 
             // --- /PANEL GEZİNME BUTONLARI ---
             if (customId === 'nav_panel_home') {
@@ -3706,6 +3983,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     const db = getDB();
     const guildId = newState.guild.id;
     ensureGuildDB(db, guildId);
+
+    // CANLI RADYO OTOMATİK AYRILMA (Bot atılırsa veya kanalda kimse kalmazsa)
+    if (radioPlayers.has(guildId)) {
+        const radioData = radioPlayers.get(guildId);
+        if (oldState.id === client.user?.id && !newState.channelId) {
+            stopRadio(guildId);
+        } else if (radioData && radioData.channelId) {
+            const ch = oldState.guild.channels.cache.get(radioData.channelId);
+            if (!ch || ch.members.filter(m => !m.user.bot).size === 0) {
+                stopRadio(guildId);
+            }
+        }
+    }
 
     // GEÇİCİ ODA OLUŞTURMA (15 Saniye Cooldown Korumalı)
     if (db[guildId].odaKanal && db[guildId].odaKategori) {
