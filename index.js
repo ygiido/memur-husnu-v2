@@ -33,7 +33,7 @@ const liveLogs = [];
 function addLiveLog(msg) {
     const time = new Date().toLocaleTimeString('tr-TR');
     liveLogs.push(`[${time}] ${msg}`);
-    if (liveLogs.length > 50) liveLogs.shift();
+    if (liveLogs.length > 250) liveLogs.shift();
     console.log(`[BOT DIAGNOSTIC] ${msg}`);
 }
 
@@ -52,15 +52,42 @@ const wsStatusMap = {
 // Render vb. bulut sunucularda botun aktif kalması ve canlı durum izleme HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
+    // Canlı test endpoint'i: ffmpeg ile radyo akış testini doğrudan çalıştırıp sonucu JSON verir
+    if (req.url === '/test-radio') {
+        const testProc = spawn(ffmpegPath, [
+            '-reconnect', '1',
+            '-reconnect_streamed', '1',
+            '-reconnect_delay_max', '5',
+            '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            '-i', 'https://erzincan.80.yayin.com.tr/stream',
+            '-c:a', 'libopus',
+            '-b:a', '96k',
+            '-ar', '48000',
+            '-ac', '2',
+            '-f', 'opus',
+            'pipe:1'
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        let stdoutBytes = 0;
+        let stderrText = '';
+        testProc.stdout.on('data', c => { stdoutBytes += c.length; });
+        testProc.stderr.on('data', c => { stderrText += c.toString(); });
+
+        setTimeout(() => {
+            try { testProc.kill(); } catch (e) { }
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({
+                status: stdoutBytes > 0 ? 'SUCCESS' : 'FAILED',
+                stdoutBytes,
+                stderr: stderrText.slice(0, 1500)
+            }, null, 2));
+        }, 3000);
+        return;
+    }
+
     const isBotReady = Boolean(client && client.isReady && client.isReady());
     const wsCode = client && client.ws ? client.ws.status : null;
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
-
-    // Gelen istek ve UptimeRobot pingini kaydet
-    const ua = req.headers['user-agent'] || 'Bilinmeyen UA';
-    if (!req.url.includes('favicon')) {
-        addLiveLog(`[HTTP Ping] ${req.method} ${req.url} - UA: ${ua.slice(0, 35)}`);
-    }
 
     const statusData = {
         versiyon: 'v2.1.2',
@@ -69,6 +96,13 @@ const server = http.createServer((req, res) => {
         discordWebsocketDurumu: wsText,
         mongoDurumu: isMongoConnected ? 'BAĞLI (MongoDB Atlas Bulut)' : 'YEREL (JSON Fallback)',
         tokenTanimliMi: Boolean(process.env.TOKEN),
+        aktifRadyolar: Array.from(radioPlayers.entries()).map(([gid, r]) => ({
+            guildId: gid,
+            istasyon: r.station?.name,
+            kanalId: r.channelId,
+            playerDurum: r.player?.state?.status,
+            processAlive: !r.process?.killed
+        })),
         canliGunlukler: liveLogs
     };
 
@@ -394,6 +428,7 @@ async function playRadio(guild, voiceChannel, station) {
         '-reconnect', '1',
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '5',
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         '-i', station.url,
         '-c:a', 'libopus',
         '-b:a', '96k',
@@ -414,19 +449,21 @@ async function playRadio(guild, voiceChannel, station) {
         addLiveLog(`[FFMPEG ÇIKIŞ] kod: ${code}, sinyal: ${sig}`);
     });
 
-    resource.playStream.on('error', err => {
-        addLiveLog(`[STREAM HATA] ${err.message}`);
-    });
-
-    resource.playStream.on('end', () => {
-        addLiveLog(`[STREAM BİTTİ (END)]`);
-    });
-
     ffmpegProcess.on('error', err => {
         addLiveLog(`[FFMPEG HATA] (${station.name}): ${err.message}`);
     });
 
     const resource = createAudioResource(ffmpegProcess.stdout, { inputType: StreamType.OggOpus });
+
+    if (resource.playStream) {
+        resource.playStream.on('error', err => {
+            addLiveLog(`[STREAM HATA] ${err.message}`);
+        });
+        resource.playStream.on('end', () => {
+            addLiveLog(`[STREAM BİTTİ (END)]`);
+        });
+    }
+
     const player = createAudioPlayer({
         behaviors: {
             noSubscriber: NoSubscriberBehavior.Play,
