@@ -51,6 +51,30 @@ const wsStatusMap = {
     8: 'RESUMING (Devam Ettiriliyor)'
 };
 
+async function getAudioStreamForUrl(url) {
+    if (url.includes('.m3u8')) {
+        return m3u8stream(url, {
+            requestOptions: {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            }
+        });
+    }
+
+    const response = await fetch(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Radyo sunucusu HTTP ${response.status} hatası döndürdü.`);
+    }
+
+    return Readable.fromWeb(response.body);
+}
+
 // Render vb. bulut sunucularda botun aktif kalması ve canlı durum izleme HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
@@ -62,19 +86,7 @@ const server = http.createServer((req, res) => {
 
         (async () => {
             try {
-                const response = await fetch(testUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                    }
-                });
-
-                if (!response.ok) {
-                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-                    return res.end(JSON.stringify({ status: 'HTTP_ERROR', httpStatus: response.status, testUrl }));
-                }
-
-                const { Readable } = require('stream');
-                const webStream = Readable.fromWeb(response.body);
+                const webStream = await getAudioStreamForUrl(testUrl);
 
                 const testProc = spawn(ffmpegPath, [
                     '-i', 'pipe:0',
@@ -416,30 +428,6 @@ function buildRadioView(guild, voiceChannelId, activeStation = null) {
     );
 
     return { embeds: [embed], components: [musicRow, newsRow, btnRow] };
-}
-
-async function getAudioStreamForUrl(url) {
-    if (url.includes('.m3u8')) {
-        return m3u8stream(url, {
-            requestOptions: {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                }
-            }
-        });
-    }
-
-    const response = await fetch(url, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error(`Radyo sunucusu HTTP ${response.status} hatası döndürdü.`);
-    }
-
-    return Readable.fromWeb(response.body);
 }
 
 async function playRadio(guild, voiceChannel, station) {
