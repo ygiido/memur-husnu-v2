@@ -18,8 +18,10 @@ const {
 const fs = require('fs');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
+const { Readable } = require('stream');
 const util = require('util');
 const execFileAsync = util.promisify(execFile);
+const m3u8stream = require('m3u8stream');
 const {
     joinVoiceChannel, getVoiceConnection, createAudioPlayer, createAudioResource,
     AudioPlayerStatus, VoiceConnectionStatus, StreamType, NoSubscriberBehavior,
@@ -416,9 +418,36 @@ function buildRadioView(guild, voiceChannelId, activeStation = null) {
     return { embeds: [embed], components: [musicRow, newsRow, btnRow] };
 }
 
+async function getAudioStreamForUrl(url) {
+    if (url.includes('.m3u8')) {
+        return m3u8stream(url, {
+            requestOptions: {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            }
+        });
+    }
+
+    const response = await fetch(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Radyo sunucusu HTTP ${response.status} hatası döndürdü.`);
+    }
+
+    return Readable.fromWeb(response.body);
+}
+
 async function playRadio(guild, voiceChannel, station) {
     const existing = radioPlayers.get(guild.id);
     if (existing) {
+        if (existing.sourceStream) {
+            try { existing.sourceStream.destroy(); } catch (e) { }
+        }
         if (existing.process) {
             try { existing.process.kill(); } catch (e) { }
         }
@@ -453,29 +482,37 @@ async function playRadio(guild, voiceChannel, station) {
         }
     }
 
+    // 1. Ağ akışını Node.js seviyesinde güvenle başlat (glibc DNS SIGSEGV çökmesini engeller)
+    const sourceStream = await getAudioStreamForUrl(station.url);
+
+    // 2. FFmpeg'e ağ yerine doğrudan stdin (pipe:0) besle
     const ffmpegProcess = spawn(ffmpegPath, [
-        '-reconnect', '1',
-        '-reconnect_streamed', '1',
-        '-reconnect_delay_max', '5',
-        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        '-i', station.url,
+        '-i', 'pipe:0',
         '-c:a', 'libopus',
         '-b:a', '96k',
         '-ar', '48000',
         '-ac', '2',
         '-f', 'opus',
         'pipe:1'
-    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+    sourceStream.pipe(ffmpegProcess.stdin);
+
+    sourceStream.on('error', err => {
+        addLiveLog(`[KAYNAK AKIŞ HATASI] (${station.name}): ${err.message}`);
+    });
+
+    ffmpegProcess.stdin.on('error', () => { });
 
     ffmpegProcess.stderr.on('data', chunk => {
         const text = chunk.toString().trim();
-        if (text) {
-            addLiveLog(`[FFMPEG STDERR] ${text.slice(0, 200)}`);
+        if (text.includes('Error') || text.includes('Invalid')) {
+            addLiveLog(`[FFMPEG UYARI] (${station.name}): ${text.slice(0, 150)}`);
         }
     });
 
     ffmpegProcess.on('close', (code, sig) => {
-        addLiveLog(`[FFMPEG ÇIKIŞ] kod: ${code}, sinyal: ${sig}`);
+        addLiveLog(`[FFMPEG ÇIKIŞ] (${station.name}): kod ${code}, sinyal ${sig}`);
     });
 
     ffmpegProcess.on('error', err => {
@@ -489,7 +526,7 @@ async function playRadio(guild, voiceChannel, station) {
             addLiveLog(`[STREAM HATA] ${err.message}`);
         });
         resource.playStream.on('end', () => {
-            addLiveLog(`[STREAM BİTTİ (END)]`);
+            addLiveLog(`[STREAM BİTTİ (END)] (${station.name})`);
         });
     }
 
@@ -515,6 +552,7 @@ async function playRadio(guild, voiceChannel, station) {
         connection,
         player,
         process: ffmpegProcess,
+        sourceStream,
         station,
         channelId: voiceChannel.id
     });
@@ -525,6 +563,9 @@ async function playRadio(guild, voiceChannel, station) {
 function stopRadio(guildId) {
     const radio = radioPlayers.get(guildId);
     if (radio) {
+        if (radio.sourceStream) {
+            try { radio.sourceStream.destroy(); } catch (e) { }
+        }
         if (radio.process) {
             try { radio.process.kill(); } catch (e) { }
         }
