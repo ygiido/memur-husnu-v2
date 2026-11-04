@@ -338,8 +338,8 @@ const RADIO_STATIONS = {
         { id: 'power_turk', name: 'Power Türk', desc: 'Türkçe Pop & En Çok Dinlenenler', emoji: '🔥', url: 'https://listen.powerapp.com.tr/powerturk/mpeg/icecast.audio' },
         { id: 'power_fm', name: 'Power FM', desc: 'Yabancı Hit & Pop Müzik', emoji: '🎵', url: 'https://listen.powerapp.com.tr/powerfm/mpeg/icecast.audio' },
         { id: 'slow_turk', name: 'Slow Türk', desc: 'Duygusal & Türkçe Aşk Şarkıları', emoji: '❤️', url: 'https://radyo.duhnet.tv/slowturk' },
-        { id: 'kral_pop', name: 'Kral Pop', desc: 'Türkçe Pop Müziğin Zirvesi', emoji: '👑', url: 'https://moondigitalmaster.radyotvonline.net/kralpop/playlist.m3u8' },
-        { id: 'kral_fm', name: 'Kral FM', desc: 'İlaç Gibi Radyo (Arabesk & Damar)', emoji: '👑', url: 'https://moondigitalmaster.radyotvonline.net/kralfm/playlist.m3u8' },
+        { id: 'kral_pop', name: 'Kral Pop', desc: 'Türkçe Pop Müziğin Zirvesi', emoji: '👑', url: 'https://dygedge.radyotvonline.net/kralpop/playlist.m3u8' },
+        { id: 'kral_fm', name: 'Kral FM', desc: 'İlaç Gibi Radyo (Arabesk & Damar)', emoji: '👑', url: 'https://dygedge.radyotvonline.net/kralfm/playlist.m3u8' },
         { id: 'alem_fm', name: 'Alem FM', desc: 'Cümle Alem Burada (Pop & Eğlence)', emoji: '🎉', url: 'https://turkmedya.radyotvonline.net/alemfmaac' },
         { id: 'pal_fm', name: 'Pal FM', desc: 'Müziğin Kalbi Burada Atıyor', emoji: '✨', url: 'https://moondigitaledge.radyotvonline.net/palfm/playlist.m3u8' },
         { id: 'radyo_viva', name: 'Radyo Viva', desc: 'Türkçe Pop & Nostalji Klasikleri', emoji: '🎶', url: 'https://moondigitaledge.radyotvonline.net/radyoviva/playlist.m3u8' }
