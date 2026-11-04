@@ -53,13 +53,17 @@ const wsStatusMap = {
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
     // Canlı test endpoint'i: ffmpeg ile radyo akış testini doğrudan çalıştırıp sonucu JSON verir
-    if (req.url === '/test-radio') {
+    if (req.url.startsWith('/test-radio')) {
+        const u = new URL(req.url, 'http://localhost');
+        const testUrl = u.searchParams.get('url') || 'https://rd-trtfm.medya.trt.com.tr/master_128.m3u8';
+        const testTimeout = parseInt(u.searchParams.get('sec') || '7', 10);
+
         const testProc = spawn(ffmpegPath, [
             '-reconnect', '1',
             '-reconnect_streamed', '1',
             '-reconnect_delay_max', '5',
-            '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            '-i', 'https://erzincan.80.yayin.com.tr/stream',
+            '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '-i', testUrl,
             '-c:a', 'libopus',
             '-b:a', '96k',
             '-ar', '48000',
@@ -73,15 +77,20 @@ const server = http.createServer((req, res) => {
         testProc.stdout.on('data', c => { stdoutBytes += c.length; });
         testProc.stderr.on('data', c => { stderrText += c.toString(); });
 
+        let exitInfo = 'Çalışıyor';
+        testProc.on('close', (code, sig) => { exitInfo = `Kapandı: kod ${code}, sinyal ${sig}`; });
+
         setTimeout(() => {
             try { testProc.kill(); } catch (e) { }
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({
                 status: stdoutBytes > 0 ? 'SUCCESS' : 'FAILED',
+                testUrl,
                 stdoutBytes,
-                stderr: stderrText.slice(0, 1500)
+                exitInfo,
+                stderr: stderrText.slice(-1500)
             }, null, 2));
-        }, 3000);
+        }, testTimeout * 1000);
         return;
     }
 
