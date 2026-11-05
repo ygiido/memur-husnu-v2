@@ -53,7 +53,26 @@ const wsStatusMap = {
 
 async function getAudioStreamForUrl(url) {
     if (url.includes('.m3u8')) {
-        return m3u8stream(url, {
+        let streamUrl = url;
+        try {
+            const manifestRes = await fetch(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+            if (manifestRes.ok) {
+                const text = await manifestRes.text();
+                if (text.includes('#EXT-X-STREAM-INF')) {
+                    const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+                    if (lines.length > 0) {
+                        const sub = lines[0];
+                        streamUrl = sub.startsWith('http') ? sub : new URL(sub, url).toString();
+                    }
+                }
+            }
+        } catch (e) { }
+
+        return m3u8stream(streamUrl, {
             requestOptions: {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -338,18 +357,20 @@ const RADIO_STATIONS = {
         { id: 'power_turk', name: 'Power Türk', desc: 'Türkçe Pop & En Çok Dinlenenler', emoji: '🔥', url: 'https://listen.powerapp.com.tr/powerturk/mpeg/icecast.audio' },
         { id: 'power_fm', name: 'Power FM', desc: 'Yabancı Hit & Pop Müzik', emoji: '🎵', url: 'https://listen.powerapp.com.tr/powerfm/mpeg/icecast.audio' },
         { id: 'slow_turk', name: 'Slow Türk', desc: 'Duygusal & Türkçe Aşk Şarkıları', emoji: '❤️', url: 'https://radyo.duhnet.tv/slowturk' },
-        { id: 'kral_pop', name: 'Kral Pop', desc: 'Türkçe Pop Müziğin Zirvesi', emoji: '👑', url: 'https://dygedge.radyotvonline.net/kralpop/playlist.m3u8' },
-        { id: 'kral_fm', name: 'Kral FM', desc: 'İlaç Gibi Radyo (Arabesk & Damar)', emoji: '👑', url: 'https://dygedge.radyotvonline.net/kralfm/playlist.m3u8' },
+        { id: 'super_fm', name: 'Süper FM', desc: 'En İyi Türkçe Pop Hitleri', emoji: '⚡', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/SUPER_FM_SC' },
+        { id: 'joy_turk', name: 'Joy Türk', desc: 'Aşkın Sesi Türkçe Slow Müzik', emoji: '🌹', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/JOY_TURK_SC' },
+        { id: 'kral_pop', name: 'Kral Pop', desc: 'Türkçe Pop Müziğin Zirvesi', emoji: '👑', url: 'http://46.20.3.201:80/' },
+        { id: 'kral_fm', name: 'Kral FM', desc: 'İlaç Gibi Radyo (Arabesk & Damar)', emoji: '👑', url: 'http://46.20.3.204:80/' },
         { id: 'alem_fm', name: 'Alem FM', desc: 'Cümle Alem Burada (Pop & Eğlence)', emoji: '🎉', url: 'https://turkmedya.radyotvonline.net/alemfmaac' },
         { id: 'pal_fm', name: 'Pal FM', desc: 'Müziğin Kalbi Burada Atıyor', emoji: '✨', url: 'https://moondigitaledge.radyotvonline.net/palfm/playlist.m3u8' },
-        { id: 'radyo_viva', name: 'Radyo Viva', desc: 'Türkçe Pop & Nostalji Klasikleri', emoji: '🎶', url: 'https://moondigitaledge.radyotvonline.net/radyoviva/playlist.m3u8' }
+        { id: 'radyo_viva', name: 'Radyo Viva', desc: 'Türkçe Pop & Nostalji Klasikleri', emoji: '🎶', url: 'http://shoutcast.radyogrup.com:1020/;' }
     ],
     haber: [
         { id: 'trt_radyo1', name: 'TRT Radyo 1', desc: 'Haber, Kültür & Edebiyat', emoji: '📰', url: 'https://rd-trtradyo1.medya.trt.com.tr/master_128.m3u8' },
         { id: 'ntv_radyo', name: 'NTV Radyo', desc: 'Haberin Doğru Adresi & Gündem', emoji: '🎙️', url: 'http://ntvrdwmp.radyotvonline.com/' },
         { id: 'cnn_turk', name: 'CNN Türk Radyo', desc: 'İlk Bilen Siz Olun (Canlı Yayın)', emoji: '📺', url: 'https://moondigitaledge2.radyotvonline.net/cnnturk/playlist.m3u8' },
         { id: 'a_haber', name: 'A Haber Radyo', desc: 'Türkiye ve Dünya Gündemi', emoji: '🔴', url: 'https://trkvz-radyolar.ercdn.net/ahaberradyo/playlist.m3u8' },
-        { id: 'haberturk', name: 'Habertürk Radyo', desc: 'Doğru Haber & Tarafsız Yorum', emoji: '📰', url: 'https://moondigitalmaster.radyotvonline.net/haberturkradyo/playlist.m3u8' },
+        { id: 'trt_nagme', name: 'TRT Nağme', desc: 'Klasik Türk Sanat Müziği', emoji: '🎻', url: 'https://rd-trtnagme.medya.trt.com.tr/master_128.m3u8' },
         { id: 'a_spor', name: 'A Spor Radyo', desc: 'Canlı Maç Anlatımı & Spor Haberleri', emoji: '⚽', url: 'https://trkvz-radyolar.ercdn.net/asporradyo/playlist.m3u8' },
         { id: 'diyanet_radyo', name: 'Diyanet Radyo', desc: 'İyiliğin ve Doğruluğun Sesi', emoji: '🕌', url: 'https://eustr73.mediatriple.net/videoonlylive/mtikoimxnztxlive/broadcast_5e3c1171d7d2a.smil/playlist.m3u8' }
     ]
@@ -2064,7 +2085,8 @@ client.once('ready', async () => {
                 {
                     name: 'secim', type: 3, description: 'Tahmininiz', required: true, choices: [
                         { name: 'Yazı', value: 'yazi' },
-                        { name: 'Tura', value: 'tura' }
+                        { name: 'Tura', value: 'tura' },
+                        { name: 'Dik (%5 Şans - 25x Kazanç!)', value: 'dik' }
                     ]
                 }
             ]
@@ -2337,41 +2359,62 @@ client.on('interactionCreate', async interaction => {
                 if (uData.papel === undefined) uData.papel = 0;
 
                 if (uData.papel < miktar) {
-                    return interaction.reply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel} Papel**.`, ephemeral: true });
+                    return interaction.reply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**.`, ephemeral: true });
                 }
 
                 const roll = Math.random() * 100;
                 let outcome = '';
-                let win = false;
 
-                if (roll < 45) {
-                    outcome = 'yazi';
-                    win = (secim === 'yazi');
-                } else if (roll < 90) {
-                    outcome = 'tura';
-                    win = (secim === 'tura');
-                } else {
+                // %5 dik, %47.5 yazi, %47.5 tura
+                if (roll < 5) {
                     outcome = 'dik';
-                    win = false;
+                } else if (roll < 52.5) {
+                    outcome = 'yazi';
+                } else {
+                    outcome = 'tura';
                 }
 
-                const secimText = secim === 'yazi' ? 'Yazı' : 'Tura';
-                const outcomeText = outcome === 'dik' ? 'Para dik geldi! 🪙 (Kasa Kazandı)' : (outcome === 'yazi' ? 'Yazı 🪙' : 'Tura 🪙');
+                const secimMap = {
+                    yazi: 'Yazı',
+                    tura: 'Tura',
+                    dik: 'Dik'
+                };
+                const secimText = secimMap[secim] || secim;
 
-                if (win) {
-                    uData.papel += miktar;
-                    saveDB(db);
-                    return interaction.reply({
-                        content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n🎉 **Tebrikler, kazandınız!** +${miktar} Papel kazandınız.\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
-                        ephemeral: true
-                    });
+                if (outcome === 'dik') {
+                    if (secim === 'dik') {
+                        // Dik bildi -> Yapılan bahsin 25 katı kazanç
+                        const kazanc = miktar * 25;
+                        uData.papel += kazanc;
+                        saveDB(db);
+                        return interaction.reply({
+                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙⚡\nTahmininiz: **${secimText}**\n\n🎉 **İNANILMAZ ŞANS!** Paranın dik duracağını doğru tahmin ettiniz!\n🔥 Bahsinizin tam **25 katı** ödendi: **+${kazanc.toLocaleString('tr-TR')} Papel**!\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            ephemeral: true
+                        });
+                    } else {
+                        // Dik geldi ama oyuncu yazı veya tura seçmişti: Kasa kazanmasın, bahis iade!
+                        return interaction.reply({
+                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙\nTahmininiz: **${secimText}**\n\n⚖️ **Kasa Kazanamadı (Berabere)!** Para dik durduğu için kasa kazanamaz; **${miktar.toLocaleString('tr-TR')} Papel** bahsiniz iade edildi.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            ephemeral: true
+                        });
+                    }
                 } else {
-                    uData.papel -= miktar;
-                    saveDB(db);
-                    return interaction.reply({
-                        content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n💀 **Maalesef kaybettiniz!** -${miktar} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
-                        ephemeral: true
-                    });
+                    const outcomeText = outcome === 'yazi' ? 'Yazı 🪙' : 'Tura 🪙';
+                    if (secim === outcome) {
+                        uData.papel += miktar;
+                        saveDB(db);
+                        return interaction.reply({
+                            content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n🎉 **Tebrikler, kazandınız!** +${miktar.toLocaleString('tr-TR')} Papel kazandınız.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            ephemeral: true
+                        });
+                    } else {
+                        uData.papel -= miktar;
+                        saveDB(db);
+                        return interaction.reply({
+                            content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n💀 **Maalesef kaybettiniz!** -${miktar.toLocaleString('tr-TR')} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            ephemeral: true
+                        });
+                    }
                 }
             }
 
