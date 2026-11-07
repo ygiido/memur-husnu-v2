@@ -1903,56 +1903,134 @@ function buildLeaderboardView(guild, guildDb, type = 'xp', targetUserId = null) 
     }
 }
 
-async function buildTopInviteView(guild) {
-    let invites;
+async function buildTopInviteView(guild, timeFilter = 'all') {
+    let invites = new Map();
     try {
-        invites = await guild.invites.fetch();
-    } catch (err) {
-        return {
-            content: '❌ Davetler listelenirken bir hata oluştu veya botun `Davetleri Yönet (Manage Guild)` yetkisi eksik.',
-            embeds: [],
-            components: [],
-            ephemeral: true
-        };
-    }
+        const fetched = await guild.invites.fetch();
+        invites = fetched;
+    } catch (err) { }
 
+    const db = getDB();
+    const guildDb = (db && db[guild.id]) || {};
+    const now = Date.now();
+
+    const timeLimits = {
+        day: 24 * 60 * 60 * 1000,
+        week: 7 * 24 * 60 * 60 * 1000,
+        month: 30 * 24 * 60 * 60 * 1000
+    };
+    const timeLabels = {
+        all: 'Tüm Zamanlar',
+        day: 'Son 1 Gün (24 Saat)',
+        week: 'Son 1 Hafta (7 Gün)',
+        month: 'Son 1 Ay (30 Gün)'
+    };
+    const currentLimit = timeLimits[timeFilter] || null;
+    const filterLabel = timeLabels[timeFilter] || 'Tüm Zamanlar';
+
+    // Kullanıcı bazlı davet verileri
     const userInvites = new Map();
-    let totalServerUses = 0;
+    let totalUsesCount = 0;
 
-    for (const invite of invites.values()) {
-        totalServerUses += (invite.uses || 0);
-        if (!invite.inviter) continue;
+    if (timeFilter === 'all') {
+        for (const invite of invites.values()) {
+            totalUsesCount += (invite.uses || 0);
+            if (!invite.inviter) continue;
 
-        const inviterId = invite.inviter.id;
-        if (!userInvites.has(inviterId)) {
-            userInvites.set(inviterId, {
-                user: invite.inviter,
-                totalUses: 0,
-                linksCount: 0
-            });
+            const inviterId = invite.inviter.id;
+            if (!userInvites.has(inviterId)) {
+                userInvites.set(inviterId, {
+                    userId: inviterId,
+                    count: 0,
+                    activeLinks: 0
+                });
+            }
+            const entry = userInvites.get(inviterId);
+            entry.count += (invite.uses || 0);
+            entry.activeLinks += 1;
         }
-        const entry = userInvites.get(inviterId);
-        entry.totalUses += (invite.uses || 0);
-        entry.linksCount += 1;
+
+        const usersObj = guildDb.users || {};
+        const dbJoinCounts = {};
+        for (const [uid, u] of Object.entries(usersObj)) {
+            if (u.inviterId) {
+                dbJoinCounts[u.inviterId] = (dbJoinCounts[u.inviterId] || 0) + 1;
+            }
+        }
+        for (const [inviterId, count] of Object.entries(dbJoinCounts)) {
+            if (!userInvites.has(inviterId)) {
+                userInvites.set(inviterId, {
+                    userId: inviterId,
+                    count: count,
+                    activeLinks: 0
+                });
+                totalUsesCount += count;
+            } else {
+                const entry = userInvites.get(inviterId);
+                if (count > entry.count) {
+                    totalUsesCount += (count - entry.count);
+                    entry.count = count;
+                }
+            }
+        }
+    } else {
+        // Zaman filtreli (Son 1 gün, 1 hafta, 1 ay)
+        const usersObj = guildDb.users || {};
+        for (const [uid, u] of Object.entries(usersObj)) {
+            if (u.inviterId && u.lastJoin && (now - u.lastJoin <= currentLimit)) {
+                totalUsesCount += 1;
+                if (!userInvites.has(u.inviterId)) {
+                    userInvites.set(u.inviterId, {
+                        userId: u.inviterId,
+                        count: 0,
+                        activeLinks: 0
+                    });
+                }
+                userInvites.get(u.inviterId).count += 1;
+            }
+        }
+
+        // Bu zaman aralığında oluşturulmuş aktif linklerin kullanımlarını da ekle
+        for (const invite of invites.values()) {
+            if (invite.createdTimestamp && (now - invite.createdTimestamp <= currentLimit)) {
+                if (invite.inviter) {
+                    const inviterId = invite.inviter.id;
+                    if (!userInvites.has(inviterId)) {
+                        userInvites.set(inviterId, {
+                            userId: inviterId,
+                            count: 0,
+                            activeLinks: 0
+                        });
+                    }
+                    const entry = userInvites.get(inviterId);
+                    entry.activeLinks += 1;
+                    if (invite.uses > entry.count) {
+                        totalUsesCount += (invite.uses - entry.count);
+                        entry.count = invite.uses;
+                    }
+                }
+            }
+        }
     }
 
     const sorted = Array.from(userInvites.values())
-        .sort((a, b) => b.totalUses - a.totalUses);
+        .filter(item => item.count > 0)
+        .sort((a, b) => b.count - a.count);
 
     const top15 = sorted.slice(0, 15);
-    let desc = `### 📨 ${guild.name} — En Çok Davet Yapanlar (Top Davet)\n` +
-        `*Sunucuya en çok üye kazandıran yetkili ve üyelerin güncel davet liderlik tablosu.*\n\n` +
-        `📊 **GENEL DAVET İSTATİSTİKLERİ**\n` +
-        `> 🔗 **Toplam Aktif Davet Linki:** \`${invites.size} adet\`\n` +
-        `> 👥 **Davet Linkleriyle Gelen Toplam Üye:** \`${totalServerUses.toLocaleString('tr-TR')}\`\n`;
+    let desc = `### 📨 ${guild.name} — En Çok Davet Yapanlar\n` +
+        `⏱️ **Zaman Filtresi:** \`${filterLabel}\`\n\n` +
+        `📊 **DÖNEMLİK DAVET İSTATİSTİKLERİ**\n` +
+        `> 🔗 **Aktif Davet Linki:** \`${invites.size} adet\`\n` +
+        `> 👥 **Bu Dönemde Gelen Üye:** \`${totalUsesCount.toLocaleString('tr-TR')}\`\n`;
 
-    if (guild.vanityURLCode) {
+    if (guild.vanityURLCode && timeFilter === 'all') {
         desc += `> 🌐 **Özel Vanity URL (.gg/${guild.vanityURLCode}):** \`${(guild.vanityURLUses || 0).toLocaleString('tr-TR')} kullanım\`\n`;
     }
     desc += `\n**🏆 EN ÇOK DAVET EDEN İLK ${top15.length} ÜYE**\n`;
 
-    if (top15.length === 0 || totalServerUses === 0) {
-        desc += `> ℹ️ *Sunucuda henüz aktif davet linkiyle üye getiren kullanıcı bulunamadı.*`;
+    if (top15.length === 0 || totalUsesCount === 0) {
+        desc += `> ℹ️ *Seçilen zaman aralığında (**${filterLabel}**) davetle katılan üye bulunamadı.*`;
     } else {
         top15.forEach((item, index) => {
             const rankNum = index + 1;
@@ -1961,19 +2039,24 @@ async function buildTopInviteView(guild) {
             else if (rankNum === 2) badge = '🥈 **#2**';
             else if (rankNum === 3) badge = '🥉 **#3**';
 
-            desc += `${badge} <@${item.user.id}> — **${item.totalUses.toLocaleString('tr-TR')} Davet** *(Link: \`${item.linksCount} adet\`)*\n`;
+            const linkInfo = item.activeLinks > 0 ? ` *(Link: \`${item.activeLinks} adet\`)*` : '';
+            desc += `${badge} <@${item.userId}> — **${item.count.toLocaleString('tr-TR')} Davet**${linkInfo}\n`;
         });
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0xf1c40f)
+        .setColor(timeFilter === 'all' ? 0xf1c40f : (timeFilter === 'day' ? 0x2ecc71 : 0x3498db))
         .setDescription(desc)
         .setThumbnail(guild.iconURL({ dynamic: true }) || null)
-        .setFooter({ text: `Yönetici Özel Paneli • ${guild.name}`, iconURL: guild.iconURL({ dynamic: true }) || undefined })
+        .setFooter({ text: `Yönetici Özel Paneli • Filtre: ${filterLabel}`, iconURL: guild.iconURL({ dynamic: true }) || undefined })
         .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_refresh_top_invite').setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄')
+        new ButtonBuilder().setCustomId('topinv_time_day').setLabel('Son 1 Gün').setStyle(timeFilter === 'day' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('⚡').setDisabled(timeFilter === 'day'),
+        new ButtonBuilder().setCustomId('topinv_time_week').setLabel('Son 1 Hafta').setStyle(timeFilter === 'week' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('📅').setDisabled(timeFilter === 'week'),
+        new ButtonBuilder().setCustomId('topinv_time_month').setLabel('Son 1 Ay').setStyle(timeFilter === 'month' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🗓️').setDisabled(timeFilter === 'month'),
+        new ButtonBuilder().setCustomId('topinv_time_all').setLabel('Tüm Zamanlar').setStyle(timeFilter === 'all' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🌐').setDisabled(timeFilter === 'all'),
+        new ButtonBuilder().setCustomId(`topinv_refresh_${timeFilter}`).setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄')
     );
 
     return { embeds: [embed], components: [row], ephemeral: true };
@@ -2329,7 +2412,21 @@ client.once('ready', async () => {
         {
             name: 'top-invite',
             description: 'Sunucudaki en çok davet yapan üyelerin sıralamasını listeler (Sadece Yöneticiler).',
-            default_member_permissions: PermissionsBitField.Flags.Administrator.toString()
+            default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
+            options: [
+                {
+                    name: 'zaman',
+                    type: 3,
+                    description: 'Hangi zaman aralığındaki davetleri görmek istersiniz?',
+                    required: false,
+                    choices: [
+                        { name: 'Son 1 Gün (24 Saat)', value: 'day' },
+                        { name: 'Son 1 Hafta (7 Gün)', value: 'week' },
+                        { name: 'Son 1 Ay (30 Gün)', value: 'month' },
+                        { name: 'Tüm Zamanlar', value: 'all' }
+                    ]
+                }
+            ]
         }
     ];
 
@@ -2504,18 +2601,21 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (commandName === 'siralama' || commandName === 'top') {
+                await interaction.deferReply().catch(() => { });
                 ensureGuildDB(db, guildId);
-                return interaction.reply(buildLeaderboardView(interaction.guild, db[guildId], 'xp', interaction.user.id));
+                const view = buildLeaderboardView(interaction.guild, db[guildId], 'xp', interaction.user.id);
+                return interaction.editReply(view).catch(() => { });
             }
 
             if (commandName === 'top-invite') {
-                const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
+                const isAdmin = Boolean(interaction.memberPermissions && interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator));
                 if (!isAdmin) {
-                    return interaction.reply({ content: '❌ Bu komutu sadece **Sunucu Yöneticileri** kullanabilir.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ Bu komutu sadece **Sunucu Yöneticileri** kullanabilir.' });
                 }
-                await interaction.deferReply({ ephemeral: true });
-                const view = await buildTopInviteView(interaction.guild);
-                return interaction.editReply(view);
+                const zaman = interaction.options.getString('zaman') || 'all';
+                const view = await buildTopInviteView(interaction.guild, zaman);
+                return interaction.editReply(view).catch(() => { });
             }
 
             if (commandName === 'market') {
@@ -3441,14 +3541,21 @@ client.on('interactionCreate', async interaction => {
                 return interaction.update(buildLeaderboardView(interaction.guild, db[guildId], 'papel', interaction.user.id)).catch(() => { });
             }
 
-            // --- TOP INVITE YENİLEME BUTONU ---
-            if (customId === 'btn_refresh_top_invite') {
-                const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+            // --- TOP INVITE FİLTRE & YENİLEME BUTONLARI ---
+            if (customId.startsWith('topinv_time_') || customId.startsWith('topinv_refresh_') || customId === 'btn_refresh_top_invite') {
+                const isAdmin = Boolean(interaction.memberPermissions && interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator));
                 if (!isAdmin) {
-                    return interaction.reply({ content: '❌ Bu listeyi sadece **Sunucu Yöneticileri** yenileyebilir.', ephemeral: true });
+                    return interaction.reply({ content: '❌ Bu paneli sadece **Sunucu Yöneticileri** kullanabilir.', ephemeral: true });
                 }
-                const view = await buildTopInviteView(interaction.guild);
-                return interaction.update(view).catch(() => { });
+                await interaction.deferUpdate().catch(() => { });
+                let timeFilter = 'all';
+                if (customId.startsWith('topinv_time_')) {
+                    timeFilter = customId.replace('topinv_time_', '');
+                } else if (customId.startsWith('topinv_refresh_')) {
+                    timeFilter = customId.replace('topinv_refresh_', '');
+                }
+                const view = await buildTopInviteView(interaction.guild, timeFilter);
+                return interaction.editReply(view).catch(() => { });
             }
 
             if (customId === 'btn_profile_how_it_works') {
