@@ -1793,6 +1793,192 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
     return { embeds: [embed], components: [row], ephemeral: true };
 }
 
+function buildLeaderboardView(guild, guildDb, type = 'xp', targetUserId = null) {
+    const isXP = (type === 'xp');
+
+    if (isXP) {
+        const list = Object.entries(guildDb.users || {})
+            .filter(([_, u]) => (u.xp || 0) > 0 && !u.xpDisabled)
+            .sort((a, b) => (b[1].xp || 0) - (a[1].xp || 0));
+
+        let userRank = null;
+        if (targetUserId) {
+            const idx = list.findIndex(([uid]) => uid === targetUserId);
+            if (idx !== -1) {
+                userRank = { pos: idx + 1, data: list[idx][1] };
+            }
+        }
+
+        const top10 = list.slice(0, 10);
+        let desc = `### 🏆 ${guild.name} — XP & Seviye Liderlik Sıralaması\n` +
+            `*Ses odalarında ve metin kanallarında en aktif olan ilk 10 üyemiz.*\n\n`;
+
+        if (top10.length === 0) {
+            desc += `> ℹ️ *Henüz sunucuda XP kazanmış bir üye bulunmuyor.*\n`;
+        } else {
+            top10.forEach(([uid, u], index) => {
+                const rankNum = index + 1;
+                let medal = `\`#${rankNum}\``;
+                if (rankNum === 1) medal = '🥇 **#1**';
+                else if (rankNum === 2) medal = '🥈 **#2**';
+                else if (rankNum === 3) medal = '🥉 **#3**';
+
+                const lvl = calculateLevel(u.xp || 0);
+                const title = XP_LEVELS.find(l => l.level === lvl)?.title || 'Gezgin';
+                desc += `${medal} <@${uid}> — **${(u.xp || 0).toLocaleString('tr-TR')} XP**\n> 🔰 \`Seviye ${lvl}\` • *${title}*\n\n`;
+            });
+        }
+
+        if (userRank) {
+            const lvl = calculateLevel(userRank.data.xp || 0);
+            desc += `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `🎯 **Sizin Sıranız:** **#${userRank.pos.toLocaleString('tr-TR')}** • **${(userRank.data.xp || 0).toLocaleString('tr-TR')} XP** *(Seviye ${lvl})*`;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865f2)
+            .setDescription(desc)
+            .setThumbnail(guild.iconURL({ dynamic: true }) || null)
+            .setFooter({ text: `${guild.name} • Toplam ${list.length} sıralanan aktif üye`, iconURL: guild.iconURL({ dynamic: true }) || undefined })
+            .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('lb_show_xp').setLabel('XP Sıralaması').setStyle(ButtonStyle.Primary).setEmoji('🏆').setDisabled(true),
+            new ButtonBuilder().setCustomId('lb_show_papel').setLabel('Papel Sıralaması').setStyle(ButtonStyle.Secondary).setEmoji('💰'),
+            new ButtonBuilder().setCustomId('lb_refresh_xp').setLabel('Yenile').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
+        );
+
+        return { embeds: [embed], components: [row] };
+    } else {
+        const list = Object.entries(guildDb.users || {})
+            .filter(([_, u]) => (u.papel || 0) > 0)
+            .sort((a, b) => (b[1].papel || 0) - (a[1].papel || 0));
+
+        let userRank = null;
+        if (targetUserId) {
+            const idx = list.findIndex(([uid]) => uid === targetUserId);
+            if (idx !== -1) {
+                userRank = { pos: idx + 1, data: list[idx][1] };
+            }
+        }
+
+        const top10 = list.slice(0, 10);
+        let desc = `### 💰 ${guild.name} — Papel Zenginlik Liderlik Sıralaması\n` +
+            `*Cüzdanında en yüksek Papel bakiyesi bulunduran en zengin ilk 10 üyemiz.*\n\n`;
+
+        if (top10.length === 0) {
+            desc += `> ℹ️ *Henüz sunucuda cüzdanında Papel bulunan bir üye yok.*\n`;
+        } else {
+            top10.forEach(([uid, u], index) => {
+                const rankNum = index + 1;
+                let medal = `\`#${rankNum}\``;
+                if (rankNum === 1) medal = '🥇 **#1**';
+                else if (rankNum === 2) medal = '🥈 **#2**';
+                else if (rankNum === 3) medal = '🥉 **#3**';
+
+                const spent = u.spentPapel ? ` *(💸 ${u.spentPapel.toLocaleString('tr-TR')} harcandı)*` : '';
+                desc += `${medal} <@${uid}> — **${(u.papel || 0).toLocaleString('tr-TR')} Papel** 💵${spent}\n\n`;
+            });
+        }
+
+        if (userRank) {
+            desc += `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `🎯 **Sizin Sıranız:** **#${userRank.pos.toLocaleString('tr-TR')}** • Bakiye: **${(userRank.data.papel || 0).toLocaleString('tr-TR')} Papel** 💵`;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x2ecc71)
+            .setDescription(desc)
+            .setThumbnail(guild.iconURL({ dynamic: true }) || null)
+            .setFooter({ text: `${guild.name} • Toplam ${list.length} Papel sahibi`, iconURL: guild.iconURL({ dynamic: true }) || undefined })
+            .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('lb_show_xp').setLabel('XP Sıralaması').setStyle(ButtonStyle.Secondary).setEmoji('🏆'),
+            new ButtonBuilder().setCustomId('lb_show_papel').setLabel('Papel Sıralaması').setStyle(ButtonStyle.Success).setEmoji('💰').setDisabled(true),
+            new ButtonBuilder().setCustomId('lb_refresh_papel').setLabel('Yenile').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
+        );
+
+        return { embeds: [embed], components: [row] };
+    }
+}
+
+async function buildTopInviteView(guild) {
+    let invites;
+    try {
+        invites = await guild.invites.fetch();
+    } catch (err) {
+        return {
+            content: '❌ Davetler listelenirken bir hata oluştu veya botun `Davetleri Yönet (Manage Guild)` yetkisi eksik.',
+            embeds: [],
+            components: [],
+            ephemeral: true
+        };
+    }
+
+    const userInvites = new Map();
+    let totalServerUses = 0;
+
+    for (const invite of invites.values()) {
+        totalServerUses += (invite.uses || 0);
+        if (!invite.inviter) continue;
+
+        const inviterId = invite.inviter.id;
+        if (!userInvites.has(inviterId)) {
+            userInvites.set(inviterId, {
+                user: invite.inviter,
+                totalUses: 0,
+                linksCount: 0
+            });
+        }
+        const entry = userInvites.get(inviterId);
+        entry.totalUses += (invite.uses || 0);
+        entry.linksCount += 1;
+    }
+
+    const sorted = Array.from(userInvites.values())
+        .sort((a, b) => b.totalUses - a.totalUses);
+
+    const top15 = sorted.slice(0, 15);
+    let desc = `### 📨 ${guild.name} — En Çok Davet Yapanlar (Top Davet)\n` +
+        `*Sunucuya en çok üye kazandıran yetkili ve üyelerin güncel davet liderlik tablosu.*\n\n` +
+        `📊 **GENEL DAVET İSTATİSTİKLERİ**\n` +
+        `> 🔗 **Toplam Aktif Davet Linki:** \`${invites.size} adet\`\n` +
+        `> 👥 **Davet Linkleriyle Gelen Toplam Üye:** \`${totalServerUses.toLocaleString('tr-TR')}\`\n`;
+
+    if (guild.vanityURLCode) {
+        desc += `> 🌐 **Özel Vanity URL (.gg/${guild.vanityURLCode}):** \`${(guild.vanityURLUses || 0).toLocaleString('tr-TR')} kullanım\`\n`;
+    }
+    desc += `\n**🏆 EN ÇOK DAVET EDEN İLK ${top15.length} ÜYE**\n`;
+
+    if (top15.length === 0 || totalServerUses === 0) {
+        desc += `> ℹ️ *Sunucuda henüz aktif davet linkiyle üye getiren kullanıcı bulunamadı.*`;
+    } else {
+        top15.forEach((item, index) => {
+            const rankNum = index + 1;
+            let badge = `\`#${rankNum}\``;
+            if (rankNum === 1) badge = '🥇 **#1**';
+            else if (rankNum === 2) badge = '🥈 **#2**';
+            else if (rankNum === 3) badge = '🥉 **#3**';
+
+            desc += `${badge} <@${item.user.id}> — **${item.totalUses.toLocaleString('tr-TR')} Davet** *(Link: \`${item.linksCount} adet\`)*\n`;
+        });
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(0xf1c40f)
+        .setDescription(desc)
+        .setThumbnail(guild.iconURL({ dynamic: true }) || null)
+        .setFooter({ text: `Yönetici Özel Paneli • ${guild.name}`, iconURL: guild.iconURL({ dynamic: true }) || undefined })
+        .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('btn_refresh_top_invite').setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄')
+    );
+
+    return { embeds: [embed], components: [row], ephemeral: true };
+}
+
 // ============================================================================
 // GEÇİCİ ODA PANEL OLUŞTURUCU (TEMP VOICE UI - EMOJİSİZ TEMİZ YAPI)
 // ============================================================================
@@ -2131,6 +2317,19 @@ client.once('ready', async () => {
                     ]
                 }
             ]
+        },
+        {
+            name: 'siralama',
+            description: 'Sunucu içi XP Seviye ve Papel Cüzdan liderlik sıralamasını görüntüler (Butonlu geçiş).'
+        },
+        {
+            name: 'top',
+            description: 'Sunucu içi XP Seviye ve Papel Cüzdan liderlik sıralamasını görüntüler (Butonlu geçiş).'
+        },
+        {
+            name: 'top-invite',
+            description: 'Sunucudaki en çok davet yapan üyelerin sıralamasını listeler (Sadece Yöneticiler).',
+            default_member_permissions: PermissionsBitField.Flags.Administrator.toString()
         }
     ];
 
@@ -2302,6 +2501,21 @@ client.on('interactionCreate', async interaction => {
                 const targetUser = interaction.options.getUser('kullanici') || interaction.user;
                 ensureGuildDB(db, guildId);
                 return interaction.reply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
+            }
+
+            if (commandName === 'siralama' || commandName === 'top') {
+                ensureGuildDB(db, guildId);
+                return interaction.reply(buildLeaderboardView(interaction.guild, db[guildId], 'xp', interaction.user.id));
+            }
+
+            if (commandName === 'top-invite') {
+                const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+                if (!isAdmin) {
+                    return interaction.reply({ content: '❌ Bu komutu sadece **Sunucu Yöneticileri** kullanabilir.', ephemeral: true });
+                }
+                await interaction.deferReply({ ephemeral: true });
+                const view = await buildTopInviteView(interaction.guild);
+                return interaction.editReply(view);
             }
 
             if (commandName === 'market') {
@@ -3214,6 +3428,27 @@ client.on('interactionCreate', async interaction => {
                     targetUser = client.users.cache.get(targetUid) || interaction.user;
                 }
                 return interaction.update(buildUserProfileCard(targetUser, interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            // --- LİDERLİK TABLOSU (SIRALAMA) BUTONLARI ---
+            if (customId === 'lb_show_xp' || customId === 'lb_refresh_xp') {
+                ensureGuildDB(db, guildId);
+                return interaction.update(buildLeaderboardView(interaction.guild, db[guildId], 'xp', interaction.user.id)).catch(() => { });
+            }
+
+            if (customId === 'lb_show_papel' || customId === 'lb_refresh_papel') {
+                ensureGuildDB(db, guildId);
+                return interaction.update(buildLeaderboardView(interaction.guild, db[guildId], 'papel', interaction.user.id)).catch(() => { });
+            }
+
+            // --- TOP INVITE YENİLEME BUTONU ---
+            if (customId === 'btn_refresh_top_invite') {
+                const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+                if (!isAdmin) {
+                    return interaction.reply({ content: '❌ Bu listeyi sadece **Sunucu Yöneticileri** yenileyebilir.', ephemeral: true });
+                }
+                const view = await buildTopInviteView(interaction.guild);
+                return interaction.update(view).catch(() => { });
             }
 
             if (customId === 'btn_profile_how_it_works') {
