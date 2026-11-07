@@ -440,13 +440,11 @@ function buildRadioView(guild, voiceChannelId, activeStation = null) {
             .setCustomId('btn_radio_stop')
             .setLabel('Radyoyu Kapat & Ayrıl')
             .setStyle(ButtonStyle.Danger)
-            .setEmoji('⏹️')
             .setDisabled(!Boolean(currentPlaying)),
         new ButtonBuilder()
             .setCustomId(`btn_radio_refresh_${voiceChannelId || 'none'}`)
             .setLabel('Yenile')
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji('🔄')
     );
 
     return { embeds: [embed], components: [musicRow, newsRow, btnRow] };
@@ -1350,14 +1348,14 @@ async function handleLinkViolation(message, db, guildId) {
 }
 function buildDashboardButtons(activeTab = 'ayar') {
     const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('nav_panel_ayar').setLabel('Sistem Ayarları').setStyle(activeTab === 'ayar' ? ButtonStyle.Primary : ButtonStyle.Secondary).setEmoji('⚙️'),
-        new ButtonBuilder().setCustomId('nav_panel_log').setLabel('Log Ayarları').setStyle(activeTab === 'log' ? ButtonStyle.Primary : ButtonStyle.Secondary).setEmoji('📜'),
-        new ButtonBuilder().setCustomId('nav_panel_ticket').setLabel('Ticket Kurulumu').setStyle(activeTab === 'ticket' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🎫')
+        new ButtonBuilder().setCustomId('nav_panel_ayar').setLabel('Sistem Ayarları').setStyle(activeTab === 'ayar' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('nav_panel_log').setLabel('Log Ayarları').setStyle(activeTab === 'log' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('nav_panel_ticket').setLabel('Ticket Kurulumu').setStyle(activeTab === 'ticket' ? ButtonStyle.Success : ButtonStyle.Secondary)
     );
     const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('nav_panel_ekonomi').setLabel('Ekonomi & XP').setStyle(activeTab === 'ekonomi' ? ButtonStyle.Primary : ButtonStyle.Secondary).setEmoji('💵'),
-        new ButtonBuilder().setCustomId('nav_panel_cekilis').setLabel('Çekiliş Yönetimi').setStyle(activeTab === 'cekilis' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🎉'),
-        new ButtonBuilder().setCustomId('nav_panel_info').setLabel('Sistem Özeti').setStyle(activeTab === 'info' ? ButtonStyle.Primary : ButtonStyle.Secondary).setEmoji('📊')
+        new ButtonBuilder().setCustomId('nav_panel_ekonomi').setLabel('Ekonomi & XP').setStyle(activeTab === 'ekonomi' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('nav_panel_cekilis').setLabel('Çekiliş Yönetimi').setStyle(activeTab === 'cekilis' ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('nav_panel_info').setLabel('Sistem Özeti').setStyle(activeTab === 'info' ? ButtonStyle.Primary : ButtonStyle.Secondary)
     );
     return [row1, row2];
 }
@@ -1650,8 +1648,8 @@ async function updateGiveawayMessage(guild, gw) {
         if (!msg) return;
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`btn_gw_join_${gw.messageId}`).setLabel(`🎉 Katıl (${(gw.participants || []).length})`).setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`btn_gw_list_${gw.messageId}`).setLabel('👥 Katılımcılar').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId(`btn_gw_join_${gw.messageId}`).setLabel(`Katıl (${(gw.participants || []).length})`).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`btn_gw_list_${gw.messageId}`).setLabel('Katılımcılar').setStyle(ButtonStyle.Secondary)
         );
 
         await msg.edit({ components: [row] }).catch(() => { });
@@ -1847,8 +1845,8 @@ function buildCekilisDashboard(guild, guildDb) {
         .setTimestamp();
 
     const actionRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_open_cekilis_modal').setLabel('Yeni Çekiliş Başlat').setStyle(ButtonStyle.Success).setEmoji('🎉'),
-        new ButtonBuilder().setCustomId('btn_refresh_cekilis_dashboard').setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄')
+        new ButtonBuilder().setCustomId('btn_open_cekilis_modal').setLabel('Yeni Çekiliş Başlat').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('btn_refresh_cekilis_dashboard').setLabel('Yenile').setStyle(ButtonStyle.Primary)
     );
 
     const components = [...buildDashboardButtons('cekilis'), actionRow];
@@ -1955,9 +1953,9 @@ function buildMarketView(guild, guildDb, user) {
     }
 
     components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_market_my_profile').setLabel('Profilim').setStyle(ButtonStyle.Success).setEmoji('👤'),
-        new ButtonBuilder().setCustomId('btn_open_market_view').setLabel('Yenile').setStyle(ButtonStyle.Secondary).setEmoji('🔄'),
-        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Papel Kazanılır?').setStyle(ButtonStyle.Primary).setEmoji('❓')
+        new ButtonBuilder().setCustomId('btn_market_my_profile').setLabel('Profilim').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('btn_open_market_view').setLabel('Yenile').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Papel Kazanılır?').setStyle(ButtonStyle.Primary)
     ));
 
     return { embeds: [embed], components, ephemeral: true };
@@ -2061,12 +2059,12 @@ function buildUserProfileCard(targetUser, guild, guildDb) {
         .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`btn_profile_refresh_${targetUser.id}`).setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄'),
-        new ButtonBuilder().setCustomId('btn_open_market_view').setLabel('Markete Git').setStyle(ButtonStyle.Success).setEmoji('🛒'),
-        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Çalışır?').setStyle(ButtonStyle.Secondary).setEmoji('❓'),
+        new ButtonBuilder().setCustomId(`btn_profile_refresh_${targetUser.id}`).setLabel('Yenile').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('btn_open_market_view').setLabel('Markete Git').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('btn_profile_how_it_works').setLabel('Nasıl Çalışır?').setStyle(ButtonStyle.Secondary),
         isOptedOut
-            ? new ButtonBuilder().setCustomId('btn_toggle_user_xp').setLabel('Sisteme Katıl').setStyle(ButtonStyle.Success).setEmoji('🟢')
-            : new ButtonBuilder().setCustomId('btn_toggle_user_xp').setLabel('Devre Dışı Bırak').setStyle(ButtonStyle.Danger).setEmoji('🔴')
+            ? new ButtonBuilder().setCustomId('btn_toggle_user_xp').setLabel('Sisteme Katıl').setStyle(ButtonStyle.Success)
+            : new ButtonBuilder().setCustomId('btn_toggle_user_xp').setLabel('Devre Dışı Bırak').setStyle(ButtonStyle.Danger)
     );
 
     return { embeds: [embed], components: [row], ephemeral: true };
@@ -2122,9 +2120,9 @@ function buildLeaderboardView(guild, guildDb, type = 'xp', targetUserId = null) 
             .setTimestamp();
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('lb_show_xp').setLabel('XP Sıralaması').setStyle(ButtonStyle.Primary).setEmoji('🏆').setDisabled(true),
-            new ButtonBuilder().setCustomId('lb_show_papel').setLabel('Papel Sıralaması').setStyle(ButtonStyle.Secondary).setEmoji('💰'),
-            new ButtonBuilder().setCustomId('lb_refresh_xp').setLabel('Yenile').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
+            new ButtonBuilder().setCustomId('lb_show_xp').setLabel('XP Sıralaması').setStyle(ButtonStyle.Primary).setDisabled(true),
+            new ButtonBuilder().setCustomId('lb_show_papel').setLabel('Papel Sıralaması').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('lb_refresh_xp').setLabel('Yenile').setStyle(ButtonStyle.Secondary)
         );
 
         return { embeds: [embed], components: [row] };
@@ -2173,9 +2171,9 @@ function buildLeaderboardView(guild, guildDb, type = 'xp', targetUserId = null) 
             .setTimestamp();
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('lb_show_xp').setLabel('XP Sıralaması').setStyle(ButtonStyle.Secondary).setEmoji('🏆'),
-            new ButtonBuilder().setCustomId('lb_show_papel').setLabel('Papel Sıralaması').setStyle(ButtonStyle.Success).setEmoji('💰').setDisabled(true),
-            new ButtonBuilder().setCustomId('lb_refresh_papel').setLabel('Yenile').setStyle(ButtonStyle.Secondary).setEmoji('🔄')
+            new ButtonBuilder().setCustomId('lb_show_xp').setLabel('XP Sıralaması').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('lb_show_papel').setLabel('Papel Sıralaması').setStyle(ButtonStyle.Success).setDisabled(true),
+            new ButtonBuilder().setCustomId('lb_refresh_papel').setLabel('Yenile').setStyle(ButtonStyle.Secondary)
         );
 
         return { embeds: [embed], components: [row] };
@@ -2331,11 +2329,11 @@ async function buildTopInviteView(guild, timeFilter = 'all') {
         .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('topinv_time_day').setLabel('Son 1 Gün').setStyle(timeFilter === 'day' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('⚡').setDisabled(timeFilter === 'day'),
-        new ButtonBuilder().setCustomId('topinv_time_week').setLabel('Son 1 Hafta').setStyle(timeFilter === 'week' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('📅').setDisabled(timeFilter === 'week'),
-        new ButtonBuilder().setCustomId('topinv_time_month').setLabel('Son 1 Ay').setStyle(timeFilter === 'month' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🗓️').setDisabled(timeFilter === 'month'),
-        new ButtonBuilder().setCustomId('topinv_time_all').setLabel('Tüm Zamanlar').setStyle(timeFilter === 'all' ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji('🌐').setDisabled(timeFilter === 'all'),
-        new ButtonBuilder().setCustomId(`topinv_refresh_${timeFilter}`).setLabel('Yenile').setStyle(ButtonStyle.Primary).setEmoji('🔄')
+        new ButtonBuilder().setCustomId('topinv_time_day').setLabel('Son 1 Gün').setStyle(timeFilter === 'day' ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(timeFilter === 'day'),
+        new ButtonBuilder().setCustomId('topinv_time_week').setLabel('Son 1 Hafta').setStyle(timeFilter === 'week' ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(timeFilter === 'week'),
+        new ButtonBuilder().setCustomId('topinv_time_month').setLabel('Son 1 Ay').setStyle(timeFilter === 'month' ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(timeFilter === 'month'),
+        new ButtonBuilder().setCustomId('topinv_time_all').setLabel('Tüm Zamanlar').setStyle(timeFilter === 'all' ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(timeFilter === 'all'),
+        new ButtonBuilder().setCustomId(`topinv_refresh_${timeFilter}`).setLabel('Yenile').setStyle(ButtonStyle.Primary)
     );
 
     return { embeds: [embed], components: [row], ephemeral: true };
@@ -3015,15 +3013,15 @@ client.on('interactionCreate', async interaction => {
                         .setTimestamp(endsAt);
 
                     const tempRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('btn_gw_join_temp').setLabel('🎉 Katıl (0)').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId('btn_gw_list_temp').setLabel('👥 Katılımcılar').setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('btn_gw_join_temp').setLabel('Katıl (0)').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('btn_gw_list_temp').setLabel('Katılımcılar').setStyle(ButtonStyle.Secondary)
                     );
 
                     const sentMsg = await targetChannel.send({ embeds: [embed], components: [tempRow] });
 
                     const realRow = new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`btn_gw_join_${sentMsg.id}`).setLabel('🎉 Katıl (0)').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId(`btn_gw_list_${sentMsg.id}`).setLabel('👥 Katılımcılar').setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId(`btn_gw_join_${sentMsg.id}`).setLabel('Katıl (0)').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`btn_gw_list_${sentMsg.id}`).setLabel('Katılımcılar').setStyle(ButtonStyle.Secondary)
                     );
                     await sentMsg.edit({ components: [realRow] });
 
@@ -4010,11 +4008,11 @@ client.on('interactionCreate', async interaction => {
                 if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Çekiliş başlatmayı sadece Sunucu Yöneticileri ve Yetkilileri yapabilir.', ephemeral: true }).catch(() => { });
                 const modal = new ModalBuilder()
                     .setCustomId('modal_start_cekilis')
-                    .setTitle('🎉 Yeni Çekiliş Başlat');
+                    .setTitle('Yeni Çekiliş Başlat');
 
                 const prizeInput = new TextInputBuilder()
                     .setCustomId('gw_prize')
-                    .setLabel('🎁 Çekiliş Ödülü')
+                    .setLabel('Çekiliş Ödülü')
                     .setPlaceholder('Örn: Discord Nitro, 50.000 Papel, VIP Rolü')
                     .setStyle(TextInputStyle.Short)
                     .setMaxLength(100)
@@ -4022,7 +4020,7 @@ client.on('interactionCreate', async interaction => {
 
                 const durationInput = new TextInputBuilder()
                     .setCustomId('gw_duration')
-                    .setLabel('⏱️ Süre (Örn: 10m, 2h, 1d, 3 gün)')
+                    .setLabel('Süre (Örn: 10m, 2h, 1d, 3 gün)')
                     .setPlaceholder('10m, 2h, 1d, 3 gün, 30 dakika')
                     .setStyle(TextInputStyle.Short)
                     .setMaxLength(30)
@@ -4030,7 +4028,7 @@ client.on('interactionCreate', async interaction => {
 
                 const winnersInput = new TextInputBuilder()
                     .setCustomId('gw_winners')
-                    .setLabel('🏆 Kazanan Sayısı (Varsayılan: 1)')
+                    .setLabel('Kazanan Sayısı (Varsayılan: 1)')
                     .setPlaceholder('1')
                     .setStyle(TextInputStyle.Short)
                     .setValue('1')
@@ -4039,14 +4037,14 @@ client.on('interactionCreate', async interaction => {
 
                 const channelInput = new TextInputBuilder()
                     .setCustomId('gw_channel')
-                    .setLabel('📢 Kanal (#kanal veya ID, boşsa bu kanal)')
+                    .setLabel('Kanal (#kanal veya ID, boşsa bu kanal)')
                     .setPlaceholder('Boş bırakırsanız mevcut kanala kurulur')
                     .setStyle(TextInputStyle.Short)
                     .setRequired(false);
 
                 const reqInput = new TextInputBuilder()
                     .setCustomId('gw_requirements')
-                    .setLabel('🔒 Şartlar (Örn: rol:VIP seviye:3)')
+                    .setLabel('Şartlar (Örn: rol:VIP seviye:3)')
                     .setPlaceholder('rol:RolAdıVeyaID seviye:3 (isteğe bağlı)')
                     .setStyle(TextInputStyle.Short)
                     .setRequired(false);
@@ -4578,8 +4576,8 @@ client.on('interactionCreate', async interaction => {
                     .setTimestamp(endsAt);
 
                 const tempRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('btn_gw_join_temp').setLabel('🎉 Katıl (0)').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId('btn_gw_list_temp').setLabel('👥 Katılımcılar').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('btn_gw_join_temp').setLabel('Katıl (0)').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('btn_gw_list_temp').setLabel('Katılımcılar').setStyle(ButtonStyle.Secondary)
                 );
 
                 let sentMsg;
@@ -4590,8 +4588,8 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 const realRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`btn_gw_join_${sentMsg.id}`).setLabel('🎉 Katıl (0)').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId(`btn_gw_list_${sentMsg.id}`).setLabel('👥 Katılımcılar').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId(`btn_gw_join_${sentMsg.id}`).setLabel('Katıl (0)').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`btn_gw_list_${sentMsg.id}`).setLabel('Katılımcılar').setStyle(ButtonStyle.Secondary)
                 );
                 await sentMsg.edit({ components: [realRow] }).catch(() => { });
 
