@@ -1834,22 +1834,110 @@ async function cancelGiveaway(guild, giveawayId) {
     await channel.send(`🚫 **Çekiliş İptal Edildi:** **${gw.prize}** çekilişi bir yetkili tarafından iptal edilmiştir.`).catch(() => { });
 }
 
-function buildCekilisDashboard(guild, guildDb) {
+function buildCekilisDashboard(guild, guildDb, selectedGwId = null) {
     const giveaways = guildDb.giveaways || {};
     const gwList = Object.values(giveaways);
 
     const activeList = gwList.filter(g => !g.ended).sort((a, b) => a.endsAt - b.endsAt);
-    const endedList = gwList.filter(g => g.ended).sort((a, b) => (b.endedAt || b.endsAt) - (a.endedAt || a.endsAt)).slice(0, 5);
-    const rerollableList = endedList.filter(g => !g.cancelled && g.participants && g.participants.length > 0);
+    const endedList = gwList.filter(g => g.ended).sort((a, b) => (b.endedAt || b.endsAt) - (a.endedAt || a.endsAt)).slice(0, 10);
 
-    let activeText = '> *Şu anda sunucuda devam eden aktif bir çekiliş yok.*';
+    // Tüm çekilişler için ortak açılır menü opsiyonları:
+    const selectOptions = [];
+    activeList.slice(0, 10).forEach(g => {
+        const chName = guild.channels.cache.get(g.channelId)?.name || 'kanal';
+        selectOptions.push({
+            label: `[Aktif] ${g.prize}`.slice(0, 100),
+            description: `#${chName} | ${(g.participants || []).length} Katılımcı`,
+            value: `manage_${g.messageId}`
+        });
+    });
+    endedList.slice(0, 10).forEach(g => {
+        const tag = g.cancelled ? '[İptal]' : '[Bitti]';
+        const winNames = (g.winners && g.winners.length > 0) ? `${g.winners.length} kazanan` : 'Yok';
+        selectOptions.push({
+            label: `${tag} ${g.prize}`.slice(0, 100),
+            description: `Kazanan: ${winNames} | ${(g.participants || []).length} Katılımcı`,
+            value: `manage_${g.messageId}`
+        });
+    });
+
+    // 1. ÖZEL SEÇİLMİŞ ÇEKİLİŞ EKRANI (Butonlarla Doğrudan Yönetim):
+    if (selectedGwId && giveaways[selectedGwId]) {
+        const gw = giveaways[selectedGwId];
+        const endSec = Math.floor(gw.endsAt / 1000);
+        const isEnded = Boolean(gw.ended);
+        const statusText = gw.cancelled ? '🚫 İptal Edildi' : (isEnded ? '✅ Tamamlandı' : `⏳ Devam Ediyor (<t:${endSec}:R>)`);
+
+        let reqText = 'Yok (Şartsız)';
+        if (gw.requiredRoleId && gw.minLevel) {
+            reqText = `<@&${gw.requiredRoleId}> ve Seviye ${gw.minLevel}`;
+        } else if (gw.requiredRoleId) {
+            reqText = `<@&${gw.requiredRoleId}> Rolü`;
+        } else if (gw.minLevel) {
+            reqText = `Seviye ${gw.minLevel}`;
+        }
+
+        const winnersText = (gw.winners && gw.winners.length > 0) ? gw.winners.map(id => `<@${id}>`).join(', ') : (gw.cancelled ? 'İptal Edildi' : (isEnded ? 'Katılım Yok' : 'Henüz Belirlenmedi'));
+
+        const embed = new EmbedBuilder()
+            .setTitle(`🎯 Çekiliş Yönetim Ekranı: ${gw.prize}`)
+            .setDescription(
+                `Bu çekiliş üzerinde yapmak istediğiniz işlemi aşağıdaki **butonlardan** seçebilirsiniz.\n\n` +
+                `🎁 **Ödül:** **${gw.prize}**\n` +
+                `📢 **Kanal:** <#${gw.channelId}>\n` +
+                `📊 **Durum:** **${statusText}**\n` +
+                `👑 **Kazanan Sayısı:** \`${gw.winnersCount} kişi\`\n` +
+                `👥 **Katılımcı:** \`${(gw.participants || []).length} üye\`\n` +
+                `📌 **Şartlar:** ${reqText}\n` +
+                `🏆 **Kazananlar:** ${winnersText}\n` +
+                `🆔 **Mesaj ID:** \`${gw.messageId}\``
+            )
+            .setColor(isEnded ? 0x95a5a6 : 0x5865f2)
+            .setFooter({ text: `${guild.name} • Seçili çekiliş işlem paneli` })
+            .setTimestamp();
+
+        const actionButtons = new ActionRowBuilder();
+        if (!isEnded) {
+            actionButtons.addComponents(
+                new ButtonBuilder().setCustomId(`btn_gw_do_end_${gw.messageId}`).setLabel('Çekilişi Bitir').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`btn_gw_do_cancel_${gw.messageId}`).setLabel('Çekilişi İptal Et').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('btn_gw_back_to_list').setLabel('Başka Çekiliş Seç / Geri').setStyle(ButtonStyle.Secondary)
+            );
+        } else {
+            if (!gw.cancelled && (gw.participants || []).length > 0) {
+                actionButtons.addComponents(
+                    new ButtonBuilder().setCustomId(`btn_gw_do_reroll_${gw.messageId}`).setLabel('Yeniden Çek (Reroll)').setStyle(ButtonStyle.Success)
+                );
+            }
+            actionButtons.addComponents(
+                new ButtonBuilder().setCustomId('btn_gw_back_to_list').setLabel('Başka Çekiliş Seç / Geri').setStyle(ButtonStyle.Secondary)
+            );
+        }
+
+        const components = [...buildDashboardButtons('cekilis'), actionButtons];
+
+        if (selectOptions.length > 1) {
+            const switchRow = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('menu_select_giveaway_to_manage')
+                    .setPlaceholder('Farklı bir çekilişe geç...')
+                    .addOptions(selectOptions.slice(0, 25))
+            );
+            components.push(switchRow);
+        }
+
+        return { content: '', embeds: [embed], components };
+    }
+
+    // 2. GENEL ÇEKİLİŞ LİSTESİ EKRANI (Ana Sayfa):
+    let activeText = '> ⚠️ *Şu anda sunucuda devam eden aktif bir çekiliş yok.*';
     if (activeList.length > 0) {
         activeText = activeList.map((g, idx) => {
             const endSec = Math.floor(g.endsAt / 1000);
             return (
                 `> **#${idx + 1} — ${g.prize}**\n` +
-                `> ├ 📢 <#${g.channelId}> | 👑 \`${g.winnersCount} kişi\` | 👥 \`${(g.participants || []).length} katılımcı\`\n` +
-                `> └ ⏱️ Bitiş: <t:${endSec}:R> | ID: \`${g.messageId}\``
+                `> ├ 📢 <#${g.channelId}> | 👑 \`${g.winnersCount} kişi\` | 👥 \`${(g.participants || []).length} üye\`\n` +
+                `> └ ⏱️ Bitiş: <t:${endSec}:R> | 🆔 \`${g.messageId}\``
             );
         }).join('\n\n');
     }
@@ -1865,7 +1953,7 @@ function buildCekilisDashboard(guild, guildDb) {
     const embed = new EmbedBuilder()
         .setTitle('🎉 Çekiliş Yönetim Paneli')
         .setDescription(
-            `Aşağıdaki butonları kullanarak çekiliş başlatabilir, aktif çekilişi anında sonlandırabilir, iptal edebilir veya yeniden çekebilirsiniz.\n\n` +
+            `Sunucunuzdaki çekilişleri buradan görebilir, yeni çekiliş başlatabilir veya **aşağıdaki menüden bir çekiliş seçerek butonlarla yönetebilirsiniz**.\n\n` +
             `**🔥 DEVAM EDEN AKTİF ÇEKİLİŞLER**\n${activeText}\n\n` +
             `**🏆 SON BİTEN ÇEKİLİŞLER**\n${endedText}`
         )
@@ -1873,50 +1961,18 @@ function buildCekilisDashboard(guild, guildDb) {
         .setFooter({ text: `${guild.name} • Toplam ${gwList.length} çekiliş kaydı` })
         .setTimestamp();
 
-    const hasActive = activeList.length > 0;
-    const hasRerollable = rerollableList.length > 0;
-
     const actionRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_open_cekilis_modal').setLabel('Yeni Çekiliş').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('btn_quick_gw_end').setLabel('Çekilişi Bitir').setStyle(ButtonStyle.Primary).setDisabled(!hasActive),
-        new ButtonBuilder().setCustomId('btn_quick_gw_cancel').setLabel('İptal Et').setStyle(ButtonStyle.Danger).setDisabled(!hasActive),
-        new ButtonBuilder().setCustomId('btn_quick_gw_reroll').setLabel('Yeniden Çek').setStyle(ButtonStyle.Secondary).setDisabled(!hasRerollable),
+        new ButtonBuilder().setCustomId('btn_open_cekilis_modal').setLabel('Yeni Çekiliş Başlat').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('btn_refresh_cekilis_dashboard').setLabel('Yenile').setStyle(ButtonStyle.Secondary)
     );
 
     const components = [...buildDashboardButtons('cekilis'), actionRow];
 
-    // Birden fazla çekiliş varsa seçim için kompakt menü:
-    const selectOptions = [];
-    if (activeList.length > 1) {
-        activeList.slice(0, 5).forEach(g => {
-            selectOptions.push({
-                label: `Bitir: ${g.prize}`.slice(0, 100),
-                description: `${(g.participants || []).length} Katılımcı - ID: ${g.messageId.slice(-6)}`,
-                value: `end_${g.messageId}`
-            });
-            selectOptions.push({
-                label: `İptal: ${g.prize}`.slice(0, 100),
-                description: `Ödül vermeden iptal eder - ID: ${g.messageId.slice(-6)}`,
-                value: `cancel_${g.messageId}`
-            });
-        });
-    }
-    if (rerollableList.length > 1) {
-        rerollableList.slice(0, 5).forEach(g => {
-            selectOptions.push({
-                label: `Reroll: ${g.prize}`.slice(0, 100),
-                description: `Yeni kazanan seçer (${(g.participants || []).length} Katılımcı)`,
-                value: `reroll_${g.messageId}`
-            });
-        });
-    }
-
     if (selectOptions.length > 0) {
         const menuRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
-                .setCustomId('menu_cekilis_action')
-                .setPlaceholder('Çoklu Çekiliş Menüsü (Özel İşlem Seçin)...')
+                .setCustomId('menu_select_giveaway_to_manage')
+                .setPlaceholder('Yönetmek istediğiniz çekilişi buradan seçin...')
                 .addOptions(selectOptions.slice(0, 25))
         );
         components.push(menuRow);
@@ -3975,13 +4031,13 @@ client.on('interactionCreate', async interaction => {
                 return interaction.showModal(modal);
             }
 
-            if (interaction.customId === 'menu_select_giveaway_manage') {
+            if (interaction.customId === 'menu_select_giveaway_to_manage' || interaction.customId === 'menu_select_giveaway_manage') {
                 if (!isAdmin && !isYetkili) {
                     return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
                 }
                 const selected = interaction.values[0];
                 ensureGuildDB(db, guildId);
-                const targetMsgId = selected.replace('select_gw_', '');
+                const targetMsgId = selected.replace('manage_', '').replace('select_gw_', '');
                 return interaction.update(buildCekilisDashboard(interaction.guild, db[guildId], targetMsgId)).catch(() => { });
             }
 
@@ -4201,85 +4257,44 @@ client.on('interactionCreate', async interaction => {
                 return interaction.editReply({ embeds: [embed] });
             }
 
-            if (customId.startsWith('btn_gw_action_end_')) {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+            if (customId.startsWith('btn_gw_do_end_') || customId.startsWith('btn_gw_action_end_')) {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu işlemi sadece Sunucu Yöneticileri ve Yetkilileri yapabilir.', ephemeral: true });
                 await interaction.deferUpdate().catch(() => { });
-                const targetMsgId = customId.replace('btn_gw_action_end_', '');
+                const targetMsgId = customId.replace('btn_gw_do_end_', '').replace('btn_gw_action_end_', '');
                 try {
                     await endGiveaway(interaction.guild, targetMsgId, false);
                 } catch (e) { }
                 ensureGuildDB(db, guildId);
-                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId], targetMsgId)).catch(() => { });
             }
 
-            if (customId.startsWith('btn_gw_action_cancel_')) {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+            if (customId.startsWith('btn_gw_do_cancel_') || customId.startsWith('btn_gw_action_cancel_')) {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu işlemi sadece Sunucu Yöneticileri ve Yetkilileri yapabilir.', ephemeral: true });
                 await interaction.deferUpdate().catch(() => { });
-                const targetMsgId = customId.replace('btn_gw_action_cancel_', '');
+                const targetMsgId = customId.replace('btn_gw_do_cancel_', '').replace('btn_gw_action_cancel_', '');
                 try {
                     await cancelGiveaway(interaction.guild, targetMsgId);
                 } catch (e) { }
                 ensureGuildDB(db, guildId);
-                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId], null)).catch(() => { });
             }
 
-            if (customId.startsWith('btn_gw_action_reroll_')) {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+            if (customId.startsWith('btn_gw_do_reroll_') || customId.startsWith('btn_gw_action_reroll_')) {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu işlemi sadece Sunucu Yöneticileri ve Yetkilileri yapabilir.', ephemeral: true });
                 await interaction.deferUpdate().catch(() => { });
-                const targetMsgId = customId.replace('btn_gw_action_reroll_', '');
+                const targetMsgId = customId.replace('btn_gw_do_reroll_', '').replace('btn_gw_action_reroll_', '');
                 try {
                     await endGiveaway(interaction.guild, targetMsgId, true);
                 } catch (e) { }
                 ensureGuildDB(db, guildId);
-                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId], targetMsgId)).catch(() => { });
             }
 
-            if (customId === 'btn_quick_gw_end') {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+            if (customId === 'btn_gw_back_to_list') {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu işlemi sadece Sunucu Yöneticileri ve Yetkilileri yapabilir.', ephemeral: true });
                 await interaction.deferUpdate().catch(() => { });
                 ensureGuildDB(db, guildId);
-                const activeList = Object.values(db[guildId].giveaways || {}).filter(g => !g.ended).sort((a, b) => b.createdAt - a.createdAt);
-                if (activeList.length === 0) {
-                    return interaction.followUp({ content: 'Şu anda devam eden aktif bir çekiliş bulunmuyor.', ephemeral: true });
-                }
-                const targetGw = activeList[0];
-                try {
-                    await endGiveaway(interaction.guild, targetGw.messageId, false);
-                } catch (e) { }
-                ensureGuildDB(db, guildId);
-                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
-            }
-
-            if (customId === 'btn_quick_gw_cancel') {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
-                await interaction.deferUpdate().catch(() => { });
-                ensureGuildDB(db, guildId);
-                const activeList = Object.values(db[guildId].giveaways || {}).filter(g => !g.ended).sort((a, b) => b.createdAt - a.createdAt);
-                if (activeList.length === 0) {
-                    return interaction.followUp({ content: 'Şu anda devam eden aktif bir çekiliş bulunmuyor.', ephemeral: true });
-                }
-                const targetGw = activeList[0];
-                try {
-                    await cancelGiveaway(interaction.guild, targetGw.messageId);
-                } catch (e) { }
-                ensureGuildDB(db, guildId);
-                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
-            }
-
-            if (customId === 'btn_quick_gw_reroll') {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
-                await interaction.deferUpdate().catch(() => { });
-                ensureGuildDB(db, guildId);
-                const endedList = Object.values(db[guildId].giveaways || {}).filter(g => g.ended && !g.cancelled && g.participants && g.participants.length > 0).sort((a, b) => (b.endedAt || b.endsAt) - (a.endedAt || a.endsAt));
-                if (endedList.length === 0) {
-                    return interaction.followUp({ content: 'Yeniden çekilecek katılımcılı bir çekiliş bulunmuyor.', ephemeral: true });
-                }
-                const targetGw = endedList[0];
-                try {
-                    await endGiveaway(interaction.guild, targetGw.messageId, true);
-                } catch (e) { }
-                ensureGuildDB(db, guildId);
-                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId], null)).catch(() => { });
             }
 
             // --- HIZLI AÇ/KAPAT TOGGLE BUTONLARI ---
