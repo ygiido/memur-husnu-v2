@@ -1834,76 +1834,22 @@ async function cancelGiveaway(guild, giveawayId) {
     await channel.send(`🚫 **Çekiliş İptal Edildi:** **${gw.prize}** çekilişi bir yetkili tarafından iptal edilmiştir.`).catch(() => { });
 }
 
-function buildCekilisDashboard(guild, guildDb, selectedGwId = null) {
+function buildCekilisDashboard(guild, guildDb) {
     const giveaways = guildDb.giveaways || {};
     const gwList = Object.values(giveaways);
 
-    // Eğer belirli bir çekiliş yönetilmek üzere seçildiyse:
-    if (selectedGwId && giveaways[selectedGwId]) {
-        const gw = giveaways[selectedGwId];
-        const endSec = Math.floor(gw.endsAt / 1000);
-        const isEnded = Boolean(gw.ended);
-        const statusText = gw.cancelled ? 'İptal Edildi' : (isEnded ? 'Tamamlandı' : `Devam Ediyor (<t:${endSec}:R>)`);
-
-        let reqText = 'Yok (Şartsız)';
-        if (gw.requiredRoleId && gw.minLevel) {
-            reqText = `<@&${gw.requiredRoleId}> ve Seviye ${gw.minLevel}`;
-        } else if (gw.requiredRoleId) {
-            reqText = `<@&${gw.requiredRoleId}> Rolü`;
-        } else if (gw.minLevel) {
-            reqText = `Seviye ${gw.minLevel}`;
-        }
-
-        const winnersText = (gw.winners && gw.winners.length > 0) ? gw.winners.map(id => `<@${id}>`).join(', ') : 'Belirlenmedi';
-
-        const embed = new EmbedBuilder()
-            .setTitle(`Çekiliş Yönetimi: ${gw.prize}`)
-            .setDescription(
-                `Bu çekiliş üzerinde yapmak istediğiniz işlemi aşağıdaki butonlardan seçin.\n\n` +
-                `🎁 **Ödül:** **${gw.prize}**\n` +
-                `📢 **Kanal:** <#${gw.channelId}>\n` +
-                `📊 **Durum:** **${statusText}**\n` +
-                `👑 **Kazanan Sayısı:** \`${gw.winnersCount} kişi\`\n` +
-                `👥 **Katılımcı Sayısı:** \`${(gw.participants || []).length} üye\`\n` +
-                `📌 **Katılım Şartları:** ${reqText}\n` +
-                `🏆 **Kazananlar:** ${winnersText}\n` +
-                `🆔 **Mesaj ID:** \`${gw.messageId}\``
-            )
-            .setColor(isEnded ? 0x95a5a6 : 0x5865f2)
-            .setFooter({ text: 'İşlem yapmak için aşağıdaki butonları kullanın' })
-            .setTimestamp();
-
-        const actionButtons = new ActionRowBuilder();
-        if (!isEnded) {
-            actionButtons.addComponents(
-                new ButtonBuilder().setCustomId(`btn_gw_action_end_${gw.messageId}`).setLabel('Erken Bitir').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId(`btn_gw_action_cancel_${gw.messageId}`).setLabel('Çekilişi İptal Et').setStyle(ButtonStyle.Danger)
-            );
-        } else if (!gw.cancelled && (gw.participants || []).length > 0) {
-            actionButtons.addComponents(
-                new ButtonBuilder().setCustomId(`btn_gw_action_reroll_${gw.messageId}`).setLabel('Yeniden Çek (Reroll)').setStyle(ButtonStyle.Success)
-            );
-        }
-        actionButtons.addComponents(
-            new ButtonBuilder().setCustomId('btn_refresh_cekilis_dashboard').setLabel('Geri Dön').setStyle(ButtonStyle.Secondary)
-        );
-
-        return { content: '', embeds: [embed], components: [...buildDashboardButtons('cekilis'), actionButtons] };
-    }
-
-    // Ana Liste Görünümü:
     const activeList = gwList.filter(g => !g.ended).sort((a, b) => a.endsAt - b.endsAt);
     const endedList = gwList.filter(g => g.ended).sort((a, b) => (b.endedAt || b.endsAt) - (a.endedAt || a.endsAt)).slice(0, 5);
+    const rerollableList = endedList.filter(g => !g.cancelled && g.participants && g.participants.length > 0);
 
-    let activeText = '> ⚠️ *Şu anda sunucuda devam eden aktif bir çekiliş yok.*';
+    let activeText = '> *Şu anda sunucuda devam eden aktif bir çekiliş yok.*';
     if (activeList.length > 0) {
         activeText = activeList.map((g, idx) => {
             const endSec = Math.floor(g.endsAt / 1000);
             return (
                 `> **#${idx + 1} — ${g.prize}**\n` +
-                `> ├ 📢 **Kanal:** <#${g.channelId}> | 👑 **Kazanan:** \`${g.winnersCount} kişi\`\n` +
-                `> ├ 👥 **Katılımcı:** \`${(g.participants || []).length} üye\` | ⏱️ **Bitiş:** <t:${endSec}:R>\n` +
-                `> └ 🆔 **Mesaj ID:** \`${g.messageId}\``
+                `> ├ 📢 <#${g.channelId}> | 👑 \`${g.winnersCount} kişi\` | 👥 \`${(g.participants || []).length} katılımcı\`\n` +
+                `> └ ⏱️ Bitiş: <t:${endSec}:R> | ID: \`${g.messageId}\``
             );
         }).join('\n\n');
     }
@@ -1912,54 +1858,65 @@ function buildCekilisDashboard(guild, guildDb, selectedGwId = null) {
     if (endedList.length > 0) {
         endedText = endedList.map((g, idx) => {
             const winners = (g.winners && g.winners.length > 0) ? g.winners.map(id => `<@${id}>`).join(', ') : (g.cancelled ? '*(İptal Edildi)*' : '*(Katılım Yok)*');
-            return (
-                `> **${g.prize}** — 🏆 Kazanan: ${winners}\n` +
-                `> └ 👥 Katılımcı: \`${(g.participants || []).length}\` | 🆔 Mesaj ID: \`${g.messageId}\``
-            );
+            return `> **${g.prize}** — 🏆 ${winners} (\`${(g.participants || []).length} katılım\`)`;
         }).join('\n');
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('Çekiliş ve Ödül Yönetim Merkezi')
+        .setTitle('🎉 Çekiliş Yönetim Paneli')
         .setDescription(
-            `Sunucunuzdaki çekilişleri buradan takip edebilir, yeni çekiliş başlatabilir veya aşağıdaki menüden dilediğiniz çekilişi seçerek yönetebilirsiniz.\n\n` +
-            `**DEVAM EDEN AKTİF ÇEKİLİŞLER**\n${activeText}\n\n` +
-            `**SON TAMAMLANAN ÇEKİLİŞLER**\n${endedText}`
+            `Aşağıdaki butonları kullanarak çekiliş başlatabilir, aktif çekilişi anında sonlandırabilir, iptal edebilir veya yeniden çekebilirsiniz.\n\n` +
+            `**🔥 DEVAM EDEN AKTİF ÇEKİLİŞLER**\n${activeText}\n\n` +
+            `**🏆 SON BİTEN ÇEKİLİŞLER**\n${endedText}`
         )
         .setColor(0x5865f2)
         .setFooter({ text: `${guild.name} • Toplam ${gwList.length} çekiliş kaydı` })
         .setTimestamp();
 
+    const hasActive = activeList.length > 0;
+    const hasRerollable = rerollableList.length > 0;
+
     const actionRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('btn_open_cekilis_modal').setLabel('Yeni Çekiliş Başlat').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('btn_refresh_cekilis_dashboard').setLabel('Yenile').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('btn_open_cekilis_modal').setLabel('Yeni Çekiliş').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('btn_quick_gw_end').setLabel('Çekilişi Bitir').setStyle(ButtonStyle.Primary).setDisabled(!hasActive),
+        new ButtonBuilder().setCustomId('btn_quick_gw_cancel').setLabel('İptal Et').setStyle(ButtonStyle.Danger).setDisabled(!hasActive),
+        new ButtonBuilder().setCustomId('btn_quick_gw_reroll').setLabel('Yeniden Çek').setStyle(ButtonStyle.Secondary).setDisabled(!hasRerollable),
+        new ButtonBuilder().setCustomId('btn_refresh_cekilis_dashboard').setLabel('Yenile').setStyle(ButtonStyle.Secondary)
     );
 
     const components = [...buildDashboardButtons('cekilis'), actionRow];
 
+    // Birden fazla çekiliş varsa seçim için kompakt menü:
     const selectOptions = [];
-    activeList.slice(0, 10).forEach(g => {
-        selectOptions.push({
-            label: `[Aktif] ${g.prize}`.slice(0, 100),
-            description: `Katılımcı: ${(g.participants || []).length} üye - ID: ${g.messageId.slice(-6)}`,
-            value: `select_gw_${g.messageId}`
+    if (activeList.length > 1) {
+        activeList.slice(0, 5).forEach(g => {
+            selectOptions.push({
+                label: `Bitir: ${g.prize}`.slice(0, 100),
+                description: `${(g.participants || []).length} Katılımcı - ID: ${g.messageId.slice(-6)}`,
+                value: `end_${g.messageId}`
+            });
+            selectOptions.push({
+                label: `İptal: ${g.prize}`.slice(0, 100),
+                description: `Ödül vermeden iptal eder - ID: ${g.messageId.slice(-6)}`,
+                value: `cancel_${g.messageId}`
+            });
         });
-    });
-
-    endedList.slice(0, 5).forEach(g => {
-        const tag = g.cancelled ? '[İptal]' : '[Bitti]';
-        selectOptions.push({
-            label: `${tag} ${g.prize}`.slice(0, 100),
-            description: `Katılımcı: ${(g.participants || []).length} üye - ID: ${g.messageId.slice(-6)}`,
-            value: `select_gw_${g.messageId}`
+    }
+    if (rerollableList.length > 1) {
+        rerollableList.slice(0, 5).forEach(g => {
+            selectOptions.push({
+                label: `Reroll: ${g.prize}`.slice(0, 100),
+                description: `Yeni kazanan seçer (${(g.participants || []).length} Katılımcı)`,
+                value: `reroll_${g.messageId}`
+            });
         });
-    });
+    }
 
     if (selectOptions.length > 0) {
         const menuRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
-                .setCustomId('menu_select_giveaway_manage')
-                .setPlaceholder('Yönetmek istediğiniz çekilişi seçin (Bitir / İptal / Reroll)...')
+                .setCustomId('menu_cekilis_action')
+                .setPlaceholder('Çoklu Çekiliş Menüsü (Özel İşlem Seçin)...')
                 .addOptions(selectOptions.slice(0, 25))
         );
         components.push(menuRow);
@@ -4272,6 +4229,54 @@ client.on('interactionCreate', async interaction => {
                 const targetMsgId = customId.replace('btn_gw_action_reroll_', '');
                 try {
                     await endGiveaway(interaction.guild, targetMsgId, true);
+                } catch (e) { }
+                ensureGuildDB(db, guildId);
+                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            if (customId === 'btn_quick_gw_end') {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                await interaction.deferUpdate().catch(() => { });
+                ensureGuildDB(db, guildId);
+                const activeList = Object.values(db[guildId].giveaways || {}).filter(g => !g.ended).sort((a, b) => b.createdAt - a.createdAt);
+                if (activeList.length === 0) {
+                    return interaction.followUp({ content: 'Şu anda devam eden aktif bir çekiliş bulunmuyor.', ephemeral: true });
+                }
+                const targetGw = activeList[0];
+                try {
+                    await endGiveaway(interaction.guild, targetGw.messageId, false);
+                } catch (e) { }
+                ensureGuildDB(db, guildId);
+                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            if (customId === 'btn_quick_gw_cancel') {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                await interaction.deferUpdate().catch(() => { });
+                ensureGuildDB(db, guildId);
+                const activeList = Object.values(db[guildId].giveaways || {}).filter(g => !g.ended).sort((a, b) => b.createdAt - a.createdAt);
+                if (activeList.length === 0) {
+                    return interaction.followUp({ content: 'Şu anda devam eden aktif bir çekiliş bulunmuyor.', ephemeral: true });
+                }
+                const targetGw = activeList[0];
+                try {
+                    await cancelGiveaway(interaction.guild, targetGw.messageId);
+                } catch (e) { }
+                ensureGuildDB(db, guildId);
+                return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
+
+            if (customId === 'btn_quick_gw_reroll') {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
+                await interaction.deferUpdate().catch(() => { });
+                ensureGuildDB(db, guildId);
+                const endedList = Object.values(db[guildId].giveaways || {}).filter(g => g.ended && !g.cancelled && g.participants && g.participants.length > 0).sort((a, b) => (b.endedAt || b.endsAt) - (a.endedAt || a.endsAt));
+                if (endedList.length === 0) {
+                    return interaction.followUp({ content: 'Yeniden çekilecek katılımcılı bir çekiliş bulunmuyor.', ephemeral: true });
+                }
+                const targetGw = endedList[0];
+                try {
+                    await endGiveaway(interaction.guild, targetGw.messageId, true);
                 } catch (e) { }
                 ensureGuildDB(db, guildId);
                 return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
