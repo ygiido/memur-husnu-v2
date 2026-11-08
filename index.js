@@ -1623,16 +1623,19 @@ function buildEkonomiDashboard(guildDb) {
 function parseDurationString(str) {
     if (!str) return null;
     const s = str.trim().toLowerCase();
-    const match = s.match(/^(\d+)\s*(m|dakika|dk|s|saat|h|d|gun|gün|g|w|hafta)?$/);
+    const match = s.match(/^(\d+)\s*(sn|saniye|sec|m|min|dakika|dk|saat|sa|h|gun|gün|g|d|day|w|hafta)?$/);
     if (!match) return null;
     const val = parseInt(match[1], 10);
-    const unit = match[2] || 'm';
+    if (isNaN(val) || val <= 0) return null;
+    const unit = match[2] || 'dk';
 
-    if (['m', 'dakika', 'dk'].includes(unit)) {
+    if (['sn', 'saniye', 'sec'].includes(unit)) {
+        return val * 1000;
+    } else if (['m', 'min', 'dakika', 'dk'].includes(unit)) {
         return val * 60 * 1000;
-    } else if (['h', 'saat', 's'].includes(unit)) {
+    } else if (['h', 'saat', 'sa'].includes(unit)) {
         return val * 60 * 60 * 1000;
-    } else if (['d', 'gun', 'gün', 'g'].includes(unit)) {
+    } else if (['d', 'gun', 'gün', 'g', 'day'].includes(unit)) {
         return val * 24 * 60 * 60 * 1000;
     } else if (['w', 'hafta'].includes(unit)) {
         return val * 7 * 24 * 60 * 60 * 1000;
@@ -1712,9 +1715,12 @@ async function endGiveaway(guild, giveawayId, isReroll = false) {
 
     const winnersText = winners.map(id => `<@${id}>`).join(', ');
 
-    // Otomatik Papel Ödülü Kontrolü (Ödül adında Papel geçiyorsa kazananlara otomatik yatırılır)
-    let autoPapelNote = '';
+    // 1. Otomatik Papel Ödülü Kontrolü (Ödül adında Papel geçiyorsa kazananlara otomatik yatırılır)
+    let autoDeliverNote = '';
+    let dmExplain = '';
     const papelMatch = gw.prize.match(/(\d[\d\.\,]*)\s*papel/i);
+    let matchingRole = null;
+
     if (papelMatch) {
         const rawNum = papelMatch[1].replace(/\./g, '').replace(/,/g, '');
         const papelAmount = parseInt(rawNum, 10);
@@ -1724,7 +1730,28 @@ async function endGiveaway(guild, giveawayId, isReroll = false) {
                 guildDb.users[wId].papel = (guildDb.users[wId].papel || 0) + papelAmount;
             });
             saveDB(db);
-            autoPapelNote = `\n💰 **Otomatik Ödül:** Kazananların cüzdanına **+${papelAmount.toLocaleString('tr-TR')} Papel** aktarıldı!`;
+            autoDeliverNote = `\n💰 **Otomatik Teslim:** Kazananların Papel cüzdanına **+${papelAmount.toLocaleString('tr-TR')} Papel** aktarıldı!`;
+            dmExplain = `Cüzdanınıza **+${papelAmount.toLocaleString('tr-TR')} Papel** otomatik olarak aktarılmıştır. /profil komutundan bakiyenizi görebilirsiniz.`;
+        }
+    } else {
+        // 2. Otomatik Rol Ödülü Kontrolü (Ödül sunucudaki bir role aitse otomatik rol verilir)
+        const cleanPrizeName = gw.prize.replace(/rolü|rolu|role/gi, '').trim().toLowerCase();
+        matchingRole = guild.roles.cache.find(r => r.name.toLowerCase() === cleanPrizeName || r.name.toLowerCase() === gw.prize.trim().toLowerCase());
+        if (matchingRole) {
+            for (const wId of winners) {
+                try {
+                    const member = guild.members.cache.get(wId) || await guild.members.fetch(wId).catch(() => null);
+                    if (member && !member.roles.cache.has(matchingRole.id)) {
+                        await member.roles.add(matchingRole.id).catch(() => {});
+                    }
+                } catch (e) {}
+            }
+            autoDeliverNote = `\n🎭 **Otomatik Teslim:** Kazanan üyelere <@&${matchingRole.id}> rolü bot tarafından otomatik olarak verildi!`;
+            dmExplain = `Sunucuda **${matchingRole.name}** rolünüz profilinize otomatik olarak tanımlandı!`;
+        } else {
+            // 3. Manuel Teslim (Nitro, Kod veya Fiziksel Ödüller)
+            autoDeliverNote = `\n📦 **Ödül Teslimi:** <@${gw.hostedBy}> lütfen kazanan üye(ler)e özel mesaj (DM) üzerinden ödüllerini iletiniz.`;
+            dmExplain = `Ödülünüzü teslim almak için lütfen çekilişi düzenleyen <@${gw.hostedBy}> ile iletişime geçiniz veya yetkilinin size DM atmasını bekleyiniz.`;
         }
     }
 
@@ -1739,7 +1766,7 @@ async function endGiveaway(guild, giveawayId, isReroll = false) {
                 `👤 **Başlatan:** <@${gw.hostedBy}>\n` +
                 `👥 **Toplam Katılımcı:** \`${participants.length} kişi\`\n\n` +
                 `🏆 **KAZANANLAR:**\n${winnersText}` +
-                autoPapelNote
+                autoDeliverNote
             );
 
         const row = new ActionRowBuilder().addComponents(
@@ -1750,8 +1777,8 @@ async function endGiveaway(guild, giveawayId, isReroll = false) {
     }
 
     const winMsg = isReroll
-        ? `🔄 **YENİDEN ÇEKİLİŞ (REROLL)!**\n🎁 **${gw.prize}** çekilişinin yeni kazananı: ${winnersText}! Tebrikler! 🎉${autoPapelNote}`
-        : `🎉 **ÇEKİLİŞ SONA ERDİ!**\n🎁 **${gw.prize}** ödülünün şanslı kazananı: ${winnersText}! Tebrik ederiz! 🥳🎊${autoPapelNote}`;
+        ? `🔄 **YENİDEN ÇEKİLİŞ (REROLL)!**\n🎁 **${gw.prize}** çekilişinin yeni kazananı: ${winnersText}! Tebrikler! 🎉${autoDeliverNote}`
+        : `🎉 **ÇEKİLİŞ SONA ERDİ!**\n🎁 **${gw.prize}** ödülünün şanslı kazananı: ${winnersText}! Tebrik ederiz! 🥳🎊${autoDeliverNote}`;
 
     await channel.send(winMsg).catch(() => { });
 
@@ -1759,7 +1786,7 @@ async function endGiveaway(guild, giveawayId, isReroll = false) {
         try {
             const user = guild.client.users.cache.get(wId) || await guild.client.users.fetch(wId);
             if (user) {
-                await user.send(`🎉 Tebrikler! **${guild.name}** sunucusundaki **${gw.prize}** çekilişini kazandınız! 🎁`).catch(() => { });
+                await user.send(`🎉 Tebrikler! **${guild.name}** sunucusundaki **${gw.prize}** çekilişini kazandınız! 🎁\nℹ️ ${dmExplain}`).catch(() => { });
             }
         } catch (e) { }
     }
@@ -4012,23 +4039,24 @@ client.on('interactionCreate', async interaction => {
 
                 const prizeInput = new TextInputBuilder()
                     .setCustomId('gw_prize')
-                    .setLabel('Çekiliş Ödülü')
-                    .setPlaceholder('Örn: Discord Nitro, 50.000 Papel, VIP Rolü')
+                    .setLabel('1. Çekiliş Ödülü')
+                    .setPlaceholder('Örn: 50.000 Papel, VIP Rolü veya Discord Nitro')
                     .setStyle(TextInputStyle.Short)
                     .setMaxLength(100)
                     .setRequired(true);
 
                 const durationInput = new TextInputBuilder()
                     .setCustomId('gw_duration')
-                    .setLabel('Süre (Örn: 10m, 2h, 1d, 3 gün)')
-                    .setPlaceholder('10m, 2h, 1d, 3 gün, 30 dakika')
+                    .setLabel('2. Çekiliş Süresi (dk / saat / gün)')
+                    .setPlaceholder('Örn: 30dk, 2saat, 1gün, 3gün')
+                    .setValue('1gün')
                     .setStyle(TextInputStyle.Short)
                     .setMaxLength(30)
                     .setRequired(true);
 
                 const winnersInput = new TextInputBuilder()
                     .setCustomId('gw_winners')
-                    .setLabel('Kazanan Sayısı (Varsayılan: 1)')
+                    .setLabel('3. Kazanan Kişi Sayısı (Varsayılan: 1)')
                     .setPlaceholder('1')
                     .setStyle(TextInputStyle.Short)
                     .setValue('1')
@@ -4037,15 +4065,15 @@ client.on('interactionCreate', async interaction => {
 
                 const channelInput = new TextInputBuilder()
                     .setCustomId('gw_channel')
-                    .setLabel('Kanal (#kanal veya ID, boşsa bu kanal)')
-                    .setPlaceholder('Boş bırakırsanız mevcut kanala kurulur')
+                    .setLabel('4. Gönderilecek Kanal (Boş = Bu Kanal)')
+                    .setPlaceholder('Örn: #çekiliş (Boş bırakırsanız bu kanala atılır)')
                     .setStyle(TextInputStyle.Short)
                     .setRequired(false);
 
                 const reqInput = new TextInputBuilder()
                     .setCustomId('gw_requirements')
-                    .setLabel('Şartlar (Örn: rol:VIP seviye:3)')
-                    .setPlaceholder('rol:RolAdıVeyaID seviye:3 (isteğe bağlı)')
+                    .setLabel('5. Katılım Şartı (Rol veya Seviye, Boş = Yok)')
+                    .setPlaceholder('Örn: VIP veya Seviye 3 (İsteğe bağlı, boş bırakabilirsiniz)')
                     .setStyle(TextInputStyle.Short)
                     .setRequired(false);
 
@@ -4061,15 +4089,16 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (customId.startsWith('btn_gw_join_')) {
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 const gwId = customId.replace('btn_gw_join_', '');
                 ensureGuildDB(db, guildId);
                 const gw = db[guildId].giveaways ? db[guildId].giveaways[gwId] : null;
 
                 if (!gw) {
-                    return interaction.reply({ content: '❌ Çekiliş verisi bulunamadı veya silinmiş.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ Çekiliş verisi bulunamadı veya silinmiş.' });
                 }
                 if (gw.ended) {
-                    return interaction.reply({ content: '⚠️ Bu çekiliş sona ermiş!', ephemeral: true });
+                    return interaction.editReply({ content: '⚠️ Bu çekiliş sona ermiş!' });
                 }
 
                 // Şart kontrolü: Rol
@@ -4077,9 +4106,8 @@ client.on('interactionCreate', async interaction => {
                     const memberRoles = interaction.member?.roles;
                     const hasRole = memberRoles?.cache ? memberRoles.cache.has(gw.requiredRoleId) : (memberRoles?.includes && memberRoles.includes(gw.requiredRoleId));
                     if (!hasRole) {
-                        return interaction.reply({
-                            content: `❌ Bu çekilişe katılabilmek için <@&${gw.requiredRoleId}> rolüne sahip olmalısınız!`,
-                            ephemeral: true
+                        return interaction.editReply({
+                            content: `❌ Bu çekilişe katılabilmek için <@&${gw.requiredRoleId}> rolüne sahip olmalısınız!`
                         });
                     }
                 }
@@ -4089,9 +4117,8 @@ client.on('interactionCreate', async interaction => {
                     const uData = (db[guildId].users && db[guildId].users[interaction.user.id]) || {};
                     const userLvl = uData.level || 0;
                     if (userLvl < gw.minLevel) {
-                        return interaction.reply({
-                            content: `❌ Bu çekilişe katılabilmek için en az **Seviye ${gw.minLevel}** olmalısınız! (Mevcut Seviyeniz: ${userLvl})`,
-                            ephemeral: true
+                        return interaction.editReply({
+                            content: `❌ Bu çekilişe katılabilmek için en az **Seviye ${gw.minLevel}** olmalısınız! (Mevcut Seviyeniz: ${userLvl})`
                         });
                     }
                 }
@@ -4102,39 +4129,42 @@ client.on('interactionCreate', async interaction => {
                 if (alreadyJoined) {
                     gw.participants = gw.participants.filter(id => id !== interaction.user.id);
                     saveDB(db);
-                    await updateGiveawayMessage(interaction.guild, gw);
-                    return interaction.reply({ content: '👋 Çekilişten ayrıldınız.', ephemeral: true });
+                    await interaction.editReply({ content: '👋 Çekilişten ayrıldınız.' });
+                    updateGiveawayMessage(interaction.guild, gw).catch(() => { });
+                    return;
                 } else {
                     gw.participants.push(interaction.user.id);
                     saveDB(db);
-                    await updateGiveawayMessage(interaction.guild, gw);
-                    return interaction.reply({ content: '🎉 Çekilişe başarıyla katıldınız! Bol şans dileriz! 🍀', ephemeral: true });
+                    await interaction.editReply({ content: '🎉 Çekilişe başarıyla katıldınız! Bol şans dileriz! 🍀' });
+                    updateGiveawayMessage(interaction.guild, gw).catch(() => { });
+                    return;
                 }
             }
 
             if (customId.startsWith('btn_gw_list_')) {
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 const gwId = customId.replace('btn_gw_list_', '');
                 ensureGuildDB(db, guildId);
                 const gw = db[guildId].giveaways ? db[guildId].giveaways[gwId] : null;
 
                 if (!gw) {
-                    return interaction.reply({ content: '❌ Çekiliş verisi bulunamadı.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ Çekiliş verisi bulunamadı.' });
                 }
 
                 const participants = gw.participants || [];
                 if (participants.length === 0) {
-                    return interaction.reply({ content: 'ℹ️ Bu çekilişe henüz kimse katılmadı.', ephemeral: true });
+                    return interaction.editReply({ content: 'ℹ️ Bu çekilişe henüz kimse katılmadı.' });
                 }
 
                 const sample = participants.slice(0, 50).map((id, idx) => `**${idx + 1}.** <@${id}>`).join('\n');
                 const moreText = participants.length > 50 ? `\n... ve ${participants.length - 50} kişi daha` : '';
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`👥 Katılımcı Listesi (${participants.length} Kişi)`)
+                    .setTitle(`Katılımcı Listesi (${participants.length} Kişi)`)
                     .setDescription(`**${gw.prize}**\n\n${sample}${moreText}`)
                     .setColor(0x5865f2);
 
-                return interaction.reply({ embeds: [embed], ephemeral: true });
+                return interaction.editReply({ embeds: [embed] });
             }
 
             // --- HIZLI AÇ/KAPAT TOGGLE BUTONLARI ---
@@ -4532,8 +4562,9 @@ client.on('interactionCreate', async interaction => {
 
                 let targetChannel = interaction.channel;
                 if (channelStr) {
-                    const cleanCh = channelStr.replace(/[<#>]/g, '').trim();
-                    const foundCh = interaction.guild.channels.cache.get(cleanCh) || interaction.guild.channels.cache.find(c => c.name.toLowerCase() === cleanCh.toLowerCase());
+                    const cleanCh = channelStr.replace(/[<#>]/g, '').trim().toLowerCase();
+                    const foundCh = interaction.guild.channels.cache.get(cleanCh) || 
+                                    interaction.guild.channels.cache.find(c => c.name.toLowerCase() === cleanCh || c.name.toLowerCase() === cleanCh.replace(/^#/, ''));
                     if (foundCh && foundCh.isTextBased()) {
                         targetChannel = foundCh;
                     }
@@ -4542,35 +4573,48 @@ client.on('interactionCreate', async interaction => {
                 let reqRole = null;
                 let minLevel = null;
                 if (reqStr) {
+                    // Seviye tespiti (Örn: Seviye 3, Level 5, Seviye:3 veya sadece 3)
+                    const lvlMatch = reqStr.match(/(?:minlevel|level|seviye)[:\s]*(\d+)/i);
+                    if (lvlMatch) {
+                        minLevel = parseInt(lvlMatch[1], 10);
+                    } else {
+                        const onlyNum = reqStr.trim().match(/^(\d+)$/);
+                        if (onlyNum) minLevel = parseInt(onlyNum[1], 10);
+                    }
+
+                    // Rol tespiti (Örn: rol:VIP, @VIP veya doğrudan VIP)
                     const roleMatch = reqStr.match(/rol:(\S+)/i);
                     if (roleMatch) {
                         const rVal = roleMatch[1].replace(/[<@&>]/g, '').trim();
                         const rFound = interaction.guild.roles.cache.get(rVal) || interaction.guild.roles.cache.find(r => r.name.toLowerCase() === rVal.toLowerCase());
                         if (rFound) reqRole = rFound;
                     }
-                    const lvlMatch = reqStr.match(/(?:minlevel|level|seviye):(\d+)/i);
-                    if (lvlMatch) {
-                        minLevel = parseInt(lvlMatch[1], 10);
+                    if (!reqRole) {
+                        const cleanRoleText = reqStr.replace(/(?:minlevel|level|seviye)[:\s]*\d+/gi, '').replace(/[<@&>]/g, '').trim().toLowerCase();
+                        if (cleanRoleText) {
+                            const rFound = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === cleanRoleText);
+                            if (rFound) reqRole = rFound;
+                        }
                     }
                 }
 
                 const reqParts = [];
-                if (reqRole) reqParts.push(`🏷️ **Gereken Rol:** <@&${reqRole.id}>`);
-                if (minLevel) reqParts.push(`🔰 **Minimum Seviye:** \`Seviye ${minLevel}\``);
+                if (reqRole) reqParts.push(`• Gereken Rol: <@&${reqRole.id}>`);
+                if (minLevel) reqParts.push(`• Minimum Seviye: Seviye ${minLevel}`);
 
                 const endsAt = Date.now() + durationMs;
                 const endSec = Math.floor(endsAt / 1000);
 
                 const embed = new EmbedBuilder()
-                    .setTitle(`🎉 ÇEKİLİŞ BAŞLADI: ${prize}`)
+                    .setTitle(`ÇEKİLİŞ: ${prize}`)
                     .setColor(0x5865f2)
                     .setDescription(
                         `🎁 **Ödül:** **${prize}**\n` +
                         `👑 **Kazanan Sayısı:** **${winnersCount} Kişi**\n` +
                         `⏱️ **Bitiş:** <t:${endSec}:R> (<t:${endSec}:f>)\n` +
                         `👤 **Başlatan:** <@${interaction.user.id}>\n` +
-                        (reqParts.length > 0 ? `\n📋 **Katılım Şartları:**\n${reqParts.join('\n')}\n` : '') +
-                        `\nKatılmak için aşağıdaki **🎉 Katıl** butonuna tıklayın!`
+                        (reqParts.length > 0 ? `\n📌 **Katılım Şartları:**\n${reqParts.join('\n')}\n` : '') +
+                        `\nKatılmak için aşağıdaki **Katıl** butonuna tıklayın!`
                     )
                     .setFooter({ text: 'Memur Hüsnü Çekiliş Sistemi' })
                     .setTimestamp(endsAt);
