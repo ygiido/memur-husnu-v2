@@ -3366,15 +3366,16 @@ client.on('interactionCreate', async interaction => {
 
                     const rolesInput = new TextInputBuilder()
                         .setCustomId('br_roles')
-                        .setLabel('Roller ve Buton Metinleri (Her Satıra 1)')
-                        .setPlaceholder('Rol İsmi veya ID | Buton Metni | Renk\nÖrnek:\nDuyuru | Duyuru Bildirimleri | Mavi\nÇekiliş | Çekiliş Katılımcısı | Yeşil')
+                        .setLabel('Roller ve Butonlar (Her Satıra 1 Tane)')
+                        .setValue('Duyuru | Duyuru Bildirimleri | Mavi\nÇekiliş | Çekiliş Katılımcısı | Yeşil')
+                        .setPlaceholder('Rol İsmi | Buton Yazısı | Mavi/Yeşil/Kırmızı/Gri')
                         .setMaxLength(1500)
                         .setStyle(TextInputStyle.Paragraph)
                         .setRequired(true);
 
                     const colorInput = new TextInputBuilder()
                         .setCustomId('br_color')
-                        .setLabel('Panel Rengi (Mavi, Yeşil, Kırmızı, Siyah vb.)')
+                        .setLabel('Panel Rengi (Mavi, Yeşil, Kırmızı vb.)')
                         .setValue('Mavi')
                         .setMaxLength(30)
                         .setStyle(TextInputStyle.Short)
@@ -4194,15 +4195,16 @@ client.on('interactionCreate', async interaction => {
 
                 const rolesInput = new TextInputBuilder()
                     .setCustomId('br_roles')
-                    .setLabel('Roller ve Buton Metinleri (Her Satıra 1)')
-                    .setPlaceholder('Rol İsmi veya ID | Buton Metni | Renk\nÖrnek:\nDuyuru | Duyuru Bildirimleri | Mavi\nÇekiliş | Çekiliş Katılımcısı | Yeşil')
+                    .setLabel('Roller ve Butonlar (Her Satıra 1 Tane)')
+                    .setValue('Duyuru | Duyuru Bildirimleri | Mavi\nÇekiliş | Çekiliş Katılımcısı | Yeşil')
+                    .setPlaceholder('Rol İsmi | Buton Yazısı | Mavi/Yeşil/Kırmızı/Gri')
                     .setMaxLength(1500)
                     .setStyle(TextInputStyle.Paragraph)
                     .setRequired(true);
 
                 const colorInput = new TextInputBuilder()
                     .setCustomId('br_color')
-                    .setLabel('Panel Rengi (Mavi, Yeşil, Kırmızı, Siyah vb.)')
+                    .setLabel('Panel Rengi (Mavi, Yeşil, Kırmızı vb.)')
                     .setValue('Mavi')
                     .setMaxLength(30)
                     .setStyle(TextInputStyle.Short)
