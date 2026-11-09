@@ -336,6 +336,7 @@ function ensureGuildDB(db, guildId) {
     if (!Array.isArray(db[guildId].marketRoles)) db[guildId].marketRoles = [];
     if (!Array.isArray(db[guildId].tempUserRoles)) db[guildId].tempUserRoles = [];
     if (!db[guildId].giveaways) db[guildId].giveaways = {};
+    if (!db[guildId].buttonRoles) db[guildId].buttonRoles = {};
     if (db[guildId].xpEnabled === undefined) db[guildId].xpEnabled = true;
     if (db[guildId].gamesEnabled === undefined) db[guildId].gamesEnabled = true;
     if (db[guildId].kickKanal && !db[guildId].duyuruKanal) {
@@ -1350,12 +1351,13 @@ function buildDashboardButtons(activeTab = 'ayar') {
     const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('nav_panel_ayar').setLabel('Sistem Ayarları').setStyle(activeTab === 'ayar' ? ButtonStyle.Primary : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('nav_panel_log').setLabel('Log Ayarları').setStyle(activeTab === 'log' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('nav_panel_ticket').setLabel('Ticket Kurulumu').setStyle(activeTab === 'ticket' ? ButtonStyle.Success : ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('nav_panel_ticket').setLabel('Ticket Kurulumu').setStyle(activeTab === 'ticket' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('nav_panel_info').setLabel('Sistem Özeti').setStyle(activeTab === 'info' ? ButtonStyle.Primary : ButtonStyle.Secondary)
     );
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('nav_panel_ekonomi').setLabel('Ekonomi & XP').setStyle(activeTab === 'ekonomi' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('nav_panel_cekilis').setLabel('Çekiliş Yönetimi').setStyle(activeTab === 'cekilis' ? ButtonStyle.Success : ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('nav_panel_info').setLabel('Sistem Özeti').setStyle(activeTab === 'info' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('nav_panel_cekilis').setLabel('Çekiliş Yönetimi').setStyle(activeTab === 'cekilis' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('nav_panel_buttonrole').setLabel('Buton Rolleri').setStyle(activeTab === 'buttonrole' ? ButtonStyle.Success : ButtonStyle.Secondary)
     );
     return [row1, row2];
 }
@@ -1364,7 +1366,7 @@ function buildHomeDashboard(guild) {
     const embed = new EmbedBuilder()
         .setTitle(`${guild.name} - Yönetim ve Rehber Paneli`)
         .setDescription(
-            `Bu kontrol paneli üzerinden sunucunun tüm moderasyon, güvenlik, geçici ses odası, log, çekiliş ve destek (ticket) sistemlerini hiçbir komut ezberlemeden yapılandırabilirsiniz.\n\n` +
+            `Bu kontrol paneli üzerinden sunucunun tüm moderasyon, güvenlik, geçici ses odası, log, çekiliş, destek (ticket) ve buton rol sistemlerini hiçbir komut ezberlemeden yapılandırabilirsiniz.\n\n` +
             `**1. Sistem Ayarları Butonu**\n` +
             `Yetkili, muaf, cezalı ve sicilli rollerini; geçici ses odası oluşturucu kanalını, yayın duyuru sistemini, küfür/link engellerini ve bot korumasını buradan yönetebilirsiniz.\n\n` +
             `**2. Log Ayarları Butonu**\n` +
@@ -1373,8 +1375,11 @@ function buildHomeDashboard(guild) {
             `İstediğiniz kanala özel destek veya başvuru kutusu kurmanızı sağlar. Üyeler butona bastığında karşılarına bir başvuru formu (Modal) çıkar; konu ve açıklamayı yazıp onayladıklarında özel kanal açılır.\n\n` +
             `**4. Çekiliş Yönetimi Butonu**\n` +
             `Sunucuda anlık geri sayımlı çekilişler başlatabilir, katılım şartları (Rol, Seviye) belirleyebilir ve biten çekilişleri yeniden çekebilirsiniz (Reroll).\n\n` +
-            `**5. Komutlar ve Yetki Dağılımı**\n` +
+            `**5. Buton Rolleri Butonu**\n` +
+            `Üyelerin tek tıkla üzerlerine rol alıp bırakabileceği (Self-Role) panelleri dilediğiniz kanallara kurmanızı ve yönetmenizi sağlar.\n\n` +
+            `**6. Komutlar ve Yetki Dağılımı**\n` +
             `- \`/panel\` : Bu yönetim ekranını açar (Sadece Sunucu Yöneticileri).\n` +
+            `- \`/butonrol\` : Buton rol paneli oluşturma ve yönetim komutları.\n` +
             `- \`/cekilis\` : Çekiliş başlatma ve yönetim komutları (Yöneticiler).\n` +
             `- \`/yaz\` : Bot üzerinden kanala duyuru/mesaj yazar (Sadece Sunucu Yöneticileri).\n` +
             `- \`/hapis\` : Kullanıcıyı belirtilen süreyle cezalıya atar (Yöneticiler ve Yetkili Rol).\n` +
@@ -1976,6 +1981,103 @@ function buildCekilisDashboard(guild, guildDb, selectedGwId = null) {
                 .addOptions(selectOptions.slice(0, 25))
         );
         components.push(menuRow);
+    }
+
+    return { content: '', embeds: [embed], components };
+}
+
+function parseColor(colorInput) {
+    if (!colorInput) return 0x5865f2;
+    const clean = colorInput.trim().toLowerCase();
+    if (clean === 'mavi' || clean === 'blue') return 0x3498db;
+    if (clean === 'yesil' || clean === 'yeşil' || clean === 'green') return 0x2ecc71;
+    if (clean === 'kirmizi' || clean === 'kırmızı' || clean === 'red') return 0xe74c3c;
+    if (clean === 'sari' || clean === 'sarı' || clean === 'yellow') return 0xf1c40f;
+    if (clean === 'mor' || clean === 'purple') return 0x9b59b6;
+    if (clean === 'siyah' || clean === 'black') return 0x2b2d31;
+    if (clean.startsWith('#')) {
+        const parsed = parseInt(clean.replace('#', ''), 16);
+        if (!isNaN(parsed)) return parsed;
+    }
+    const num = parseInt(clean, 16);
+    if (!isNaN(num)) return num;
+    return 0x5865f2;
+}
+
+function parseButtonStyle(styleInput) {
+    if (!styleInput) return ButtonStyle.Primary;
+    const clean = styleInput.trim().toLowerCase();
+    if (clean === 'mavi' || clean === 'blue' || clean === 'primary') return ButtonStyle.Primary;
+    if (clean === 'yesil' || clean === 'yeşil' || clean === 'green' || clean === 'success') return ButtonStyle.Success;
+    if (clean === 'kirmizi' || clean === 'kırmızı' || clean === 'red' || clean === 'danger') return ButtonStyle.Danger;
+    if (clean === 'gri' || clean === 'gray' || clean === 'secondary') return ButtonStyle.Secondary;
+    return ButtonStyle.Primary;
+}
+
+function buildButtonRoleDashboard(guild, guildDb) {
+    const panels = guildDb.buttonRoles || {};
+    const panelList = Object.values(panels);
+
+    let listText = '> ⚠️ *Şu anda bu sunucuda kurulmuş bir buton rol paneli bulunmuyor.*';
+    if (panelList.length > 0) {
+        listText = panelList.map((p, idx) => {
+            const chName = guild.channels.cache.get(p.channelId)?.name || 'silinmiş-kanal';
+            const rolesText = (p.roles || []).map(r => `<@&${r.roleId}> (\`${r.label}\`)`).join(', ') || 'Rol yok';
+            const createdSec = Math.floor((p.createdAt || Date.now()) / 1000);
+            return (
+                `> **#${idx + 1} — ${p.title}**\n` +
+                `> ├ 📢 Kanal: <#${p.channelId}> (\`#${chName}\`)\n` +
+                `> ├ 🎭 Roller: ${rolesText}\n` +
+                `> └ 🆔 Mesaj ID: \`${p.messageId}\` • Kuruldu: <t:${createdSec}:R>`
+            );
+        }).join('\n\n');
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('🔘 Buton Rol (Self-Role) Yönetim Paneli')
+        .setDescription(
+            `Sunucunuzda üyelerin **tek bir tıkla üzerlerine rol alabileceği veya çıkarabileceği** butonlu rol panellerini buradan dilediğiniz kanallara kurabilir ve yönetebilirsiniz.\n\n` +
+            `**Nasıl Kurulur?**\n` +
+            `1. Aşağıdaki menüden panelin gönderileceği kanalı seçin.\n` +
+            `2. Açılan pencerede Panel Başlığı, Açıklaması ve Rolleri girin.\n` +
+            `3. Bot belirttiğiniz kanala butonları otomatik olarak gönderir.\n\n` +
+            `**📋 KURULU BUTON ROL PANELLERİ (${panelList.length})**\n${listText}`
+        )
+        .setColor(0x5865f2)
+        .setFooter({ text: `${guild.name} • Buton Rol Sistemi` })
+        .setTimestamp();
+
+    const actionRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('btn_refresh_buttonrole_dashboard').setLabel('Yenile').setStyle(ButtonStyle.Secondary)
+    );
+
+    const channelRow = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+            .setCustomId('select_br_target_channel')
+            .setPlaceholder('Yeni Buton Rol Paneli kurmak için kanal seçin...')
+            .setChannelTypes([ChannelType.GuildText, ChannelType.GuildAnnouncement])
+            .setMaxValues(1)
+    );
+
+    const components = [...buildDashboardButtons('buttonrole'), actionRow, channelRow];
+
+    if (panelList.length > 0) {
+        const deleteOptions = panelList.slice(0, 25).map(p => {
+            const chName = guild.channels.cache.get(p.channelId)?.name || 'kanal';
+            return {
+                label: `[Sil] ${p.title}`.slice(0, 100),
+                description: `#${chName} | ${(p.roles || []).length} Rol | ID: ${p.messageId}`.slice(0, 100),
+                value: `del_br_${p.id}`
+            };
+        });
+
+        const deleteRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('menu_delete_buttonrole_panel')
+                .setPlaceholder('Silmek istediğiniz bir Buton Rol panelini seçin...')
+                .addOptions(deleteOptions)
+        );
+        components.push(deleteRow);
     }
 
     return { content: '', embeds: [embed], components };
@@ -2861,6 +2963,26 @@ client.once('ready', async () => {
                     type: 1
                 }
             ]
+        },
+        {
+            name: 'butonrol',
+            description: 'Buton rol paneli oluşturma ve yönetim komutları.',
+            default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
+            options: [
+                {
+                    name: 'kur',
+                    description: 'Belirtilen kanala butonlu rol alma paneli gönderir.',
+                    type: 1,
+                    options: [
+                        { name: 'kanal', type: 7, description: 'Panelin gönderileceği metin veya duyuru kanalı', required: true }
+                    ]
+                },
+                {
+                    name: 'liste',
+                    description: 'Sunucudaki kurulu buton rol panellerini listeler.',
+                    type: 1
+                }
+            ]
         }
     ];
 
@@ -3201,6 +3323,71 @@ client.on('interactionCreate', async interaction => {
                     }
                     const text = gwList.map((g, i) => `**${i + 1}.** **${g.prize}** — <#${g.channelId}> | Bitiş: <t:${Math.floor(g.endsAt / 1000)}:R> | Mesaj ID: \`${g.messageId}\``).join('\n');
                     return interaction.editReply({ content: `🎉 **Devam Eden Çekilişler (${gwList.length}):**\n${text}` });
+                }
+            }
+
+            if (commandName === 'butonrol') {
+                if (!isAdmin && !isYetkili) {
+                    return interaction.reply({ content: '❌ Buton rol komutlarını sadece **Yöneticiler ve Yetkililer** kullanabilir.', ephemeral: true });
+                }
+
+                const sub = interaction.options.getSubcommand();
+                ensureGuildDB(db, guildId);
+
+                if (sub === 'liste') {
+                    return interaction.reply({ ...buildButtonRoleDashboard(interaction.guild, db[guildId]), ephemeral: true });
+                }
+
+                if (sub === 'kur') {
+                    const targetChannel = interaction.options.getChannel('kanal');
+                    if (!targetChannel || !targetChannel.isTextBased()) {
+                        return interaction.reply({ content: '❌ Lütfen geçerli bir metin veya duyuru kanalı seçin.', ephemeral: true });
+                    }
+
+                    const modal = new ModalBuilder()
+                        .setCustomId(`modal_create_br_${targetChannel.id}`)
+                        .setTitle('Yeni Buton Rol Paneli Kurulumu');
+
+                    const titleInput = new TextInputBuilder()
+                        .setCustomId('br_title')
+                        .setLabel('Panel Başlığı')
+                        .setValue('Rol Alma Merkezi')
+                        .setMaxLength(100)
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true);
+
+                    const descInput = new TextInputBuilder()
+                        .setCustomId('br_desc')
+                        .setLabel('Panel Açıklaması')
+                        .setValue('Aşağıdaki butonlara tıklayarak dilediğiniz rolü alabilir veya geri bırakabilirsiniz.')
+                        .setMaxLength(1500)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true);
+
+                    const rolesInput = new TextInputBuilder()
+                        .setCustomId('br_roles')
+                        .setLabel('Roller ve Buton Metinleri (Her Satıra 1)')
+                        .setPlaceholder('Rol İsmi veya ID | Buton Metni | Renk\nÖrnek:\nDuyuru | Duyuru Bildirimleri | Mavi\nÇekiliş | Çekiliş Katılımcısı | Yeşil')
+                        .setMaxLength(1500)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true);
+
+                    const colorInput = new TextInputBuilder()
+                        .setCustomId('br_color')
+                        .setLabel('Panel Rengi (Mavi, Yeşil, Kırmızı, Siyah vb.)')
+                        .setValue('Mavi')
+                        .setMaxLength(30)
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(false);
+
+                    modal.addComponents(
+                        new ActionRowBuilder().addComponents(titleInput),
+                        new ActionRowBuilder().addComponents(descInput),
+                        new ActionRowBuilder().addComponents(rolesInput),
+                        new ActionRowBuilder().addComponents(colorInput)
+                    );
+
+                    return interaction.showModal(modal);
                 }
             }
 
@@ -3954,9 +4141,83 @@ client.on('interactionCreate', async interaction => {
                 );
                 return interaction.showModal(modal);
             }
+
+            if (interaction.customId === 'menu_delete_buttonrole_panel') {
+                if (!isAdmin && !isYetkili) {
+                    return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
+                }
+                const selected = interaction.values[0];
+                const panelId = selected.replace('del_br_', '');
+                ensureGuildDB(db, guildId);
+                const panel = db[guildId].buttonRoles?.[panelId];
+                if (panel) {
+                    try {
+                        const ch = interaction.guild.channels.cache.get(panel.channelId) || await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
+                        if (ch && panel.messageId) {
+                            const msg = await ch.messages.fetch(panel.messageId).catch(() => null);
+                            if (msg) await msg.delete().catch(() => { });
+                        }
+                    } catch (e) { }
+                    delete db[guildId].buttonRoles[panelId];
+                    saveDB(db);
+                }
+                return interaction.update(buildButtonRoleDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
         }
 
         if (interaction.isChannelSelectMenu()) {
+            if (interaction.customId === 'select_br_target_channel') {
+                if (!isAdmin && !isYetkili) {
+                    return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
+                }
+                const targetChId = interaction.values[0];
+
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_create_br_${targetChId}`)
+                    .setTitle('Yeni Buton Rol Paneli Kurulumu');
+
+                const titleInput = new TextInputBuilder()
+                    .setCustomId('br_title')
+                    .setLabel('Panel Başlığı')
+                    .setValue('Rol Alma Merkezi')
+                    .setMaxLength(100)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true);
+
+                const descInput = new TextInputBuilder()
+                    .setCustomId('br_desc')
+                    .setLabel('Panel Açıklaması')
+                    .setValue('Aşağıdaki butonlara tıklayarak dilediğiniz rolü alabilir veya geri bırakabilirsiniz.')
+                    .setMaxLength(1500)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true);
+
+                const rolesInput = new TextInputBuilder()
+                    .setCustomId('br_roles')
+                    .setLabel('Roller ve Buton Metinleri (Her Satıra 1)')
+                    .setPlaceholder('Rol İsmi veya ID | Buton Metni | Renk\nÖrnek:\nDuyuru | Duyuru Bildirimleri | Mavi\nÇekiliş | Çekiliş Katılımcısı | Yeşil')
+                    .setMaxLength(1500)
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true);
+
+                const colorInput = new TextInputBuilder()
+                    .setCustomId('br_color')
+                    .setLabel('Panel Rengi (Mavi, Yeşil, Kırmızı, Siyah vb.)')
+                    .setValue('Mavi')
+                    .setMaxLength(30)
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(false);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(titleInput),
+                    new ActionRowBuilder().addComponents(descInput),
+                    new ActionRowBuilder().addComponents(rolesInput),
+                    new ActionRowBuilder().addComponents(colorInput)
+                );
+
+                return interaction.showModal(modal);
+            }
+
             if (interaction.customId.startsWith('set_ayar_ch_')) {
                 if (!isAdmin) return;
                 const key = interaction.customId.replace('set_ayar_ch_', '');
@@ -4119,6 +4380,11 @@ client.on('interactionCreate', async interaction => {
                 if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri ve Yetkilileri yönetebilir.', ephemeral: true }).catch(() => { });
                 ensureGuildDB(db, guildId);
                 return interaction.update(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
+            if (customId === 'nav_panel_buttonrole' || customId === 'btn_refresh_buttonrole_dashboard') {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri ve Yetkilileri yönetebilir.', ephemeral: true }).catch(() => { });
+                ensureGuildDB(db, guildId);
+                return interaction.update(buildButtonRoleDashboard(interaction.guild, db[guildId])).catch(() => { });
             }
 
             if (customId === 'btn_open_cekilis_modal') {
@@ -4295,6 +4561,54 @@ client.on('interactionCreate', async interaction => {
                 await interaction.deferUpdate().catch(() => { });
                 ensureGuildDB(db, guildId);
                 return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId], null)).catch(() => { });
+            }
+
+            // --- BUTON İLE ROL ALMA / BIRAKMA (SELF-ROLE) ---
+            if (customId.startsWith('btn_role_toggle_')) {
+                const roleId = customId.replace('btn_role_toggle_', '');
+                const role = interaction.guild.roles.cache.get(roleId) || await interaction.guild.roles.fetch(roleId).catch(() => null);
+
+                if (!role) {
+                    return interaction.reply({ content: '❌ Bu rol sunucuda bulunamadı veya silinmiş.', ephemeral: true });
+                }
+
+                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+                if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                    return interaction.reply({ content: '❌ Botun rolleri yönetme ("Rolleri Yönet" / Manage Roles) yetkisi bulunmuyor.', ephemeral: true });
+                }
+
+                if (role.position >= botMember.roles.highest.position) {
+                    return interaction.reply({
+                        content: `❌ <@&${role.id}> rolü botun kendi rolünden daha üstte olduğu için bot bu rolü veremez. Lütfen bir sunucu yöneticisine bildiriniz.`,
+                        ephemeral: true
+                    });
+                }
+
+                const member = interaction.member;
+                if (!member) {
+                    return interaction.reply({ content: '❌ Üye bilgisi alınamadı.', ephemeral: true });
+                }
+
+                try {
+                    if (member.roles.cache.has(role.id)) {
+                        await member.roles.remove(role.id);
+                        return interaction.reply({
+                            content: `🗑️ **${role.name}** rolü üzerinizden başarıyla **alındı**.`,
+                            ephemeral: true
+                        });
+                    } else {
+                        await member.roles.add(role.id);
+                        return interaction.reply({
+                            content: `✅ **${role.name}** rolü üzerinize başarıyla **verildi**!`,
+                            ephemeral: true
+                        });
+                    }
+                } catch (err) {
+                    return interaction.reply({
+                        content: `❌ Rol işlemi gerçekleştirilemedi: ${err.message}`,
+                        ephemeral: true
+                    });
+                }
             }
 
             // --- HIZLI AÇ/KAPAT TOGGLE BUTONLARI ---
@@ -4789,6 +5103,134 @@ client.on('interactionCreate', async interaction => {
                 addLiveLog(`[ÇEKİLİŞ BAŞLADI] ${interaction.user.tag} -> ${prize} (#${targetChannel.name})`);
                 return interaction.editReply({
                     content: `✅ Çekiliş başarıyla <#${targetChannel.id}> kanalında başlatıldı!\n🎁 **Ödül:** **${prize}**\n⏱️ **Bitiş:** <t:${endSec}:R>`
+                });
+            }
+
+            // Yöneticinin Buton Rol Paneli Kurma Formu
+            if (interaction.customId.startsWith('modal_create_br_')) {
+                if (!isAdmin && !isYetkili) {
+                    return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
+                }
+                const chId = interaction.customId.replace('modal_create_br_', '');
+                let targetChannel = interaction.guild.channels.cache.get(chId) || await interaction.guild.channels.fetch(chId).catch(() => null);
+                if (!targetChannel) {
+                    return interaction.reply({ content: '❌ Hedef kanal bulunamadı.', ephemeral: true });
+                }
+
+                await interaction.deferReply({ ephemeral: true });
+
+                const title = interaction.fields.getTextInputValue('br_title');
+                const desc = interaction.fields.getTextInputValue('br_desc');
+                const rawRoles = interaction.fields.getTextInputValue('br_roles');
+                const rawColor = interaction.fields.getTextInputValue('br_color') || 'Mavi';
+
+                const lines = rawRoles.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                if (lines.length === 0) {
+                    return interaction.editReply({ content: '❌ En az 1 adet rol ve buton tanımı girmelisiniz.' });
+                }
+
+                await interaction.guild.roles.fetch().catch(() => { });
+
+                const roleConfigs = [];
+                const notFoundRoles = [];
+
+                for (const line of lines) {
+                    const parts = line.split('|').map(p => p.trim());
+                    const roleQuery = parts[0].replace(/^<@&/, '').replace(/>$/, '').replace(/^@/, '');
+                    const label = (parts[1] || parts[0]).slice(0, 80);
+                    const colorStyle = parseButtonStyle(parts[2]);
+
+                    let foundRole = interaction.guild.roles.cache.get(roleQuery);
+                    if (!foundRole) {
+                        foundRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === roleQuery.toLowerCase());
+                    }
+                    if (!foundRole) {
+                        foundRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleQuery.toLowerCase()));
+                    }
+
+                    if (!foundRole) {
+                        notFoundRoles.push(roleQuery);
+                    } else {
+                        const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+                        const isHigher = botMember && foundRole.position >= botMember.roles.highest.position;
+                        roleConfigs.push({
+                            roleId: foundRole.id,
+                            roleName: foundRole.name,
+                            label: label || foundRole.name,
+                            style: colorStyle,
+                            isHigher: isHigher
+                        });
+                    }
+                }
+
+                if (roleConfigs.length === 0) {
+                    return interaction.editReply({
+                        content: `❌ Belirttiğiniz rollerin hiçbiri sunucuda bulunamadı:\n> ${notFoundRoles.join(', ')}\nLütfen rol isimlerini veya ID'lerini kontrol edin.`
+                    });
+                }
+
+                if (roleConfigs.length > 25) {
+                    return interaction.editReply({ content: '❌ Discord sınırları nedeniyle tek bir panelde en fazla 25 buton bulunabilir.' });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle(title)
+                    .setDescription(desc)
+                    .setColor(parseColor(rawColor))
+                    .setFooter({ text: `${interaction.guild.name} • Rol Alma Sistemi`, iconURL: interaction.guild.iconURL() || undefined })
+                    .setTimestamp();
+
+                const buttonRows = [];
+                let currentRow = new ActionRowBuilder();
+
+                for (let i = 0; i < roleConfigs.length; i++) {
+                    const rc = roleConfigs[i];
+                    currentRow.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`btn_role_toggle_${rc.roleId}`)
+                            .setLabel(rc.label)
+                            .setStyle(rc.style)
+                    );
+
+                    if (currentRow.components.length === 5 || i === roleConfigs.length - 1) {
+                        buttonRows.push(currentRow);
+                        currentRow = new ActionRowBuilder();
+                    }
+                }
+
+                let sentMsg;
+                try {
+                    sentMsg = await targetChannel.send({ embeds: [embed], components: buttonRows });
+                } catch (err) {
+                    return interaction.editReply({ content: `❌ Mesaj gönderilemedi: ${err.message}` });
+                }
+
+                const panelId = sentMsg.id;
+                ensureGuildDB(db, guildId);
+                db[guildId].buttonRoles[panelId] = {
+                    id: panelId,
+                    messageId: sentMsg.id,
+                    channelId: targetChannel.id,
+                    title: title,
+                    description: desc,
+                    color: rawColor,
+                    roles: roleConfigs.map(rc => ({ roleId: rc.roleId, label: rc.label })),
+                    createdAt: Date.now()
+                };
+                saveDB(db);
+
+                let warnText = '';
+                const higherList = roleConfigs.filter(r => r.isHigher);
+                if (higherList.length > 0) {
+                    warnText = `\n\n⚠️ **Dikkat:** Şu roller botun kendi rolünden daha üstte: ${higherList.map(r => `<@&${r.roleId}>`).join(', ')}. Botun bu rolleri üyelere verebilmesi için lütfen Sunucu Ayarları > Roller bölümünden botun rolünü bu rollerin üzerine taşıyın.`;
+                }
+
+                if (notFoundRoles.length > 0) {
+                    warnText += `\n⚠️ **Bulunamayan Roller:** ${notFoundRoles.join(', ')} (Panele eklenmedi).`;
+                }
+
+                return interaction.editReply({
+                    content: `✅ **Buton Rol Paneli başarıyla oluşturuldu ve <#${targetChannel.id}> kanalına gönderildi!**${warnText}`
                 });
             }
 
