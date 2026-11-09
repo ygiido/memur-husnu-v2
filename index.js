@@ -2014,7 +2014,7 @@ function parseButtonStyle(styleInput) {
     return ButtonStyle.Primary;
 }
 
-function buildButtonRoleDashboard(guild, guildDb, selectedChId = null) {
+function buildButtonRoleDashboard(guild, guildDb, selectedChId = null, alertMsg = null) {
     if (selectedChId) {
         const ch = guild.channels.cache.get(selectedChId);
         const chName = ch ? ch.name : 'kanal';
@@ -2022,17 +2022,17 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null) {
         const embed = new EmbedBuilder()
             .setTitle(`🎯 Buton Rol Kurulumu: #${chName}`)
             .setDescription(
-                `Panelin gönderileceği kanal: <#${selectedChId}>\n\n` +
-                `Lütfen aşağıdaki **Rol Seçim Menüsünden** panele eklenecek rolleri seçin.\n` +
-                `*(Tek seferde 1 ile 25 arası rol seçebilirsiniz. Seçtiğiniz her rol için butona basınca rol verme/alma butonu oluşturulacaktır.)*`
+                `📢 **Hedef Kanal:** <#${selectedChId}>\n\n` +
+                `Aşağıdaki menüden bu kanala buton olarak eklemek istediğiniz **rolleri seçin**.\n` +
+                `*(Tek seferde 1'den 25'e kadar rol seçebilirsiniz. Seçtiğiniz her rol için tıklandığında rolü veren/alan bir buton oluşturulur.)*`
             )
             .setColor(0x5865f2)
-            .setFooter({ text: `${guild.name} • 2. Adım: Rol Seçimi` });
+            .setFooter({ text: `${guild.name} • 2. Adım: Rolleri Seçin` });
 
         const roleSelectRow = new ActionRowBuilder().addComponents(
             new RoleSelectMenuBuilder()
                 .setCustomId(`select_br_roles_${selectedChId}`)
-                .setPlaceholder('Panele eklenecek rolleri buradan seçin...')
+                .setPlaceholder('Eklenecek rolleri buradan seçin (1-25 Rol)...')
                 .setMinValues(1)
                 .setMaxValues(25)
         );
@@ -2040,7 +2040,7 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null) {
         const cancelRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('btn_refresh_buttonrole_dashboard')
-                .setLabel('Geri Dön / İptal')
+                .setLabel('Vazgeç / Farklı Kanal Seç')
                 .setStyle(ButtonStyle.Secondary)
         );
 
@@ -2050,11 +2050,16 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null) {
     const panels = guildDb.buttonRoles || {};
     const panelList = Object.values(panels);
 
+    let alertBlock = '';
+    if (alertMsg) {
+        alertBlock = `> 🟢 **${alertMsg}**\n\n`;
+    }
+
     let listText = '> ⚠️ *Şu anda bu sunucuda kurulmuş bir buton rol paneli bulunmuyor.*';
     if (panelList.length > 0) {
         listText = panelList.map((p, idx) => {
             const chName = guild.channels.cache.get(p.channelId)?.name || 'silinmiş-kanal';
-            const rolesText = (p.roles || []).map(r => `<@&${r.roleId}> (\`${r.label}\`)`).join(', ') || 'Rol yok';
+            const rolesText = (p.roles || []).map(r => `<@&${r.roleId}>`).join(', ') || 'Rol yok';
             const createdSec = Math.floor((p.createdAt || Date.now()) / 1000);
             return (
                 `> **#${idx + 1} — ${p.title}**\n` +
@@ -2068,11 +2073,12 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null) {
     const embed = new EmbedBuilder()
         .setTitle('🔘 Buton Rol (Self-Role) Yönetim Paneli')
         .setDescription(
-            `Sunucunuzda üyelerin **tek bir tıkla üzerlerine rol alabileceği veya çıkarabileceği** butonlu rol panellerini buradan dilediğiniz kanallara kurabilir ve yönetebilirsiniz.\n\n` +
-            `**Nasıl Kurulur?**\n` +
-            `1. Aşağıdaki menüden panelin gönderileceği kanalı seçin.\n` +
-            `2. Açılan menüden panele eklenecek rolleri seçin.\n` +
-            `3. Dilerseniz \`/butonrol kur kanal:#kanal rol1:@Rol\` komutuyla da doğrudan rol etiketleyerek kurabilirsiniz.\n\n` +
+            `${alertBlock}` +
+            `Üyelerin tek tıkla üzerlerine rol alıp bırakabileceği panelleri buradan yönetebilirsiniz.\n\n` +
+            `**⚡ Hızlı Kurulum Adımları:**\n` +
+            `1. Aşağıdaki **Kanal Seç** menüsünden panelin gönderileceği kanalı seçin.\n` +
+            `2. Açılan listeden panele eklenecek rolleri işaretleyin (1-25 Rol).\n` +
+            `3. Dilerseniz \`/butonrol kur\` komutuyla da doğrudan rol etiketleyerek kurabilirsiniz.\n\n` +
             `**📋 KURULU BUTON ROL PANELLERİ (${panelList.length})**\n${listText}`
         )
         .setColor(0x5865f2)
@@ -3008,64 +3014,19 @@ client.once('ready', async () => {
                     options: [
                         { name: 'kanal', type: 7, description: 'Panelin gönderileceği metin veya duyuru kanalı', required: true },
                         { name: 'rol1', type: 8, description: '1. Rol (@Rol etiketleyin)', required: true },
-                        { name: 'buton1', type: 3, description: '1. Buton üzerinde yazacak metin', required: false },
-                        {
-                            name: 'renk1', type: 3, description: '1. Buton rengi', required: false,
-                            choices: [
-                                { name: 'Mavi', value: 'mavi' },
-                                { name: 'Yeşil', value: 'yesil' },
-                                { name: 'Kırmızı', value: 'kirmizi' },
-                                { name: 'Gri', value: 'gri' }
-                            ]
-                        },
                         { name: 'rol2', type: 8, description: '2. Rol (@Rol etiketleyin)', required: false },
-                        { name: 'buton2', type: 3, description: '2. Buton metni', required: false },
-                        {
-                            name: 'renk2', type: 3, description: '2. Buton rengi', required: false,
-                            choices: [
-                                { name: 'Mavi', value: 'mavi' },
-                                { name: 'Yeşil', value: 'yesil' },
-                                { name: 'Kırmızı', value: 'kirmizi' },
-                                { name: 'Gri', value: 'gri' }
-                            ]
-                        },
                         { name: 'rol3', type: 8, description: '3. Rol (@Rol etiketleyin)', required: false },
-                        { name: 'buton3', type: 3, description: '3. Buton metni', required: false },
-                        {
-                            name: 'renk3', type: 3, description: '3. Buton rengi', required: false,
-                            choices: [
-                                { name: 'Mavi', value: 'mavi' },
-                                { name: 'Yeşil', value: 'yesil' },
-                                { name: 'Kırmızı', value: 'kirmizi' },
-                                { name: 'Gri', value: 'gri' }
-                            ]
-                        },
                         { name: 'rol4', type: 8, description: '4. Rol (@Rol etiketleyin)', required: false },
-                        { name: 'buton4', type: 3, description: '4. Buton metni', required: false },
-                        {
-                            name: 'renk4', type: 3, description: '4. Buton rengi', required: false,
-                            choices: [
-                                { name: 'Mavi', value: 'mavi' },
-                                { name: 'Yeşil', value: 'yesil' },
-                                { name: 'Kırmızı', value: 'kirmizi' },
-                                { name: 'Gri', value: 'gri' }
-                            ]
-                        },
                         { name: 'rol5', type: 8, description: '5. Rol (@Rol etiketleyin)', required: false },
-                        { name: 'buton5', type: 3, description: '5. Buton metni', required: false },
+                        { name: 'rol6', type: 8, description: '6. Rol (@Rol etiketleyin)', required: false },
+                        { name: 'rol7', type: 8, description: '7. Rol (@Rol etiketleyin)', required: false },
+                        { name: 'rol8', type: 8, description: '8. Rol (@Rol etiketleyin)', required: false },
+                        { name: 'rol9', type: 8, description: '9. Rol (@Rol etiketleyin)', required: false },
+                        { name: 'rol10', type: 8, description: '10. Rol (@Rol etiketleyin)', required: false },
+                        { name: 'baslik', type: 3, description: 'Panel kutusunun başlığı (İsteğe bağlı)', required: false },
+                        { name: 'aciklama', type: 3, description: 'Panel kutusunun açıklama yazısı (İsteğe bağlı)', required: false },
                         {
-                            name: 'renk5', type: 3, description: '5. Buton rengi', required: false,
-                            choices: [
-                                { name: 'Mavi', value: 'mavi' },
-                                { name: 'Yeşil', value: 'yesil' },
-                                { name: 'Kırmızı', value: 'kirmizi' },
-                                { name: 'Gri', value: 'gri' }
-                            ]
-                        },
-                        { name: 'baslik', type: 3, description: 'Panel kutusunun başlığı', required: false },
-                        { name: 'aciklama', type: 3, description: 'Panel kutusunun açıklama yazısı', required: false },
-                        {
-                            name: 'panel_rengi', type: 3, description: 'Panel kutusunun kenarlık rengi', required: false,
+                            name: 'panel_rengi', type: 3, description: 'Panel kutusunun rengi (İsteğe bağlı)', required: false,
                             choices: [
                                 { name: 'Mavi', value: 'mavi' },
                                 { name: 'Yeşil', value: 'yesil' },
@@ -3477,18 +3438,16 @@ client.on('interactionCreate', async interaction => {
                     const rawColor = interaction.options.getString('panel_rengi') || 'Mavi';
 
                     const roleConfigs = [];
-                    for (let i = 1; i <= 5; i++) {
+                    for (let i = 1; i <= 10; i++) {
                         const role = interaction.options.getRole(`rol${i}`);
                         if (role) {
-                            const customLabel = interaction.options.getString(`buton${i}`)?.trim();
-                            const customColor = interaction.options.getString(`renk${i}`);
                             const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
                             const isHigher = botMember && role.position >= botMember.roles.highest.position;
                             roleConfigs.push({
                                 roleId: role.id,
                                 roleName: role.name,
-                                label: (customLabel || role.name).slice(0, 80),
-                                style: parseButtonStyle(customColor || 'Mavi'),
+                                label: role.name.slice(0, 80),
+                                style: ButtonStyle.Primary,
                                 isHigher: isHigher
                             });
                         }
@@ -4591,7 +4550,7 @@ client.on('interactionCreate', async interaction => {
                 try {
                     sentMsg = await targetChannel.send({ embeds: [embed], components: buttonRows });
                 } catch (err) {
-                    return interaction.followUp({ content: `❌ Mesaj gönderilemedi: ${err.message}`, ephemeral: true });
+                    return interaction.editReply(buildButtonRoleDashboard(interaction.guild, db[guildId], null, `Hata: Mesaj gönderilemedi (${err.message})`)).catch(() => { });
                 }
 
                 const panelId = sentMsg.id;
@@ -4611,14 +4570,10 @@ client.on('interactionCreate', async interaction => {
                 let warnText = '';
                 const higherList = roleConfigs.filter(r => r.isHigher);
                 if (higherList.length > 0) {
-                    warnText = `\n\n⚠️ **Dikkat:** Şu roller botun kendi rolünden daha üstte: ${higherList.map(r => `<@&${r.roleId}>`).join(', ')}. Botun bu rolleri üyelere verebilmesi için lütfen Sunucu Ayarları > Roller bölümünden botun rolünü bu rollerin üzerine taşıyın.`;
+                    warnText = ` (⚠️ Dikkat: ${higherList.map(r => r.roleName).join(', ')} rolü botun rolünden üstte olduğu için botun rolünü en üste taşıyın)`;
                 }
 
-                await interaction.editReply(buildButtonRoleDashboard(interaction.guild, db[guildId])).catch(() => { });
-                return interaction.followUp({
-                    content: `✅ **Buton Rol Paneli başarıyla oluşturuldu ve <#${targetChannel.id}> kanalına gönderildi!**\n🆔 Mesaj ID: \`${sentMsg.id}\`${warnText}`,
-                    ephemeral: true
-                });
+                return interaction.editReply(buildButtonRoleDashboard(interaction.guild, db[guildId], null, `Panel #${targetChannel.name} kanalına (${roleConfigs.length} rol) başarıyla kuruldu!${warnText}`)).catch(() => { });
             }
         }
 
