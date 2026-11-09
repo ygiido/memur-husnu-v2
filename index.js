@@ -2123,7 +2123,8 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null, alertMsg 
         .setFooter({ text: `${guild.name} • Buton Rol Sistemi` })
         .setTimestamp();
 
-    const actionRow = new ActionRowBuilder().addComponents(
+    const navButtons = buildDashboardButtons('buttonrole');
+    navButtons[1].addComponents(
         new ButtonBuilder().setCustomId('btn_refresh_buttonrole_dashboard').setLabel('Yenile').setStyle(ButtonStyle.Secondary)
     );
 
@@ -2135,14 +2136,14 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null, alertMsg 
             .setMaxValues(1)
     );
 
-    const components = [...buildDashboardButtons('buttonrole'), actionRow, channelRow];
+    const components = [...navButtons, channelRow];
 
     if (panelList.length > 0) {
         const deleteOptions = panelList.slice(0, 25).map(p => {
             const chName = guild.channels.cache.get(p.channelId)?.name || 'kanal';
             return {
                 label: `[Sil] ${p.title}`.slice(0, 100),
-                description: `#${chName} | ${(p.roles || []).length} Rol | ID: ${p.messageId}`.slice(0, 100),
+                description: `#${chName} | ${(p.roles || []).length} Rol | ID: ${p.messageId || p.id}`.slice(0, 100),
                 value: `del_br_${p.id}`
             };
         });
@@ -3614,15 +3615,16 @@ client.on('interactionCreate', async interaction => {
                     if (!panel) {
                         return interaction.editReply({ content: '❌ Bu mesaj ID\'sine ait kayıtlı bir buton rol paneli bulunamadı.' });
                     }
-                    try {
-                        const ch = interaction.guild.channels.cache.get(panel.channelId) || await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
-                        if (ch) {
-                            const msg = await ch.messages.fetch(panel.messageId).catch(() => null);
-                            if (msg) await msg.delete().catch(() => { });
-                        }
-                    } catch (e) { }
+                    const channelId = panel.channelId;
+                    const messageId = panel.messageId;
                     delete db[guildId].buttonRoles[msgId];
                     saveDB(db);
+
+                    if (channelId && messageId) {
+                        interaction.guild.channels.fetch(channelId).then(ch => {
+                            if (ch && ch.messages) ch.messages.delete(messageId).catch(() => { });
+                        }).catch(() => { });
+                    }
                     return interaction.editReply({ content: `✅ \`${msgId}\` ID'li buton rol paneli başarıyla silindi.` });
                 }
             }
@@ -4321,84 +4323,33 @@ client.on('interactionCreate', async interaction => {
                     }).catch(() => { });
                 }
             }
-        }
-
-        // ------------------------------------------------------------------------
-        // 3. KANAL VE ROL SEÇİM MENÜSÜ ETKİLEŞİMLERİ
-        // ------------------------------------------------------------------------
-        if (interaction.isRoleSelectMenu()) {
-            if (interaction.customId.startsWith('set_ayar_rol_')) {
-                if (!isAdmin) return;
-                const key = interaction.customId.replace('set_ayar_rol_', '');
-                db[guildId][key] = interaction.values[0];
-                saveDB(db);
-                return interaction.update(buildAyarDashboard(db[guildId]));
-            }
-
-            if (interaction.customId.startsWith('set_level_role_final_')) {
-                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
-                const lvl = interaction.customId.replace('set_level_role_final_', '');
-                const selectedRoleId = interaction.values[0];
-
-                if (!db[guildId].levelRoles) db[guildId].levelRoles = {};
-                db[guildId].levelRoles[lvl] = selectedRoleId;
-                saveDB(db);
-
-                return interaction.update(buildEkonomiDashboard(db[guildId]));
-            }
-
-            if (interaction.customId === 'select_role_for_market_add') {
-                if (!isAdmin) return interaction.reply({ content: 'Yetkiniz yok.', ephemeral: true });
-                const selectedRoleId = interaction.values[0];
-
-                const modal = new ModalBuilder()
-                    .setCustomId(`modal_market_price_${selectedRoleId}`)
-                    .setTitle('Market Rolü ve Süresi Belirle');
-
-                const priceInput = new TextInputBuilder()
-                    .setCustomId('market_price_val')
-                    .setLabel('Bu rol kaç Papel karşılığında satılsın?')
-                    .setPlaceholder('Örn: 250')
-                    .setStyle(TextInputStyle.Short)
-                    .setMaxLength(8)
-                    .setRequired(true);
-
-                const durationInput = new TextInputBuilder()
-                    .setCustomId('market_duration_val')
-                    .setLabel('Süre (Gün: 14 = 2 hafta, 0/boş = Kalıcı)')
-                    .setPlaceholder('Örn: 14 (Kalıcı için 0 veya boş bırakın)')
-                    .setStyle(TextInputStyle.Short)
-                    .setMaxLength(5)
-                    .setRequired(false);
-
-                modal.addComponents(
-                    new ActionRowBuilder().addComponents(priceInput),
-                    new ActionRowBuilder().addComponents(durationInput)
-                );
-                return interaction.showModal(modal);
-            }
 
             if (interaction.customId === 'menu_delete_buttonrole_panel') {
                 if (!isAdmin && !isYetkili) {
                     return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
                 }
-                await interaction.deferUpdate().catch(() => { });
                 const selected = interaction.values[0];
                 const panelId = selected.replace('del_br_', '');
                 ensureGuildDB(db, guildId);
                 const panel = db[guildId].buttonRoles?.[panelId];
                 if (panel) {
-                    try {
-                        const ch = interaction.guild.channels.cache.get(panel.channelId) || await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
-                        if (ch && panel.messageId) {
-                            const msg = await ch.messages.fetch(panel.messageId).catch(() => null);
-                            if (msg) await msg.delete().catch(() => { });
-                        }
-                    } catch (e) { }
+                    const channelId = panel.channelId;
+                    const messageId = panel.messageId;
                     delete db[guildId].buttonRoles[panelId];
                     saveDB(db);
+
+                    // Arka planda Discord kanalındaki mesajı sil (UI güncellemesini asla geciktirmez veya zaman aşımına sokmaz)
+                    if (channelId && messageId) {
+                        interaction.guild.channels.fetch(channelId).then(ch => {
+                            if (ch && ch.messages) ch.messages.delete(messageId).catch(() => { });
+                        }).catch(() => { });
+                    }
                 }
-                return interaction.editReply(buildButtonRoleDashboard(interaction.guild, db[guildId], null, 'Panel başarıyla silindi!')).catch(() => { });
+
+                const updatedData = buildButtonRoleDashboard(interaction.guild, db[guildId], null, 'Buton rol paneli başarıyla silindi!');
+                return interaction.update(updatedData).catch(async () => {
+                    return interaction.editReply(updatedData).catch(() => { });
+                });
             }
 
             if (interaction.customId === 'menu_select_giveaway_to_manage' || interaction.customId === 'menu_select_giveaway_manage') {
@@ -4434,6 +4385,85 @@ client.on('interactionCreate', async interaction => {
 
                 ensureGuildDB(db, guildId);
                 return interaction.editReply(buildCekilisDashboard(interaction.guild, db[guildId])).catch(() => { });
+            }
+        }
+
+        // ------------------------------------------------------------------------
+        // 3. KANAL VE ROL SEÇİM MENÜSÜ ETKİLEŞİMLERİ
+        // ------------------------------------------------------------------------
+        if (interaction.isRoleSelectMenu()) {
+            if (interaction.customId.startsWith('set_ayar_rol_')) {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
+                const key = interaction.customId.replace('set_ayar_rol_', '');
+                db[guildId][key] = interaction.values[0];
+                saveDB(db);
+                return interaction.update(buildAyarDashboard(db[guildId])).catch(() => { });
+            }
+
+            if (interaction.customId.startsWith('set_level_role_final_')) {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
+                const lvl = interaction.customId.replace('set_level_role_final_', '');
+                const selectedRoleId = interaction.values[0];
+
+                if (!db[guildId].levelRoles) db[guildId].levelRoles = {};
+                db[guildId].levelRoles[lvl] = selectedRoleId;
+                saveDB(db);
+
+                return interaction.update(buildEkonomiDashboard(db[guildId])).catch(() => { });
+            }
+
+            if (interaction.customId === 'select_role_for_market_add') {
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
+                const selectedRoleId = interaction.values[0];
+
+                const modal = new ModalBuilder()
+                    .setCustomId(`modal_market_price_${selectedRoleId}`)
+                    .setTitle('Market Rolü ve Süresi Belirle');
+
+                const priceInput = new TextInputBuilder()
+                    .setCustomId('market_price_val')
+                    .setLabel('Bu rol kaç Papel karşılığında satılsın?')
+                    .setPlaceholder('Örn: 250')
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(8)
+                    .setRequired(true);
+
+                const durationInput = new TextInputBuilder()
+                    .setCustomId('market_duration_val')
+                    .setLabel('Süre (Gün: 14 = 2 hafta, 0/boş = Kalıcı)')
+                    .setPlaceholder('Örn: 14 (Kalıcı için 0 veya boş bırakın)')
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(5)
+                    .setRequired(false);
+
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(priceInput),
+                    new ActionRowBuilder().addComponents(durationInput)
+                );
+                return interaction.showModal(modal);
+            }
+
+            if (interaction.customId.startsWith('select_br_roles_')) {
+                if (!isAdmin && !isYetkili) {
+                    return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
+                }
+                const targetChId = interaction.customId.replace('select_br_roles_', '');
+                ensureGuildDB(db, guildId);
+                if (!db[guildId].tempButtonRoleDraft || db[guildId].tempButtonRoleDraft.channelId !== targetChId) {
+                    db[guildId].tempButtonRoleDraft = {
+                        channelId: targetChId,
+                        selectedRoleIds: [],
+                        title: 'Rol Alma Merkezi',
+                        description: 'Aşağıdaki butonlara tıklayarak dilediğiniz rolü üzerinize alabilir veya tekrar tıklayarak çıkarabilirsiniz.',
+                        imageUrl: null,
+                        color: 'Mavi',
+                        buttonColor: 'Mavi'
+                    };
+                }
+                db[guildId].tempButtonRoleDraft.selectedRoleIds = interaction.values;
+                saveDB(db);
+
+                return interaction.update(buildButtonRoleDashboard(interaction.guild, db[guildId], targetChId)).catch(() => { });
             }
         }
 
@@ -4519,31 +4549,6 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 return interaction.showModal(modal);
-            }
-        }
-
-        if (interaction.isRoleSelectMenu()) {
-            if (interaction.customId.startsWith('select_br_roles_')) {
-                if (!isAdmin && !isYetkili) {
-                    return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
-                }
-                const targetChId = interaction.customId.replace('select_br_roles_', '');
-                ensureGuildDB(db, guildId);
-                if (!db[guildId].tempButtonRoleDraft || db[guildId].tempButtonRoleDraft.channelId !== targetChId) {
-                    db[guildId].tempButtonRoleDraft = {
-                        channelId: targetChId,
-                        selectedRoleIds: [],
-                        title: 'Rol Alma Merkezi',
-                        description: 'Aşağıdaki butonlara tıklayarak dilediğiniz rolü üzerinize alabilir veya tekrar tıklayarak çıkarabilirsiniz.',
-                        imageUrl: null,
-                        color: 'Mavi',
-                        buttonColor: 'Mavi'
-                    };
-                }
-                db[guildId].tempButtonRoleDraft.selectedRoleIds = interaction.values;
-                saveDB(db);
-
-                return interaction.update(buildButtonRoleDashboard(interaction.guild, db[guildId], targetChId)).catch(() => { });
             }
         }
 
