@@ -1987,10 +1987,10 @@ function buildCekilisDashboard(guild, guildDb, selectedGwId = null) {
 }
 
 function parseColor(colorInput) {
-    if (!colorInput) return 0x5865f2;
+    if (!colorInput) return 0x2ecc71; // Yeşil (varsayılan)
     const clean = colorInput.trim().toLowerCase();
-    if (clean === 'mavi' || clean === 'blue') return 0x3498db;
     if (clean === 'yesil' || clean === 'yeşil' || clean === 'green') return 0x2ecc71;
+    if (clean === 'mavi' || clean === 'blue') return 0x3498db;
     if (clean === 'kirmizi' || clean === 'kırmızı' || clean === 'red') return 0xe74c3c;
     if (clean === 'sari' || clean === 'sarı' || clean === 'yellow') return 0xf1c40f;
     if (clean === 'mor' || clean === 'purple') return 0x9b59b6;
@@ -2001,17 +2001,17 @@ function parseColor(colorInput) {
     }
     const num = parseInt(clean, 16);
     if (!isNaN(num)) return num;
-    return 0x5865f2;
+    return 0x2ecc71;
 }
 
 function parseButtonStyle(styleInput) {
-    if (!styleInput) return ButtonStyle.Primary;
+    if (!styleInput) return ButtonStyle.Success; // Yeşil (varsayılan)
     const clean = styleInput.trim().toLowerCase();
-    if (clean === 'mavi' || clean === 'blue' || clean === 'primary') return ButtonStyle.Primary;
     if (clean === 'yesil' || clean === 'yeşil' || clean === 'green' || clean === 'success') return ButtonStyle.Success;
+    if (clean === 'mavi' || clean === 'blue' || clean === 'primary') return ButtonStyle.Primary;
     if (clean === 'kirmizi' || clean === 'kırmızı' || clean === 'red' || clean === 'danger') return ButtonStyle.Danger;
     if (clean === 'gri' || clean === 'gray' || clean === 'secondary') return ButtonStyle.Secondary;
-    return ButtonStyle.Primary;
+    return ButtonStyle.Success;
 }
 
 function buildButtonRoleDashboard(guild, guildDb, selectedChId = null, alertMsg = null) {
@@ -2023,8 +2023,8 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null, alertMsg 
                 title: guildDb.tempButtonRoleDraft?.title || 'Rol Alma Merkezi',
                 description: guildDb.tempButtonRoleDraft?.description || 'Aşağıdaki butonlara tıklayarak dilediğiniz rolü üzerinize alabilir veya tekrar tıklayarak çıkarabilirsiniz.',
                 imageUrl: guildDb.tempButtonRoleDraft?.imageUrl || null,
-                color: guildDb.tempButtonRoleDraft?.color || 'Mavi',
-                buttonColor: guildDb.tempButtonRoleDraft?.buttonColor || 'Mavi'
+                color: guildDb.tempButtonRoleDraft?.color || 'Yeşil',
+                buttonColor: guildDb.tempButtonRoleDraft?.buttonColor || 'Yeşil'
             };
         }
 
@@ -2119,7 +2119,7 @@ function buildButtonRoleDashboard(guild, guildDb, selectedChId = null, alertMsg 
             `3. Dilerseniz \`/butonrol kur\` komutuyla da doğrudan rol etiketleyerek kurabilirsiniz.\n\n` +
             `**📋 KURULU BUTON ROL PANELLERİ (${panelList.length})**\n${listText}`
         )
-        .setColor(0x5865f2)
+        .setColor(0x2ecc71)
         .setFooter({ text: `${guild.name} • Buton Rol Sistemi` })
         .setTimestamp();
 
@@ -3474,7 +3474,7 @@ client.on('interactionCreate', async interaction => {
 
                     const title = interaction.options.getString('baslik') || 'Rol Alma Merkezi';
                     const desc = interaction.options.getString('aciklama') || 'Aşağıdaki butonlara tıklayarak dilediğiniz rolü alabilir veya geri bırakabilirsiniz.';
-                    const rawColor = interaction.options.getString('panel_rengi') || 'Mavi';
+                    const rawColor = interaction.options.getString('panel_rengi') || 'Yeşil';
 
                     const roleConfigs = [];
                     for (let i = 1; i <= 10; i++) {
@@ -3486,7 +3486,7 @@ client.on('interactionCreate', async interaction => {
                                 roleId: role.id,
                                 roleName: role.name,
                                 label: role.name.slice(0, 80),
-                                style: ButtonStyle.Primary,
+                                style: ButtonStyle.Success,
                                 isHigher: isHigher
                             });
                         }
@@ -3558,7 +3558,7 @@ client.on('interactionCreate', async interaction => {
                     const msgId = interaction.options.getString('mesaj_id').trim();
                     const role = interaction.options.getRole('rol');
                     const customLabel = interaction.options.getString('buton_yazisi')?.trim() || role.name;
-                    const customColor = interaction.options.getString('renk') || 'Mavi';
+                    const customColor = interaction.options.getString('renk') || 'Yeşil';
 
                     const panel = db[guildId].buttonRoles?.[msgId];
                     if (!panel) {
@@ -3595,7 +3595,7 @@ client.on('interactionCreate', async interaction => {
                             new ButtonBuilder()
                                 .setCustomId(`btn_role_toggle_${r.roleId}`)
                                 .setLabel(r.label)
-                                .setStyle(parseButtonStyle(r.style || 'Mavi'))
+                                .setStyle(parseButtonStyle(r.style || 'Yeşil'))
                         );
 
                         if (currentRow.components.length === 5 || i === panel.roles.length - 1) {
@@ -4456,8 +4456,8 @@ client.on('interactionCreate', async interaction => {
                         title: 'Rol Alma Merkezi',
                         description: 'Aşağıdaki butonlara tıklayarak dilediğiniz rolü üzerinize alabilir veya tekrar tıklayarak çıkarabilirsiniz.',
                         imageUrl: null,
-                        color: 'Mavi',
-                        buttonColor: 'Mavi'
+                        color: 'Yeşil',
+                        buttonColor: 'Yeşil'
                     };
                 }
                 db[guildId].tempButtonRoleDraft.selectedRoleIds = interaction.values;
@@ -4649,9 +4649,9 @@ client.on('interactionCreate', async interaction => {
 
                 const colorInput = new TextInputBuilder()
                     .setCustomId('br_c_color')
-                    .setLabel('Panel Rengi (Mavi, Yeşil, Kırmızı vb.)')
-                    .setPlaceholder('Mavi, Yeşil, Kırmızı, Mor veya Hex')
-                    .setValue(draft.color || 'Mavi')
+                    .setLabel('Panel Rengi (Yeşil, Mavi, Kırmızı vb.)')
+                    .setPlaceholder('Yeşil, Mavi, Kırmızı, Mor veya Hex')
+                    .setValue(draft.color || 'Yeşil')
                     .setMaxLength(30)
                     .setStyle(TextInputStyle.Short)
                     .setRequired(false);
@@ -4672,8 +4672,8 @@ client.on('interactionCreate', async interaction => {
                 const draft = db[guildId].tempButtonRoleDraft;
                 if (!draft) return interaction.reply({ content: 'Aktif taslak bulunamadı.', ephemeral: true });
 
-                const colorOrder = ['Mavi', 'Yeşil', 'Kırmızı', 'Gri'];
-                const curIdx = colorOrder.indexOf(draft.buttonColor || 'Mavi');
+                const colorOrder = ['Yeşil', 'Mavi', 'Kırmızı', 'Gri'];
+                const curIdx = colorOrder.indexOf(draft.buttonColor || 'Yeşil');
                 const nextColor = colorOrder[(curIdx + 1) % colorOrder.length];
                 draft.buttonColor = nextColor;
                 saveDB(db);
@@ -4704,7 +4704,7 @@ client.on('interactionCreate', async interaction => {
                             roleId: role.id,
                             roleName: role.name,
                             label: role.name.slice(0, 80),
-                            style: parseButtonStyle(draft.buttonColor || 'Mavi'),
+                            style: parseButtonStyle(draft.buttonColor || 'Yeşil'),
                             isHigher: isHigher
                         });
                     }
@@ -4717,7 +4717,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setTitle(draft.title || 'Rol Alma Merkezi')
                     .setDescription(draft.description || 'Aşağıdaki butonlara tıklayarak dilediğiniz rolü üzerinize alabilir veya tekrar tıklayarak çıkarabilirsiniz.')
-                    .setColor(parseColor(draft.color || 'Mavi'))
+                    .setColor(parseColor(draft.color || 'Yeşil'))
                     .setFooter({ text: `${interaction.guild.name} • Rol Alma Sistemi`, iconURL: interaction.guild.iconURL() || undefined })
                     .setTimestamp();
 
@@ -4757,9 +4757,9 @@ client.on('interactionCreate', async interaction => {
                     channelId: targetChannel.id,
                     title: draft.title || 'Rol Alma Merkezi',
                     description: draft.description || 'Aşağıdaki butonlara tıklayarak dilediğiniz rolü üzerinize alabilir veya tekrar tıklayarak çıkarabilirsiniz.',
-                    color: draft.color || 'Mavi',
+                    color: draft.color || 'Yeşil',
                     imageUrl: draft.imageUrl || null,
-                    buttonColor: draft.buttonColor || 'Mavi',
+                    buttonColor: draft.buttonColor || 'Yeşil',
                     roles: roleConfigs.map(rc => ({ roleId: rc.roleId, label: rc.label })),
                     createdAt: Date.now()
                 };
@@ -4981,23 +4981,59 @@ client.on('interactionCreate', async interaction => {
                     return interaction.reply({ content: '❌ Üye bilgisi alınamadı.', ephemeral: true });
                 }
 
+                let isGiving = true;
                 try {
                     if (member.roles.cache.has(role.id)) {
                         await member.roles.remove(role.id);
-                        return interaction.reply({
-                            content: `🗑️ **${role.name}** rolü üzerinizden başarıyla **alındı**.`,
-                            ephemeral: true
-                        });
+                        isGiving = false;
                     } else {
                         await member.roles.add(role.id);
-                        return interaction.reply({
-                            content: `✅ **${role.name}** rolü üzerinize başarıyla **verildi**!`,
-                            ephemeral: true
-                        });
+                        isGiving = true;
                     }
                 } catch (err) {
                     return interaction.reply({
                         content: `❌ Rol işlemi gerçekleştirilemedi: ${err.message}`,
+                        ephemeral: true
+                    });
+                }
+
+                // Butonun rengini ve yazısını dinamik olarak güncelle:
+                // Üye rolü aldığında buton KIRMIZI olur ve "Kaldır: Rol Adı" yazar.
+                // Üye rolü bıraktığında buton tekrar YEŞİL olur ve "Rol Adı" yazar.
+                if (interaction.message && interaction.message.components && interaction.message.components.length > 0) {
+                    try {
+                        const newActionRows = interaction.message.components.map(row => {
+                            const newRow = ActionRowBuilder.from(row);
+                            newRow.components = newRow.components.map(comp => {
+                                if (comp.data && comp.data.custom_id === customId) {
+                                    const btn = ButtonBuilder.from(comp);
+                                    const baseLabel = (comp.data.label || role.name).replace(/^\[Kaldır\]\s*/i, '').replace(/^Kaldır:\s*/i, '').trim();
+                                    if (isGiving) {
+                                        btn.setStyle(ButtonStyle.Danger);
+                                        btn.setLabel(`Kaldır: ${baseLabel}`.slice(0, 80));
+                                    } else {
+                                        btn.setStyle(ButtonStyle.Success);
+                                        btn.setLabel(baseLabel.slice(0, 80));
+                                    }
+                                    return btn;
+                                }
+                                return ButtonBuilder.from(comp);
+                            });
+                            return newRow;
+                        });
+
+                        await interaction.message.edit({ components: newActionRows }).catch(() => { });
+                    } catch (e) { }
+                }
+
+                if (isGiving) {
+                    return interaction.reply({
+                        content: `✅ **${role.name}** rolü üzerinize başarıyla **verildi**!\n*(Buton kırmızıya döndü ve "Kaldır" yazdı; tekrar tıklayarak rolü bırakabilirsiniz.)*`,
+                        ephemeral: true
+                    });
+                } else {
+                    return interaction.reply({
+                        content: `🗑️ **${role.name}** rolü üzerinizden başarıyla **kaldırıldı**.\n*(Buton yeşile döndü; dilediğiniz zaman tekrar tıklayarak rolü alabilirsiniz.)*`,
                         ephemeral: true
                     });
                 }
