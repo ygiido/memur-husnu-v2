@@ -9,7 +9,7 @@ if (dns.setDefaultResultOrder) {
 }
 
 const {
-    Client, GatewayIntentBits, Partials, PermissionsBitField,
+    Client, GatewayIntentBits, Partials, PermissionsBitField, PermissionFlagsBits,
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
     RoleSelectMenuBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder,
@@ -4382,6 +4382,7 @@ client.on('interactionCreate', async interaction => {
                 if (!isAdmin && !isYetkili) {
                     return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** gerçekleştirebilir.', ephemeral: true });
                 }
+                await interaction.deferUpdate().catch(() => { });
                 const selected = interaction.values[0];
                 const panelId = selected.replace('del_br_', '');
                 ensureGuildDB(db, guildId);
@@ -4397,7 +4398,7 @@ client.on('interactionCreate', async interaction => {
                     delete db[guildId].buttonRoles[panelId];
                     saveDB(db);
                 }
-                return interaction.update(buildButtonRoleDashboard(interaction.guild, db[guildId])).catch(() => { });
+                return interaction.editReply(buildButtonRoleDashboard(interaction.guild, db[guildId], null, 'Panel başarıyla silindi!')).catch(() => { });
             }
 
             if (interaction.customId === 'menu_select_giveaway_to_manage' || interaction.customId === 'menu_select_giveaway_manage') {
@@ -4955,13 +4956,17 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
-                if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                const hasPerm = botMember && (
+                    botMember.permissions.has(PermissionsBitField.Flags.ManageRoles) ||
+                    botMember.permissions.has(PermissionsBitField.Flags.Administrator)
+                );
+                if (!hasPerm) {
                     return interaction.reply({ content: '❌ Botun rolleri yönetme ("Rolleri Yönet" / Manage Roles) yetkisi bulunmuyor.', ephemeral: true });
                 }
 
                 if (role.position >= botMember.roles.highest.position) {
                     return interaction.reply({
-                        content: `❌ <@&${role.id}> rolü botun kendi rolünden daha üstte olduğu için bot bu rolü veremez. Lütfen bir sunucu yöneticisine bildiriniz.`,
+                        content: `❌ <@&${role.id}> rolü botun kendi rolünden daha üstte olduğu için bot bu rolü veremez. Lütfen bir sunucu yöneticisine bildiriniz (Botun rolü sunucu ayarlarından bu rolün üstüne taşınmalıdır).`,
                         ephemeral: true
                     });
                 }
