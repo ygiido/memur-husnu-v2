@@ -3113,6 +3113,13 @@ client.once('ready', async () => {
         }
     ];
 
+    try {
+        if (client.application) {
+            await client.application.commands.set(commands);
+            addLiveLog('✅ [ROZET]: Global slash komutları kaydedildi ("Supports Commands" {/} rozeti tetiklendi).');
+        }
+    } catch (e) { }
+
     for (const guild of client.guilds.cache.values()) {
         await guild.commands.set(commands).catch(() => { });
     }
