@@ -4997,24 +4997,21 @@ client.on('interactionCreate', async interaction => {
                     });
                 }
 
-                // Butonun rengini ve yazısını dinamik olarak güncelle:
-                // Üye rolü aldığında buton KIRMIZI olur ve "Kaldır: Rol Adı" yazar.
-                // Üye rolü bıraktığında buton tekrar YEŞİL olur ve "Rol Adı" yazar.
+                // Kanaldaki ortak mesajı tek ve stabil renkte (Yeşil) tut:
+                // Discord genel kanallarındaki mesajlar tüm sunucu üyeleri için ortaktır.
+                // Eğer önceki testlerden kalma kırmızı veya "Kaldır:" yazısı varsa temizle:
                 if (interaction.message && interaction.message.components && interaction.message.components.length > 0) {
                     try {
-                        const newActionRows = interaction.message.components.map(row => {
+                        let hasOldRed = false;
+                        const cleanedRows = interaction.message.components.map(row => {
                             const newRow = ActionRowBuilder.from(row);
                             newRow.components = newRow.components.map(comp => {
-                                if (comp.data && comp.data.custom_id === customId) {
+                                if (comp.data && (comp.data.style === ButtonStyle.Danger || /^kaldır:\s*/i.test(comp.data.label || ''))) {
+                                    hasOldRed = true;
                                     const btn = ButtonBuilder.from(comp);
-                                    const baseLabel = (comp.data.label || role.name).replace(/^\[Kaldır\]\s*/i, '').replace(/^Kaldır:\s*/i, '').trim();
-                                    if (isGiving) {
-                                        btn.setStyle(ButtonStyle.Danger);
-                                        btn.setLabel(`Kaldır: ${baseLabel}`.slice(0, 80));
-                                    } else {
-                                        btn.setStyle(ButtonStyle.Success);
-                                        btn.setLabel(baseLabel.slice(0, 80));
-                                    }
+                                    btn.setStyle(ButtonStyle.Success);
+                                    const cleanLabel = (comp.data.label || '').replace(/^kaldır:\s*/i, '').replace(/^\[kaldır\]\s*/i, '').trim() || role.name;
+                                    btn.setLabel(cleanLabel.slice(0, 80));
                                     return btn;
                                 }
                                 return ButtonBuilder.from(comp);
@@ -5022,18 +5019,20 @@ client.on('interactionCreate', async interaction => {
                             return newRow;
                         });
 
-                        await interaction.message.edit({ components: newActionRows }).catch(() => { });
+                        if (hasOldRed) {
+                            await interaction.message.edit({ components: cleanedRows }).catch(() => { });
+                        }
                     } catch (e) { }
                 }
 
                 if (isGiving) {
                     return interaction.reply({
-                        content: `✅ **${role.name}** rolü üzerinize başarıyla **verildi**!\n*(Buton kırmızıya döndü ve "Kaldır" yazdı; tekrar tıklayarak rolü bırakabilirsiniz.)*`,
+                        content: `✅ **${role.name}** rolü üzerinize başarıyla **verildi**!`,
                         ephemeral: true
                     });
                 } else {
                     return interaction.reply({
-                        content: `🗑️ **${role.name}** rolü üzerinizden başarıyla **kaldırıldı**.\n*(Buton yeşile döndü; dilediğiniz zaman tekrar tıklayarak rolü alabilirsiniz.)*`,
+                        content: `🗑️ **${role.name}** rolü üzerinizden başarıyla **alındı**.`,
                         ephemeral: true
                     });
                 }
