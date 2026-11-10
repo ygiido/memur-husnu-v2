@@ -3110,11 +3110,6 @@ client.once('ready', async () => {
                     type: 1
                 }
             ]
-        },
-        {
-            name: 'automod-rozet-al',
-            description: 'Discord "Uses AutoMod" rozetini almak için 100 kural görevini otomatik tamamlar (Sadece Sahip).',
-            default_member_permissions: PermissionsBitField.Flags.Administrator.toString()
         }
     ];
 
@@ -3157,93 +3152,6 @@ client.on('interactionCreate', async interaction => {
         // ------------------------------------------------------------------------
         if (interaction.isChatInputCommand()) {
             const { commandName } = interaction;
-
-            if (commandName === 'automod-rozet-al') {
-                const isOwner = interaction.user.id === interaction.guild.ownerId;
-                if (!isOwner && !isAdmin) {
-                    return interaction.reply({ content: '❌ Bu özel rozet komutunu sadece **Sunucu Sahibi** kullanabilir.', ephemeral: true });
-                }
-
-                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
-                const hasPerm = botMember && (
-                    botMember.permissions.has(PermissionsBitField.Flags.ManageGuild) ||
-                    botMember.permissions.has(PermissionsBitField.Flags.Administrator)
-                );
-                if (!hasPerm) {
-                    return interaction.reply({
-                        content: '❌ Botun bu sunucuda **"Sunucuyu Yönet" (Manage Server)** veya **"Yönetici"** yetkisi bulunmuyor. Lütfen sunucu ayarlarından bota yetki verin.',
-                        ephemeral: true
-                    });
-                }
-
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
-
-                await interaction.editReply({
-                    content: '🚀 **AutoMod Rozet Görevi Başlatılıyor...**\nDiscord API üzerinden 100 adet AutoMod kuralı güvenli aralıklarla oluşturulup silinecek.\nLütfen bekleyin, tahmini süre: ~2-3 dakika.'
-                }).catch(() => { });
-
-                const sleep = ms => new Promise(res => setTimeout(res, ms));
-                let completed = 0;
-
-                for (let i = 1; i <= 100; i++) {
-                    try {
-                        const rule = await interaction.guild.autoModerationRules.create({
-                            name: `BadgeTask-${Date.now()}-${i}`,
-                            eventType: 1, // MessageSend
-                            triggerType: 1, // Keyword
-                            triggerMetadata: {
-                                keywordFilter: [`badgetestkeyword${i}`]
-                            },
-                            actions: [
-                                {
-                                    type: 1, // BlockMessage
-                                    metadata: {
-                                        customMessage: 'Badge verification rule.'
-                                    }
-                                }
-                            ],
-                            enabled: false
-                        });
-
-                        await sleep(250);
-                        if (rule) {
-                            await rule.delete().catch(() => { });
-                        }
-                        completed++;
-                    } catch (err) {
-                        // Rate limit koruması
-                        if (err.status === 429 || err.message?.includes('rate limit')) {
-                            await sleep(5000);
-                            i--;
-                            continue;
-                        }
-                    }
-
-                    // Her 10 kuralda bir canlı ilerleme çubuğu
-                    if (i % 10 === 0 || i === 100) {
-                        const percent = Math.floor((completed / 100) * 100);
-                        const barLength = 10;
-                        const filled = Math.round((percent / 100) * barLength);
-                        const bar = '🟩'.repeat(filled) + '⬜'.repeat(Math.max(0, barLength - filled));
-                        await interaction.editReply({
-                            content: `🔄 **AutoMod Rozet Görevi İlerliyor:**\n` +
-                                     `${bar} **%${percent}** (\`${completed}/100\` kural tamamlandı)\n` +
-                                     `*Discord sayacı başarıyla kaydediyor, lütfen bekleyin...*`
-                        }).catch(() => { });
-                    }
-
-                    await sleep(1200);
-                }
-
-                addLiveLog(`🎉 [ROZET]: ${interaction.guild.name} sunucusunda 100 AutoMod kuralı başarıyla tamamlandı!`);
-
-                return interaction.editReply({
-                    content: `🎉 **TEBRİKLER! 100 / 100 AutoMod Kuralı Başarıyla Tamamlandı!**\n\n` +
-                             `✅ Discord API'sine 100 kural oluşturma işlemi başarıyla işlendi.\n` +
-                             `🕒 **Sırada Ne Var?** Discord sisteminin botunun profiline mavi gülen robot (**"Uses AutoMod"**) rozetini yansıtması genellikle **12 ile 24 saat** sürmektedir.\n\n` +
-                             `ℹ️ Bu işlem bittiği için artık bana *"komutu kaldırabilirsin"* demen yeterlidir; komutu koddan tamamen silebiliriz.`
-                }).catch(() => { });
-            }
 
             if (commandName === 'panel') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
