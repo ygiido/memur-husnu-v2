@@ -235,6 +235,12 @@ client.on('error', error => addLiveLog(`Discord İstemci Hatası: ${error.messag
 client.on('shardError', (error, shardId) => addLiveLog(`[Shard ${shardId} Hatası]: ${error.message}`));
 client.on('shardDisconnect', (event, shardId) => addLiveLog(`[Shard ${shardId} Kesildi]: Kod ${event.code} (${event.reason || 'Sebep Yok'})`));
 client.on('shardReconnecting', shardId => addLiveLog(`[Shard ${shardId}] Yeniden bağlanılıyor...`));
+client.rest.on('rateLimited', info => {
+    addLiveLog(`⚠️ [REST RATE LIMIT]: ${info.method} ${info.route} - ${info.timeToReset}ms beklemede (Global: ${info.global})`);
+});
+client.rest.on('invalidRequestWarning', info => {
+    addLiveLog(`⚠️ [REST INVALID REQUEST]: ${info.count} geçersiz istek yapıldı (Kalan sınır: ${info.remainingTime}ms)`);
+});
 client.on('debug', msg => {
     // Heartbeat ve gecikme mesajları logları doldurmasın
     if (msg.includes('Heartbeat') || msg.includes('Latency') || msg.includes('Swept')) return;
