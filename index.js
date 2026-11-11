@@ -8,12 +8,31 @@ if (dns.setDefaultResultOrder) {
     dns.setDefaultResultOrder('ipv4first');
 }
 
+let undiciIpv4Agent = null;
+try {
+    const { Agent: UndiciAgent, setGlobalDispatcher } = require('undici');
+    undiciIpv4Agent = new UndiciAgent({
+        connect: {
+            lookup: (hostname, opts, cb) => {
+                dns.lookup(hostname, { ...opts, family: 4 }, cb);
+            },
+            timeout: 15000
+        },
+        headersTimeout: 20000,
+        bodyTimeout: 20000
+    });
+    setGlobalDispatcher(undiciIpv4Agent);
+} catch (e) {
+    console.error('Undici IPv4 dispatcher başlatılamadı:', e);
+}
+
 const {
     Client, GatewayIntentBits, Partials, PermissionsBitField, PermissionFlagsBits,
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
     RoleSelectMenuBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder,
-    AttachmentBuilder, ChannelType, AuditLogEvent, ActivityType
+    AttachmentBuilder, ChannelType, AuditLogEvent, ActivityType,
+    REST, Routes
 } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
@@ -94,9 +113,112 @@ async function getAudioStreamForUrl(url) {
     return Readable.fromWeb(response.body);
 }
 
+// Sunucuya özel (guild) komutları temizleyip çift komut çıkmasını engelleyen yardımcı fonksiyon
+async function cleanGuildSlashCommands(token) {
+    if (!token) return { success: false, error: 'Token bulunamadı' };
+    const cleaned = [];
+    try {
+        const rest = new REST({ version: '10' }).setToken(token);
+        const app = await rest.get(Routes.oauth2CurrentApplication());
+        if (!app || !app.id) {
+            return { success: false, error: 'Bot uygulama bilgisi alınamadı' };
+        }
+        addLiveLog(`[REST]: Bot Application ID: ${app.id}. Sunucu özel komutları taranıyor...`);
+
+        const knownGuildIds = ['1538928601951633599'];
+        try {
+            const botGuilds = await rest.get(Routes.userGuilds());
+            if (Array.isArray(botGuilds)) {
+                for (const g of botGuilds) {
+                    if (!knownGuildIds.includes(g.id)) knownGuildIds.push(g.id);
+                }
+            }
+        } catch (e) { }
+
+        for (const gid of knownGuildIds) {
+            try {
+                await rest.put(Routes.applicationGuildCommands(app.id, gid), { body: [] });
+                cleaned.push(gid);
+                addLiveLog(`[REST]: Sunucu (${gid}) özel komutları sıfırlandı, çift komutlar temizlendi.`);
+            } catch (err) {
+                addLiveLog(`[REST]: Sunucu (${gid}) komut temizleme hatası: ${err.message}`);
+            }
+        }
+        return { success: true, appId: app.id, cleanedGuilds: cleaned };
+    } catch (err) {
+        addLiveLog(`[REST TEMİZLEME HATASI]: ${err.message}`);
+        return { success: false, error: err.message };
+    }
+}
+
 // Render vb. bulut sunucularda botun aktif kalması ve canlı durum izleme HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
+    // Çift komutları anında REST üzerinden sıfırlama endpoint'i
+    if (req.url.startsWith('/clean-commands')) {
+        (async () => {
+            const result = await cleanGuildSlashCommands(process.env.TOKEN);
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify(result, null, 2));
+        })();
+        return;
+    }
+
+    // Discord bağlantı ve ağ tanı testi endpoint'i
+    if (req.url.startsWith('/test-discord')) {
+        (async () => {
+            const diag = {
+                timestamp: new Date().toISOString(),
+                dns: {},
+                fetchBotGateway: null,
+                restApplication: null,
+                wsStatus: client && client.ws ? client.ws.status : null
+            };
+
+            try {
+                const discordAddresses = await dns.promises.lookup('discord.com', { all: true });
+                diag.dns['discord.com'] = discordAddresses;
+            } catch (e) {
+                diag.dns['discord.com'] = { error: e.message };
+            }
+
+            try {
+                const gwAddresses = await dns.promises.lookup('gateway.discord.gg', { all: true });
+                diag.dns['gateway.discord.gg'] = gwAddresses;
+            } catch (e) {
+                diag.dns['gateway.discord.gg'] = { error: e.message };
+            }
+
+            if (process.env.TOKEN) {
+                try {
+                    const fetchRes = await fetch('https://discord.com/api/v10/gateway/bot', {
+                        headers: { Authorization: `Bot ${process.env.TOKEN.trim()}` },
+                        signal: AbortSignal.timeout(8000)
+                    });
+                    diag.fetchBotGateway = {
+                        status: fetchRes.status,
+                        statusText: fetchRes.statusText,
+                        body: await fetchRes.json()
+                    };
+                } catch (e) {
+                    diag.fetchBotGateway = { error: e.message };
+                }
+
+                try {
+                    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN.trim());
+                    const app = await rest.get(Routes.oauth2CurrentApplication());
+                    diag.restApplication = { id: app.id, name: app.name };
+                } catch (e) {
+                    diag.restApplication = { error: e.message };
+                }
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify(diag, null, 2));
+        })();
+        return;
+    }
+
     // Canlı test endpoint'i: ffmpeg ile radyo akış testini doğrudan çalıştırıp sonucu JSON verir
     if (req.url.startsWith('/test-radio')) {
         const u = new URL(req.url, 'http://localhost');
@@ -207,6 +329,7 @@ setInterval(async () => {
 }, 8 * 60 * 1000);
 
 const client = new Client({
+    rest: undiciIpv4Agent ? { agent: undiciIpv4Agent, timeout: 25000 } : { timeout: 25000 },
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
@@ -227,6 +350,10 @@ client.on('error', error => addLiveLog(`Discord İstemci Hatası: ${error.messag
 client.on('shardError', (error, shardId) => addLiveLog(`[Shard ${shardId} Hatası]: ${error.message}`));
 client.on('shardDisconnect', (event, shardId) => addLiveLog(`[Shard ${shardId} Kesildi]: Kod ${event.code} (${event.reason || 'Sebep Yok'})`));
 client.on('shardReconnecting', shardId => addLiveLog(`[Shard ${shardId}] Yeniden bağlanılıyor...`));
+client.rest.on('restDebug', msg => {
+    if (msg.includes('Sweep')) return;
+    addLiveLog(`[REST DEBUG] ${msg}`);
+});
 client.rest.on('rateLimited', info => {
     addLiveLog(`⚠️ [REST RATE LIMIT]: ${info.method} ${info.route} - ${info.timeToReset}ms beklemede (Global: ${info.global})`);
 });
@@ -3252,9 +3379,10 @@ client.on('interactionCreate', async interaction => {
 
             if (commandName === 'yaz') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 const mesaj = interaction.options.getString('mesaj');
                 await interaction.channel.send(mesaj);
-                return interaction.reply({ content: 'Mesaj başarıyla kanala gönderildi.', ephemeral: true });
+                return interaction.editReply({ content: 'Mesaj başarıyla kanala gönderildi.' });
             }
 
             if (['hapis', 'af', 'sil'].includes(commandName)) {
@@ -7419,12 +7547,23 @@ if (!botToken) {
         isLoggingIn = true;
         try {
             await initMongoDB();
+            // Sunuculardaki çift slash komutları REST üzerinden arka planda sıfırla
+            cleanGuildSlashCommands(botToken).catch(err => {
+                addLiveLog(`[REST BAŞLANGIÇ TEMİZLEME UYARISI]: ${err.message}`);
+            });
+
             addLiveLog('Discord Gateway bağlantısı başlatılıyor...');
-            await client.login(botToken);
+            const loginPromise = client.login(botToken);
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Discord Gateway bağlantısı zaman aşımına uğradı (35s)')), 35000)
+            );
+
+            await Promise.race([loginPromise, timeoutPromise]);
             addLiveLog('✅ client.login() başarıyla tamamlandı.');
         } catch (err) {
             addLiveLog(`❌ Discord Giriş Hatası: ${err.message || err}`);
-            setTimeout(startBot, 15000);
+            try { await client.destroy(); } catch (e) { }
+            setTimeout(startBot, 10000);
         } finally {
             isLoggingIn = false;
         }
