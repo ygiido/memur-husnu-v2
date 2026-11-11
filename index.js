@@ -165,6 +165,26 @@ const server = http.createServer((req, res) => {
             playerDurum: r.player?.state?.status,
             processAlive: !r.process?.killed
         })),
+        geciciOdaAyar: Array.from(client && client.guilds && client.guilds.cache ? client.guilds.cache.values() : []).map(g => {
+            const dbRef = getDB();
+            const gDb = dbRef[g.id] || {};
+            const creator = g.channels.cache.get(gDb.odaKanal);
+            const cat = g.channels.cache.get(gDb.odaKategori);
+            const botMe = g.members.me;
+            return {
+                sunucu: g.name,
+                guildId: g.id,
+                odaKanalId: gDb.odaKanal || 'YOK',
+                odaKanalVarMi: Boolean(creator),
+                odaKanalAdi: creator?.name || 'BULUNAMADI',
+                odaKategoriId: gDb.odaKategori || 'YOK',
+                odaKategoriVarMi: Boolean(cat),
+                odaKategoriAdi: cat?.name || 'BULUNAMADI',
+                botAdminMi: Boolean(botMe?.permissions.has(PermissionsBitField.Flags.Administrator)),
+                botKanalYonetebilirMi: Boolean(botMe?.permissions.has(PermissionsBitField.Flags.ManageChannels)),
+                botUyeTasiyabilirMi: Boolean(botMe?.permissions.has(PermissionsBitField.Flags.MoveMembers))
+            };
+        }),
         canliGunlukler: liveLogs
     };
 
@@ -6348,77 +6368,129 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
     }
 
-    // GEÇİCİ ODA OLUŞTURMA (15 Saniye Cooldown Korumalı)
-    if (db[guildId].odaKanal && db[guildId].odaKategori) {
-        if (newState.channelId === db[guildId].odaKanal && newState.member && !newState.member.user.bot) {
-            const member = newState.member;
-            const now = Date.now();
-            const cdKey = `${guildId}-${member.id}`;
-            const lastCreated = vcCooldownMap.get(cdKey) || 0;
+    // GEÇİCİ ODA OLUŞTURMA (Hızlı, Güvenli, Kesin Hata Yakalamalı)
+    const odaKanalId = db[guildId]?.odaKanal;
+    if (odaKanalId && newState.channelId === odaKanalId && newState.member && !newState.member.user.bot) {
+        const member = newState.member;
+        const now = Date.now();
+        const cdKey = `${guildId}-${member.id}`;
+        const lastCreated = vcCooldownMap.get(cdKey) || 0;
 
-            if (now - lastCreated < 15000) {
-                await member.voice.disconnect().catch(() => { });
+        // 2 saniye flood koruması (asla üyeyi sesten atmaz, sadece çok hızlı tıklamayı frenler)
+        if (now - lastCreated < 2000) {
+            return;
+        }
+        vcCooldownMap.set(cdKey, now);
+
+        addLiveLog(`🎙️ [SES ODASI]: ${newState.guild.name} sunucusunda ${member.displayName} için geçici oda açılıyor...`);
+
+        try {
+            const botMember = newState.guild.members.me || await newState.guild.members.fetchMe().catch(() => null);
+            const hasManage = botMember && (botMember.permissions.has(PermissionsBitField.Flags.ManageChannels) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
+            const hasMove = botMember && (botMember.permissions.has(PermissionsBitField.Flags.MoveMembers) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
+
+            if (!hasManage || !hasMove) {
+                addLiveLog(`❌ [SES ODASI HATA]: Botun ${newState.guild.name} sunucusunda Kanalları Yönet (${hasManage}) veya Üyeleri Taşı (${hasMove}) yetkisi eksik!`);
                 return;
             }
-            vcCooldownMap.set(cdKey, now);
 
-            const roomName = `${member.user.username} Odası`;
-            try {
-                const newChannel = await newState.guild.channels.create({
-                    name: roomName,
-                    type: ChannelType.GuildVoice,
-                    parent: db[guildId].odaKategori,
-                    permissionOverwrites: [
-                        {
-                            id: newState.guild.id,
-                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
-                        },
-                        {
-                            id: member.id,
-                            allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
-                        },
-                        {
-                            id: client.user.id,
-                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ReadMessageHistory]
-                        }
-                    ]
-                });
+            // Kategori kontrolü: Belirlenen kategori yoksa veya 50 kanal sınırına ulaştıysa akıllıca ele al
+            let targetParent = db[guildId].odaKategori || null;
+            if (targetParent) {
+                const parentCat = newState.guild.channels.cache.get(targetParent);
+                if (!parentCat) {
+                    targetParent = null; // Kategori Discord'da bulunamadıysa parentsiz oluştur
+                } else if (parentCat.children && parentCat.children.cache && parentCat.children.cache.size >= 50) {
+                    targetParent = null; // Kategori 50 kanal limitine ulaştıysa
+                }
+            }
 
-                await member.voice.setChannel(newChannel);
+            // Eğer özel kategori bulunamadıysa, "Oda Oluştur" kanalının kendi üst kategorisini al
+            if (!targetParent) {
+                const creatorCh = newState.guild.channels.cache.get(odaKanalId);
+                if (creatorCh && creatorCh.parentId && newState.guild.channels.cache.has(creatorCh.parentId)) {
+                    targetParent = creatorCh.parentId;
+                }
+            }
 
-                const roomData = {
-                    ownerId: member.id,
-                    locked: false,
-                    hidden: false,
-                    chatClosed: false,
-                    panelMsgId: null
-                };
+            const roomName = `${member.displayName} Odası`.slice(0, 95);
 
-                db[guildId].tempRooms[newChannel.id] = roomData;
-                saveDB(db);
-
-                setTimeout(async () => {
-                    try {
-                        const panelMsg = await newChannel.send({
-                            content: `<@${member.id}>, oda kontrol paneliniz aşağıdadır:`,
-                            embeds: [buildTempVoiceEmbed(roomData)],
-                            components: buildTempVoiceComponents(roomData, false)
-                        });
-                        if (panelMsg) {
-                            const freshDb = getDB();
-                            ensureGuildDB(freshDb, guildId);
-                            if (freshDb[guildId].tempRooms[newChannel.id]) {
-                                freshDb[guildId].tempRooms[newChannel.id].panelMsgId = panelMsg.id;
-                                saveDB(freshDb);
-                            }
-                        }
-                    } catch (sendErr) {
-                        console.error("Geçici oda paneli gönderilemedi:", sendErr);
+            const channelOptions = {
+                name: roomName,
+                type: ChannelType.GuildVoice,
+                permissionOverwrites: [
+                    {
+                        id: newState.guild.id,
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+                    },
+                    {
+                        id: member.id,
+                        allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+                    },
+                    {
+                        id: client.user.id,
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ReadMessageHistory]
                     }
-                }, 1000);
+                ]
+            };
 
-                sendLog(newState.guild, 'logSunucu', { title: 'Geçici Ses Odası Açıldı', desc: `**Oda:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Sahibi:** <@${member.id}>`, color: 0x57f287 });
-            } catch (e) { console.error("Geçici oda oluşturma hatası:", e); }
+            if (targetParent) {
+                channelOptions.parent = targetParent;
+            }
+
+            const newChannel = await newState.guild.channels.create(channelOptions);
+
+            // Üye hala ses kanalında mı kontrol et
+            if (!member.voice || !member.voice.channelId) {
+                await newChannel.delete().catch(() => { });
+                return;
+            }
+
+            await member.voice.setChannel(newChannel);
+
+            const roomData = {
+                ownerId: member.id,
+                locked: false,
+                hidden: false,
+                chatClosed: false,
+                panelMsgId: null
+            };
+
+            if (!db[guildId].tempRooms) db[guildId].tempRooms = {};
+            db[guildId].tempRooms[newChannel.id] = roomData;
+            saveDB(db);
+
+            addLiveLog(`✅ [SES ODASI]: <#${newChannel.id}> başarıyla açıldı ve ${member.displayName} taşındı.`);
+
+            // Panel mesajını gönder
+            setTimeout(async () => {
+                try {
+                    const panelMsg = await newChannel.send({
+                        content: `<@${member.id}>, oda kontrol paneliniz aşağıdadır:`,
+                        embeds: [buildTempVoiceEmbed(roomData)],
+                        components: buildTempVoiceComponents(roomData, false)
+                    });
+                    if (panelMsg) {
+                        const freshDb = getDB();
+                        ensureGuildDB(freshDb, guildId);
+                        if (freshDb[guildId].tempRooms && freshDb[guildId].tempRooms[newChannel.id]) {
+                            freshDb[guildId].tempRooms[newChannel.id].panelMsgId = panelMsg.id;
+                            saveDB(freshDb);
+                        }
+                    }
+                } catch (sendErr) {
+                    console.error("Geçici oda paneli gönderilemedi:", sendErr);
+                }
+            }, 500);
+
+            sendLog(newState.guild, 'logSunucu', {
+                title: 'Geçici Ses Odası Açıldı',
+                desc: `**Oda:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Sahibi:** <@${member.id}>`,
+                color: 0x57f287
+            });
+        } catch (e) {
+            addLiveLog(`❌ [SES ODASI HATA]: ${e.message}`);
+            console.error("Geçici oda oluşturma hatası:", e);
         }
     }
 
