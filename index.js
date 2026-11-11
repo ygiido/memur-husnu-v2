@@ -7275,16 +7275,11 @@ if (!botToken) {
         try {
             await initMongoDB();
             addLiveLog('Discord Gateway bağlantısı başlatılıyor...');
-            await Promise.race([
-                client.login(botToken),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Gateway bağlantı isteği 25 saniye zaman aşımına uğradı')), 25000))
-            ]);
+            await client.login(botToken);
             addLiveLog('✅ client.login() başarıyla tamamlandı.');
         } catch (err) {
             addLiveLog(`❌ Discord Giriş Hatası: ${err.message || err}`);
-            isLoggingIn = false;
-            // Bağlantı koparsa veya hata verirse 10 saniye sonra otomatik yeniden dene
-            setTimeout(startBot, 10000);
+            setTimeout(startBot, 15000);
         } finally {
             isLoggingIn = false;
         }
