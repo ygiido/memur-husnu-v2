@@ -7553,20 +7553,17 @@ if (!botToken) {
             });
 
             addLiveLog('Discord Gateway bağlantısı başlatılıyor...');
-            const loginPromise = client.login(botToken);
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Discord Gateway bağlantısı zaman aşımına uğradı (35s)')), 35000)
-            );
-
-            await Promise.race([loginPromise, timeoutPromise]);
+            await client.login(botToken);
             addLiveLog('✅ client.login() başarıyla tamamlandı.');
         } catch (err) {
             addLiveLog(`❌ Discord Giriş Hatası: ${err.message || err}`);
-            try { await client.destroy(); } catch (e) { }
-            setTimeout(startBot, 10000);
-        } finally {
-            isLoggingIn = false;
+            setTimeout(() => {
+                isLoggingIn = false;
+                startBot();
+            }, 15000);
+            return;
         }
+        isLoggingIn = false;
     }
 
     startBot();
