@@ -8,13 +8,6 @@ if (dns.setDefaultResultOrder) {
     dns.setDefaultResultOrder('ipv4first');
 }
 
-let undiciIpv4Agent = null;
-try {
-    const { Agent: UndiciAgent, setGlobalDispatcher } = require('undici');
-    undiciIpv4Agent = new UndiciAgent({ connect: { family: 4, timeout: 25000 } });
-    setGlobalDispatcher(undiciIpv4Agent);
-} catch (e) { }
-
 const {
     Client, GatewayIntentBits, Partials, PermissionsBitField, PermissionFlagsBits,
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
@@ -214,7 +207,6 @@ setInterval(async () => {
 }, 8 * 60 * 1000);
 
 const client = new Client({
-    rest: undiciIpv4Agent ? { agent: undiciIpv4Agent, timeout: 30000 } : { timeout: 30000 },
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
