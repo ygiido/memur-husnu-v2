@@ -137,11 +137,14 @@ async function cleanGuildSlashCommands(token) {
 
         for (const gid of knownGuildIds) {
             try {
-                await rest.put(Routes.applicationGuildCommands(app.id, gid), { body: [] });
-                cleaned.push(gid);
-                addLiveLog(`[REST]: Sunucu (${gid}) özel komutları sıfırlandı, çift komutlar temizlendi.`);
+                const existing = await rest.get(Routes.applicationGuildCommands(app.id, gid)).catch(() => []);
+                if (Array.isArray(existing) && existing.length > 0) {
+                    await rest.put(Routes.applicationGuildCommands(app.id, gid), { body: [] });
+                    cleaned.push(gid);
+                    addLiveLog(`[REST]: Sunucu (${gid}) özel komutları sıfırlandı (${existing.length} komut kaldırıldı).`);
+                }
             } catch (err) {
-                addLiveLog(`[REST]: Sunucu (${gid}) komut temizleme hatası: ${err.message}`);
+                addLiveLog(`[REST]: Sunucu (${gid}) komut temizleme uyarısı: ${err.message}`);
             }
         }
         return { success: true, appId: app.id, cleanedGuilds: cleaned };
@@ -3319,7 +3322,13 @@ client.once('ready', async () => {
 
     // Çift komut oluşmasını önlemek için sunucuya özel komutları temizle (Yalnızca global komutlar kalır)
     for (const guild of client.guilds.cache.values()) {
-        await guild.commands.set([]).catch(() => { });
+        try {
+            const existingCmds = await guild.commands.fetch();
+            if (existingCmds && existingCmds.size > 0) {
+                await guild.commands.set([]);
+                addLiveLog(`[KOMUT]: ${guild.name} sunucusundaki ${existingCmds.size} yerel komut sıfırlandı.`);
+            }
+        } catch (e) { }
     }
 });
 
@@ -5786,7 +5795,7 @@ client.on('interactionCreate', async interaction => {
                     // Kullanıcı seste mi? Sesteyse yeni odaya taşı
                     let moved = false;
                     if (interaction.member.voice && interaction.member.voice.channelId) {
-                        await interaction.member.voice.setChannel(newChannel).catch(() => {});
+                        await interaction.member.voice.setChannel(newChannel).catch(() => { });
                         moved = true;
                     }
 
