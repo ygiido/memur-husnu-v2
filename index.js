@@ -2685,24 +2685,29 @@ function buildTempVoiceEmbed(roomData) {
 
 function buildTempVoiceCreatorPanel() {
     const embed = new EmbedBuilder()
-        .setTitle('🔊 Özel Ses Odası Oluştur')
+        .setTitle('🔊 Özel Ses Odası Sistemi')
         .setDescription(
-            'Kendinize ait özel bir ses odası oluşturmak için aşağıdaki **"Oda Oluştur"** butonuna tıklayın.\n\n' +
-            '📝 **Nasıl Çalışır?**\n' +
-            '• Butona tıkladığınızda gelen pencereye odanızın adını yazın.\n' +
-            '• Bot sizin için ses odasını anında açar ve (eğer bir sesteyseniz) sizi odaya taşır.\n' +
-            '• Oda içerisindeki kontrol panelinden oda kilidi, kişi sınırı ve üye izinlerini dilediğiniz gibi yönetebilirsiniz.\n\n' +
+            'Kendine ait özel bir ses odası oluşturmak için aşağıdaki butona tıkla!\n\n' +
+            '🚀 **Nasıl Kullanılır?**\n' +
+            '• **Odanı Oluştur!** butonuna tıkla ve odan için bir ad yaz.\n' +
+            '• Bot odanı anında oluştursun ve seni doğrudan yeni odana taşısın.\n' +
+            '• Oda içindeki kontrol panelinden kişi sınırı, kilit ve gizlilik gibi tüm ayarları yönetebilirsin!\n\n' +
             '*(Oda tamamen boşaldığında otomatik olarak silinir.)*'
         )
         .setColor(0x5865F2)
-        .setFooter({ text: 'Memur Hüsnü • Geçici Ses Odası Sistemi' });
+        .setFooter({ text: 'Memur Hüsnü • Özel Ses Odası Sistemi' });
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('btn_temp_vc_create')
-            .setLabel('Oda Oluştur')
+            .setLabel('Odanı Oluştur!')
             .setEmoji('🔊')
-            .setStyle(ButtonStyle.Success)
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('btn_temp_vc_info')
+            .setLabel('Bilgi')
+            .setEmoji('ℹ️')
+            .setStyle(ButtonStyle.Secondary)
     );
 
     return { embeds: [embed], components: [row] };
@@ -3185,8 +3190,9 @@ client.once('ready', async () => {
         }
     } catch (e) { }
 
+    // Çift komut oluşmasını önlemek için sunucuya özel komutları temizle (Yalnızca global komutlar kalır)
     for (const guild of client.guilds.cache.values()) {
-        await guild.commands.set(commands).catch(() => { });
+        await guild.commands.set([]).catch(() => { });
     }
 });
 
@@ -3220,26 +3226,27 @@ client.on('interactionCreate', async interaction => {
 
             if (commandName === 'panel') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
-                return interaction.reply({ ...buildHomeDashboard(interaction.guild), ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ ...buildHomeDashboard(interaction.guild) });
             }
 
             if (commandName === 'ses-odasi-paneli') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
                 const targetChannel = interaction.options.getChannel('kanal') || interaction.channel;
                 if (!targetChannel || !targetChannel.isTextBased()) {
-                    return interaction.reply({ content: '❌ Lütfen geçerli bir metin kanalı seçin.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ Lütfen geçerli bir metin kanalı seçin.' });
                 }
 
                 try {
                     await targetChannel.send(buildTempVoiceCreatorPanel());
                     db[guildId].odaKanal = targetChannel.id;
                     saveDB(db);
-                    return interaction.reply({
-                        content: `✅ Özel ses odası oluşturma paneli başarıyla <#${targetChannel.id}> kanalına gönderildi!`,
-                        ephemeral: true
+                    return interaction.editReply({
+                        content: `✅ Özel ses odası oluşturma paneli başarıyla <#${targetChannel.id}> kanalına gönderildi!`
                     });
                 } catch (sendErr) {
-                    return interaction.reply({ content: `❌ Panel gönderilemedi: ${sendErr.message}`, ephemeral: true });
+                    return interaction.editReply({ content: `❌ Panel gönderilemedi: ${sendErr.message}` });
                 }
             }
 
@@ -4690,12 +4697,12 @@ client.on('interactionCreate', async interaction => {
 
                 const modal = new ModalBuilder()
                     .setCustomId('modal_temp_vc_create')
-                    .setTitle('Özel Ses Odası Oluştur');
+                    .setTitle('Odanı aç');
 
                 const nameInput = new TextInputBuilder()
                     .setCustomId('modal_temp_vc_name')
-                    .setLabel('Oda İsmini Yazın')
-                    .setPlaceholder(`Örn: ${interaction.user.username} Odası`)
+                    .setLabel('Odanın adı')
+                    .setPlaceholder('Odan için bir ad yaz')
                     .setStyle(TextInputStyle.Short)
                     .setMinLength(1)
                     .setMaxLength(32)
@@ -4703,6 +4710,17 @@ client.on('interactionCreate', async interaction => {
 
                 modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
                 return interaction.showModal(modal);
+            }
+
+            if (customId === 'btn_temp_vc_info') {
+                return interaction.reply({
+                    content: 'ℹ️ **Özel Ses Odası Sistemi:**\n' +
+                        '• **Odanı Oluştur!** butonuna tıklayarak kendi özel ses odanızı açabilirsiniz.\n' +
+                        '• Butona bastığınızda açılan ekranda odanız için bir ad belirleyin.\n' +
+                        '• Odanız açıldığında oda sohbetindeki panelden odayı kilitleyebilir, gizleyebilir veya üye sınırını değiştirebilirsiniz.\n' +
+                        '• Odadaki tüm kullanıcılar çıktığında oda otomatik olarak silinir.',
+                    ephemeral: true
+                });
             }
 
             // --- CANLI RADYO BUTONLARI ---
