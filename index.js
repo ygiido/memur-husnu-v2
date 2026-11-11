@@ -58,6 +58,42 @@ function addLiveLog(msg) {
     console.log(`[BOT DIAGNOSTIC] ${msg}`);
 }
 
+// Discord /gateway/bot REST 429 rate limit atlatıcı (Bulut sunucuların askıda kalmasını engeller)
+try {
+    const wsModule = require('@discordjs/ws');
+    if (wsModule && wsModule.WebSocketManager && wsModule.WebSocketManager.prototype) {
+        const originalFetchGateway = wsModule.WebSocketManager.prototype.fetchGatewayInformation;
+        wsModule.WebSocketManager.prototype.fetchGatewayInformation = async function (force = false) {
+            if (this.gatewayInformation && this.gatewayInformation.expiresAt > Date.now() && !force) {
+                return this.gatewayInformation.data;
+            }
+            try {
+                const fetchPromise = originalFetchGateway.call(this, force);
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Gateway REST timeout/429')), 3000)
+                );
+                return await Promise.race([fetchPromise, timeoutPromise]);
+            } catch (err) {
+                addLiveLog(`⚠️ [GATEWAY 429 ATLATILDI]: /gateway/bot REST sınırı aşıldı, doğrudan wss://gateway.discord.gg üzerinden bağlanılıyor.`);
+                const fallback = {
+                    url: 'wss://gateway.discord.gg',
+                    shards: 1,
+                    session_start_limit: {
+                        total: 1000,
+                        remaining: 999,
+                        reset_after: 86400000,
+                        max_concurrency: 1
+                    }
+                };
+                this.gatewayInformation = { data: fallback, expiresAt: Date.now() + (5 * 60 * 1000) };
+                return fallback;
+            }
+        };
+    }
+} catch (e) {
+    console.error('WebSocketManager gateway patch uygulanamadı:', e);
+}
+
 const wsStatusMap = {
     0: 'READY (Aktif / Çevrimiçi)',
     1: 'CONNECTING (Bağlanıyor)',
