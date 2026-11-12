@@ -252,7 +252,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.8',
+        versiyon: 'v2.1.9',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -1291,7 +1291,7 @@ async function sendLog(guild, logCategory, options, files = []) {
     }
 }
 
-// Otomatik Hapis (Jail) Uygulama Fonksiyonu
+// Otomatik Hapis (Jail) ve Zaman Aşımı Uygulama Fonksiyonu
 async function applyJail(member, guild, reason) {
     if (!member || !guild) return;
     const db = getDB();
@@ -1306,17 +1306,20 @@ async function applyJail(member, guild, reason) {
 
     const durations = [15, 30, 60, 180];
     let durationMins = durations[userData.jailCount - 1] ? durations[userData.jailCount - 1] : 180;
-    userData.jailExpire = Date.now() + (durationMins * 60 * 1000);
+    const sureMs = durationMins * 60 * 1000;
+    userData.jailExpire = Date.now() + sureMs;
     saveDB(db);
 
     if (member.manageable) {
         if (db[guild.id].jailRol) await member.roles.add(db[guild.id].jailRol).catch(() => { });
         if (db[guild.id].sicilRol) await member.roles.add(db[guild.id].sicilRol).catch(() => { });
+        const timeoutMs = Math.min(sureMs, 28 * 24 * 60 * 60 * 1000);
+        await member.timeout(timeoutMs, reason).catch(() => { });
     }
 
     sendLog(guild, 'logCeza', {
-        title: 'Otomatik Cezalandırma (Hapis)',
-        desc: `**Kullanıcı:** <@${member.id}> (\`${member.id}\`)\n**Sebep:** ${reason}\n**Süre:** ${durationMins} dakika\n**Toplam İhlal:** ${userData.jailCount}\n**Sicil Durumu:** İşlendi`,
+        title: 'Otomatik Cezalandırma (Hapis & Zaman Aşımı)',
+        desc: `**Kullanıcı:** <@${member.id}> (\`${member.id}\`)\n**Sebep:** ${reason}\n**Süre:** ${durationMins} dakika\n**Toplam İhlal:** ${userData.jailCount}\n**Uygulanan:** Cezalı/Sicilli Rolü + Discord Zaman Aşımı (Timeout)\n**Sicil Durumu:** İşlendi`,
         color: 0xed4245,
         thumbnail: member.user.displayAvatarURL()
     });
@@ -2805,16 +2808,15 @@ setInterval(() => {
                 if (user.jailExpire && now >= user.jailExpire) {
                     user.jailExpire = null;
                     updated = true;
-                    if (jailRoleId) {
-                        const member = await guild.members.fetch(userId).catch(() => null);
-                        if (member && member.manageable) {
-                            member.roles.remove(jailRoleId).catch(() => { });
-                            sendLog(guild, 'logCeza', {
-                                title: 'Ceza Süresi Doldu',
-                                desc: `**Kullanıcı:** <@${member.id}>\nKullanıcının uzaklaştırma (hapis) süresi doldu ve erişimi geri açıldı.`,
-                                color: 0x57f287
-                            });
-                        }
+                    const member = await guild.members.fetch(userId).catch(() => null);
+                    if (member && member.manageable) {
+                        if (jailRoleId) await member.roles.remove(jailRoleId).catch(() => { });
+                        await member.timeout(null, 'Ceza süresi doldu').catch(() => { });
+                        sendLog(guild, 'logCeza', {
+                            title: 'Ceza Süresi Doldu',
+                            desc: `**Kullanıcı:** <@${member.id}>\nKullanıcının hapis ve zaman aşımı (timeout) cezası tamamlandı, rolleri kaldırıldı ve erişimi açıldı.`,
+                            color: 0x57f287
+                        });
                     }
                 }
             }
@@ -3372,17 +3374,21 @@ client.on('interactionCreate', async interaction => {
                     if (sicilVerilecek) userData.sicilli = true;
                     saveDB(db);
 
-                    if (db[guildId].jailRol) await member.roles.add(db[guildId].jailRol).catch(() => { });
-                    if (sicilVerilecek && db[guildId].sicilRol) await member.roles.add(db[guildId].sicilRol).catch(() => { });
+                    if (member.manageable) {
+                        if (db[guildId].jailRol) await member.roles.add(db[guildId].jailRol).catch(() => { });
+                        if (sicilVerilecek && db[guildId].sicilRol) await member.roles.add(db[guildId].sicilRol).catch(() => { });
+                        const timeoutMs = Math.min(sureMs, 28 * 24 * 60 * 60 * 1000);
+                        await member.timeout(timeoutMs, sebep).catch(() => { });
+                    }
 
                     sendLog(interaction.guild, 'logCeza', {
-                        title: 'Manuel Cezalandırma (Hapis)',
-                        desc: `**Yetkili:** <@${interaction.user.id}>\n**Kullanıcı:** <@${user.id}>\n**Süre:** ${sayi} ${kavram}\n**Sebep:** ${sebep}\n**Sicil:** ${sicilDurumMesaji}`,
+                        title: 'Manuel Cezalandırma (Hapis & Zaman Aşımı)',
+                        desc: `**Yetkili:** <@${interaction.user.id}>\n**Kullanıcı:** <@${user.id}>\n**Süre:** ${sayi} ${kavram}\n**Sebep:** ${sebep}\n**Uygulanan:** Cezalı/Sicilli Rolü + Discord Zaman Aşımı (Timeout)\n**Sicil:** ${sicilDurumMesaji}`,
                         color: 0xed4245,
                         thumbnail: user.displayAvatarURL()
                     });
 
-                    return safeReply(interaction, { content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.`, ephemeral: true });
+                    return safeReply(interaction, { content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** hapis cezası ve Discord zaman aşımı (timeout) uygulandı.`, ephemeral: true });
                 }
 
                 if (commandName === 'af') {
@@ -3393,11 +3399,12 @@ client.on('interactionCreate', async interaction => {
                             saveDB(db);
                             const member = await interaction.guild.members.fetch(user.id).catch(() => null);
                             if (member && member.manageable) {
-                                if (db[guildId].jailRol) member.roles.remove(db[guildId].jailRol).catch(() => { });
-                                if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
+                                if (db[guildId].jailRol) await member.roles.remove(db[guildId].jailRol).catch(() => { });
+                                if (db[guildId].sicilRol) await member.roles.remove(db[guildId].sicilRol).catch(() => { });
+                                await member.timeout(null, 'Ceza ve sicil affedildi (/af)').catch(() => { });
                             }
-                            sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
-                            return safeReply(interaction, { content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
+                            sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının hapis/sicil rolleri, zaman aşımı (timeout) ve sicil kayıtları temizlendi.`, color: 0x57f287 });
+                            return safeReply(interaction, { content: `**${user.tag}** adlı kullanıcının cezası (rol ve zaman aşımı) kaldırıldı ve sicili temizlendi.`, ephemeral: true });
                         } else {
                             return safeReply(interaction, { content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.`, ephemeral: true });
                         }
@@ -3405,7 +3412,19 @@ client.on('interactionCreate', async interaction => {
                         if (!isAdmin) return safeReply(interaction, { content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.', ephemeral: true });
                         db[guildId].users = {};
                         saveDB(db);
-                        sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı.`, color: 0x57f287 });
+                        if (db[guildId].jailRol) {
+                            const jailRole = interaction.guild.roles.cache.get(db[guildId].jailRol);
+                            if (jailRole) {
+                                jailRole.members.forEach(async (m) => {
+                                    if (m.manageable) {
+                                        await m.roles.remove(db[guildId].jailRol).catch(() => { });
+                                        if (db[guildId].sicilRol) await m.roles.remove(db[guildId].sicilRol).catch(() => { });
+                                        await m.timeout(null, 'Genel af uygulandı').catch(() => { });
+                                    }
+                                });
+                            }
+                        }
+                        sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı, cezalar kaldırıldı.`, color: 0x57f287 });
                         return safeReply(interaction, { content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.', ephemeral: true });
                     }
                 }
@@ -6851,8 +6870,13 @@ client.on('guildMemberAdd', async member => {
     const userData = db[guildId].users[member.id];
 
     if (member.manageable) {
-        if (userData.jailExpire && Date.now() < userData.jailExpire && db[guildId].jailRol) {
-            await member.roles.add(db[guildId].jailRol).catch(() => { });
+        if (userData.jailExpire && Date.now() < userData.jailExpire) {
+            if (db[guildId].jailRol) await member.roles.add(db[guildId].jailRol).catch(() => { });
+            const remainingMs = userData.jailExpire - Date.now();
+            if (remainingMs > 0) {
+                const timeoutMs = Math.min(remainingMs, 28 * 24 * 60 * 60 * 1000);
+                await member.timeout(timeoutMs, 'Cezadan kaçma koruması (Tekrar giriş)').catch(() => { });
+            }
         }
         if (userData.sicilli && db[guildId].sicilRol) {
             await member.roles.add(db[guildId].sicilRol).catch(() => { });
@@ -6998,6 +7022,20 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
             desc: `**Üye:** <@${newMember.id}>\n**İşlemi Yapan:** ${executor ? `<@${executor.id}>` : 'Süresi Doldu / Bilinmiyor'}`,
             color: 0x57f287
         });
+
+        const db = getDB();
+        if (db[guild.id]) {
+            let updated = false;
+            if (db[guild.id].users && db[guild.id].users[newMember.id] && db[guild.id].users[newMember.id].jailExpire) {
+                db[guild.id].users[newMember.id].jailExpire = null;
+                updated = true;
+            }
+            if (updated) saveDB(db);
+
+            if (db[guild.id].jailRol && newMember.roles.cache.has(db[guild.id].jailRol) && newMember.manageable) {
+                await newMember.roles.remove(db[guild.id].jailRol).catch(() => { });
+            }
+        }
     }
 
     if (oldMember.nickname !== newMember.nickname) {

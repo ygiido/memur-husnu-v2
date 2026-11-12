@@ -1,7 +1,7 @@
 {
   "name": "memur-husnu",
-  "version": "2.1.8",
-  "description": "Memur Hüsnü v2.1.8 - Gelişmiş moderasyon, akıllı link/küfür koruması, detaylı kanal izin logları, çoklu yayın duyurusu, izinsiz bot engeli, log ve butonlu geçici ses odası sistemi.",
+  "version": "2.1.9",
+  "description": "Memur Hüsnü v2.1.9 - Gelişmiş moderasyon, hem hapis rolü hem Discord zaman aşımı (timeout) entegrasyonu, akıllı link/küfür koruması, log ve butonlu geçici ses odası sistemi.",
   "main": "index.js",
   "scripts": {
     "start": "node --dns-result-order=ipv4first index.js"
