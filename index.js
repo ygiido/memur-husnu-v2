@@ -395,6 +395,12 @@ client.rest.on('restDebug', msg => {
 });
 client.rest.on('rateLimited', info => {
     addLiveLog(`⚠️ [REST RATE LIMIT]: ${info.method} ${info.route} - ${info.timeToReset}ms beklemede (Global: ${info.global})`);
+    if (info.timeToReset > 10000) {
+        addLiveLog(`[RATE LIMIT SIFIRLANDI]: ${info.timeToReset}ms yapay kuyruk beklemesi temizlendi.`);
+        client.rest.globalRemaining = 50;
+        client.rest.globalReset = -1;
+        client.rest.globalDelay = null;
+    }
 });
 client.rest.on('invalidRequestWarning', info => {
     addLiveLog(`⚠️ [REST INVALID REQUEST]: ${info.count} geçersiz istek yapıldı (Kalan sınır: ${info.remainingTime}ms)`);
