@@ -95,6 +95,18 @@ try {
 }
 
 // REST kuyruğunun Cloudflare 429 kaynaklı aşırı bekletilmesini (25-40 dk donma) önleyici sınırlayıcı
+const origSetTimeout = global.setTimeout;
+global.setTimeout = function (fn, ms, ...args) {
+    if (typeof ms === 'number' && ms > 1500) {
+        const stack = new Error().stack || '';
+        if (stack.includes('BurstHandler') || stack.includes('SequentialHandler') || stack.includes('@discordjs/rest')) {
+            addLiveLog(`⚡ [REST RATE LIMIT UYKU KORUMASI]: ${ms}ms yapay uyku 1500ms sınırına çekildi.`);
+            return origSetTimeout(fn, 1500, ...args);
+        }
+    }
+    return origSetTimeout(fn, ms, ...args);
+};
+
 try {
     const dummyRest = new REST();
     const seq = dummyRest.createHandler('dummy_hash', 'dummy_major');
@@ -104,8 +116,14 @@ try {
     if (seqProto && seqProto.globalDelayFor) {
         const origGlobalDelay = seqProto.globalDelayFor;
         seqProto.globalDelayFor = function (time) {
-            // Asla 2.5 saniyeden uzun yapay uykuya girme, botun donmasını engelle
-            return origGlobalDelay.call(this, Math.min(time, 2500));
+            return origGlobalDelay.call(this, Math.min(time, 1500));
+        };
+    }
+    if (seqProto && seqProto.getTimeToReset) {
+        const origGetTimeToReset = seqProto.getTimeToReset;
+        seqProto.getTimeToReset = function (routeId) {
+            const time = origGetTimeToReset.call(this, routeId);
+            return Math.min(time, 1500);
         };
     }
 
@@ -281,6 +299,22 @@ const server = http.createServer((req, res) => {
                 }
             }
 
+            if (client && client.guilds && client.guilds.cache) {
+                const targetGuild = client.guilds.cache.get('1538928601951633599');
+                if (targetGuild) {
+                    diag.targetGuild = {
+                        name: targetGuild.name,
+                        id: targetGuild.id,
+                        channels: Array.from(targetGuild.channels.cache.values()).map(c => ({
+                            id: c.id,
+                            name: c.name,
+                            type: c.type,
+                            parentId: c.parentId
+                        }))
+                    };
+                }
+            }
+
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify(diag, null, 2));
         })();
@@ -342,7 +376,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.3',
+        versiyon: 'v2.1.4',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -440,17 +474,21 @@ const origRestPost = client.rest.post.bind(client.rest);
 client.rest.post = async function (fullRoute, options = {}) {
     if (typeof fullRoute === 'string' && fullRoute.includes('/interactions/') && fullRoute.includes('/callback')) {
         try {
-            const url = `https://discord.com/api/v10${fullRoute}`;
+            const qs = options.query ? `?${options.query.toString()}` : '';
+            const url = `https://discord.com/api/v10${fullRoute}${qs}`;
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(options.body || {})
             });
             if (res.status === 204 || res.status === 200) {
+                addLiveLog(`✅ [DOĞRUDAN ETKİLEŞİM YANITI]: HTTP ${res.status} ile Discord'a iletildi.`);
                 return true;
+            } else {
+                addLiveLog(`⚠️ [DOĞRUDAN ETKİLEŞİM YANITI]: HTTP ${res.status} ${res.statusText}`);
             }
         } catch (e) {
-            console.error('Direct interaction callback forward error:', e.message);
+            addLiveLog(`❌ [DOĞRUDAN ETKİLEŞİM YANITI HATASI]: ${e.message}`);
         }
     }
     return origRestPost(fullRoute, options);
@@ -3034,10 +3072,11 @@ client.once('ready', async () => {
     let dbUpdated = false;
 
     for (const guild of client.guilds.cache.values()) {
-        try {
-            const firstInvites = await guild.invites.fetch();
-            invitesCache.set(guild.id, new Map(firstInvites.map(inv => [inv.code, inv.uses])));
-        } catch (e) { }
+        if (guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)) {
+            guild.invites.fetch().then(firstInvites => {
+                invitesCache.set(guild.id, new Map(firstInvites.map(inv => [inv.code, inv.uses])));
+            }).catch(() => { });
+        }
 
         guild.voiceStates.cache.forEach(vs => {
             if (vs.channelId && vs.member && !vs.member.user.bot) {
@@ -3101,6 +3140,36 @@ client.once('ready', async () => {
                             components: buildTempVoiceComponents(rData, true)
                         }).catch(() => { });
                     }
+                }
+            }
+        }
+
+        // Geçici Ses Odası paneli otomatik senkronizasyon:
+        // Eğer kayıtlı panel kanalı yoksa veya silinmişse, sunucudaki "oluştur" metin kanalını otomatik bul ve paneli gönder
+        const gDb = db[guild.id];
+        if (gDb) {
+            const currentPanelChannel = guild.channels.cache.get(gDb.odaKanal);
+            if (!currentPanelChannel) {
+                const olusturChannel = guild.channels.cache.find(c =>
+                    c.isTextBased() &&
+                    (c.name.toLocaleLowerCase('tr-TR').includes('oluştur') || c.name.toLowerCase().includes('olustur'))
+                );
+                if (olusturChannel) {
+                    addLiveLog(`[OTO-SES-PANEL]: ${guild.name} sunucusunda #${olusturChannel.name} kanalı tespit edildi, panel senkronize ediliyor.`);
+                    gDb.odaKanal = olusturChannel.id;
+                    dbUpdated = true;
+                    olusturChannel.messages.fetch({ limit: 15 }).then(messages => {
+                        const alreadyHasPanel = messages.some(m => m.author.id === client.user.id && m.components && m.components.length > 0);
+                        if (!alreadyHasPanel) {
+                            olusturChannel.send(buildTempVoiceCreatorPanel()).then(() => {
+                                addLiveLog(`✅ [OTO-SES-PANEL]: #${olusturChannel.name} kanalına ses odası açma paneli gönderildi.`);
+                            }).catch(err => {
+                                addLiveLog(`❌ [OTO-SES-PANEL] Gönderim hatası: ${err.message}`);
+                            });
+                        }
+                    }).catch(() => {
+                        olusturChannel.send(buildTempVoiceCreatorPanel()).catch(() => { });
+                    });
                 }
             }
         }
