@@ -13,7 +13,8 @@
                 "xp": 19,
                 "level": 0,
                 "papel": 0,
-                "lastVoiceXp": 1794346877230
+                "lastVoiceXp": 1794346877230,
+                "martiansXpBonusV219": true
             },
             "998344341657501736": {
                 "jailCount": 0,
@@ -27,7 +28,8 @@
                 "lastVoiceXp": 1794427458225,
                 "lastDaily": 1794049483232,
                 "msgCount": 5,
-                "lastMsgTime": 1794417605779
+                "lastMsgTime": 1794417605779,
+                "martiansXpBonusV219": true
             },
             "810509659559165992": {
                 "jailCount": 0,
@@ -35,15 +37,16 @@
                 "sicilli": false,
                 "kufurUyari": 0,
                 "spamWarn": 0,
-                "xp": 41882,
+                "xp": 42533,
                 "level": 0,
-                "papel": 339,
-                "msgCount": 150,
-                "lastMsgTime": 1794433509724,
-                "lastVoiceXp": 1794487966024,
+                "papel": 344,
+                "msgCount": 152,
+                "lastMsgTime": 1794495751319,
+                "lastVoiceXp": 1794495872761,
                 "lastDaily": 1793541193968,
                 "spentPapel": 315,
-                "xpDisabled": false
+                "xpDisabled": false,
+                "martiansXpBonusV219": true
             },
             "1143497130409996328": {
                 "jailCount": 0,
@@ -57,7 +60,8 @@
                 "lastVoiceXp": 1794424278206,
                 "lastJoin": 1793551631998,
                 "inviterId": null,
-                "inviteCode": null
+                "inviteCode": null,
+                "martiansXpBonusV219": true
             },
             "1386808277735702528": {
                 "jailCount": 0,
@@ -65,12 +69,13 @@
                 "sicilli": false,
                 "kufurUyari": 0,
                 "spamWarn": 0,
-                "xp": 40316,
+                "xp": 41000,
                 "level": 0,
-                "papel": 343,
-                "msgCount": 94,
-                "lastMsgTime": 1794432591112,
-                "lastVoiceXp": 1794432828252
+                "papel": 349,
+                "msgCount": 95,
+                "lastMsgTime": 1794494436650,
+                "lastVoiceXp": 1794495842761,
+                "martiansXpBonusV219": true
             },
             "767134521262080022": {
                 "jailCount": 0,
@@ -78,12 +83,13 @@
                 "sicilli": false,
                 "kufurUyari": 0,
                 "spamWarn": 0,
-                "xp": 60941,
+                "xp": 62150,
                 "level": 1,
-                "papel": 111,
-                "lastVoiceXp": 1794487996025,
+                "papel": 9,
+                "lastVoiceXp": 1794495842761,
                 "msgCount": 2,
-                "lastMsgTime": 1794343416247
+                "lastMsgTime": 1794343416247,
+                "martiansXpBonusV219": true
             },
             "813052742724616232": {
                 "jailCount": 0,
@@ -95,7 +101,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 2,
-                "lastMsgTime": 1793550569492
+                "lastMsgTime": 1793550569492,
+                "martiansXpBonusV219": true
             },
             "1460607721790378039": {
                 "jailCount": 0,
@@ -103,12 +110,13 @@
                 "sicilli": false,
                 "kufurUyari": 0,
                 "spamWarn": 0,
-                "xp": 17997,
+                "xp": 18076,
                 "level": 0,
                 "papel": 150,
-                "lastVoiceXp": 1794424278206,
+                "lastVoiceXp": 1794495452760,
                 "msgCount": 1,
-                "lastMsgTime": 1793917383746
+                "lastMsgTime": 1793917383746,
+                "martiansXpBonusV219": true
             },
             "728584306984878132": {
                 "jailCount": 0,
@@ -122,7 +130,8 @@
                 "xp": 11,
                 "level": 0,
                 "papel": 0,
-                "lastVoiceXp": 1793554855100
+                "lastVoiceXp": 1793554855100,
+                "martiansXpBonusV219": true
             },
             "1255633582270058630": {
                 "jailCount": 0,
@@ -132,7 +141,8 @@
                 "spamWarn": 0,
                 "lastJoin": 1793554836698,
                 "inviterId": "1460607721790378039",
-                "inviteCode": "edDpPqtJp"
+                "inviteCode": "edDpPqtJp",
+                "martiansXpBonusV219": true
             },
             "1105511115934400564": {
                 "jailCount": 0,
@@ -142,7 +152,8 @@
                 "spamWarn": 0,
                 "lastJoin": 1793554889665,
                 "inviterId": "1460607721790378039",
-                "inviteCode": "edDpPqtJp"
+                "inviteCode": "edDpPqtJp",
+                "martiansXpBonusV219": true
             },
             "1235968288694075425": {
                 "jailCount": 0,
@@ -157,7 +168,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 1,
-                "lastMsgTime": 1793657355773
+                "lastMsgTime": 1793657355773,
+                "martiansXpBonusV219": true
             },
             "373172325140529154": {
                 "jailCount": 0,
@@ -171,7 +183,8 @@
                 "xp": 881,
                 "level": 0,
                 "papel": 8,
-                "lastVoiceXp": 1793561005178
+                "lastVoiceXp": 1793561005178,
+                "martiansXpBonusV219": true
             },
             "861152832845643806": {
                 "jailCount": 0,
@@ -184,7 +197,8 @@
                 "papel": 5,
                 "lastVoiceXp": 1794348857242,
                 "msgCount": 1,
-                "lastMsgTime": 1794345391361
+                "lastMsgTime": 1794345391361,
+                "martiansXpBonusV219": true
             },
             "899291348019060766": {
                 "jailCount": 0,
@@ -197,7 +211,8 @@
                 "papel": 28,
                 "lastVoiceXp": 1794162325466,
                 "msgCount": 48,
-                "lastMsgTime": 1794337797702
+                "lastMsgTime": 1794337797702,
+                "martiansXpBonusV219": true
             },
             "1564020784345776150": {
                 "jailCount": 0,
@@ -211,7 +226,8 @@
                 "xp": 1055,
                 "level": 0,
                 "papel": 10,
-                "lastVoiceXp": 1793574058716
+                "lastVoiceXp": 1793574058716,
+                "martiansXpBonusV219": true
             },
             "592693420485640193": {
                 "jailCount": 0,
@@ -219,14 +235,15 @@
                 "sicilli": false,
                 "kufurUyari": 1,
                 "spamWarn": 0,
-                "xp": 23426,
+                "xp": 24267,
                 "level": 0,
-                "papel": 221,
-                "lastVoiceXp": 1794443929748,
+                "papel": 229,
+                "lastVoiceXp": 1794495842761,
                 "msgCount": 48,
                 "lastMsgTime": 1794476702618,
                 "lastDaily": 1794259705362,
-                "lastKufurTime": 1794085493684
+                "lastKufurTime": 1794085493684,
+                "martiansXpBonusV219": true
             },
             "971802605909057546": {
                 "jailCount": 0,
@@ -244,7 +261,8 @@
                 "lastMsgTime": 1794461888949,
                 "lastDaily": 1794378351712,
                 "lastVoiceXp": 1794420228172,
-                "lastKufurTime": 1793873399480
+                "lastKufurTime": 1793873399480,
+                "martiansXpBonusV219": true
             },
             "527526738201411592": {
                 "jailCount": 0,
@@ -256,7 +274,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 1,
-                "lastMsgTime": 1793649992548
+                "lastMsgTime": 1793649992548,
+                "martiansXpBonusV219": true
             },
             "321935928534761472": {
                 "jailCount": 0,
@@ -268,7 +287,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 2,
-                "lastMsgTime": 1793947909746
+                "lastMsgTime": 1793947909746,
+                "martiansXpBonusV219": true
             },
             "1356024695216013483": {
                 "jailCount": 0,
@@ -278,7 +298,8 @@
                 "spamWarn": 0,
                 "lastJoin": 1793715005216,
                 "inviterId": "1538548872450674801",
-                "inviteCode": "vuB39v5XC"
+                "inviteCode": "vuB39v5XC",
+                "martiansXpBonusV219": true
             },
             "852987449793183815": {
                 "jailCount": 0,
@@ -289,7 +310,8 @@
                 "xp": 816,
                 "level": 0,
                 "papel": 7,
-                "lastVoiceXp": 1793743647685
+                "lastVoiceXp": 1793743647685,
+                "martiansXpBonusV219": true
             },
             "1105882521415192617": {
                 "jailCount": 0,
@@ -301,7 +323,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 3,
-                "lastMsgTime": 1794411380039
+                "lastMsgTime": 1794411380039,
+                "martiansXpBonusV219": true
             },
             "710483348455424022": {
                 "jailCount": 0,
@@ -317,7 +340,8 @@
                 "papel": 149,
                 "lastVoiceXp": 1794443749746,
                 "msgCount": 5,
-                "lastMsgTime": 1794349254870
+                "lastMsgTime": 1794349254870,
+                "martiansXpBonusV219": true
             },
             "1301247159336833127": {
                 "jailCount": 0,
@@ -333,7 +357,8 @@
                 "papel": 0,
                 "msgCount": 3,
                 "lastMsgTime": 1793910039081,
-                "lastKufurTime": 1793826218052
+                "lastKufurTime": 1793826218052,
+                "martiansXpBonusV219": true
             },
             "1058115431342292992": {
                 "jailCount": 0,
@@ -346,7 +371,8 @@
                 "papel": 49,
                 "lastVoiceXp": 1794444109749,
                 "msgCount": 3,
-                "lastMsgTime": 1794419017610
+                "lastMsgTime": 1794419017610,
+                "martiansXpBonusV219": true
             },
             "819148633022136362": {
                 "jailCount": 0,
@@ -360,7 +386,8 @@
                 "msgCount": 1,
                 "lastMsgTime": 1793892760582,
                 "linkUyari": 1,
-                "lastLinkTime": 1793892760896
+                "lastLinkTime": 1793892760896,
+                "martiansXpBonusV219": true
             },
             "1333481128052523028": {
                 "jailCount": 0,
@@ -376,7 +403,8 @@
                 "papel": 24,
                 "lastVoiceXp": 1793996643232,
                 "msgCount": 9,
-                "lastMsgTime": 1793964253348
+                "lastMsgTime": 1793964253348,
+                "martiansXpBonusV219": true
             },
             "481804688845570049": {
                 "jailCount": 0,
@@ -389,7 +417,8 @@
                 "papel": 109,
                 "lastVoiceXp": 1794345227219,
                 "msgCount": 1,
-                "lastMsgTime": 1794344282535
+                "lastMsgTime": 1794344282535,
+                "martiansXpBonusV219": true
             },
             "1387501110302085181": {
                 "jailCount": 0,
@@ -403,7 +432,8 @@
                 "xp": 13,
                 "level": 0,
                 "papel": 0,
-                "lastVoiceXp": 1793922301426
+                "lastVoiceXp": 1793922301426,
+                "martiansXpBonusV219": true
             },
             "1383610466076459038": {
                 "jailCount": 0,
@@ -417,7 +447,8 @@
                 "xp": 1318,
                 "level": 0,
                 "papel": 13,
-                "lastVoiceXp": 1794400637891
+                "lastVoiceXp": 1794400637891,
+                "martiansXpBonusV219": true
             },
             "1566848437578895394": {
                 "jailCount": 0,
@@ -431,7 +462,8 @@
                 "xp": 61,
                 "level": 0,
                 "papel": 0,
-                "lastVoiceXp": 1793969012699
+                "lastVoiceXp": 1793969012699,
+                "martiansXpBonusV219": true
             },
             "344160086865739789": {
                 "jailCount": 0,
@@ -442,7 +474,8 @@
                 "xp": 622,
                 "level": 0,
                 "papel": 5,
-                "lastVoiceXp": 1793988423050
+                "lastVoiceXp": 1793988423050,
+                "martiansXpBonusV219": true
             },
             "619811404135792686": {
                 "jailCount": 0,
@@ -452,7 +485,8 @@
                 "spamWarn": 0,
                 "lastJoin": 1793993388941,
                 "inviterId": "217741659461386251",
-                "inviteCode": "KPYUxaYfN"
+                "inviteCode": "KPYUxaYfN",
+                "martiansXpBonusV219": true
             },
             "928370035280449597": {
                 "jailCount": 0,
@@ -462,7 +496,8 @@
                 "spamWarn": 0,
                 "lastJoin": 1794001413468,
                 "inviterId": "1386808277735702528",
-                "inviteCode": "dxXwuRxBb"
+                "inviteCode": "dxXwuRxBb",
+                "martiansXpBonusV219": true
             },
             "1004755638024421478": {
                 "jailCount": 0,
@@ -476,7 +511,8 @@
                 "xp": 613,
                 "level": 0,
                 "papel": 6,
-                "lastVoiceXp": 1794029853701
+                "lastVoiceXp": 1794029853701,
+                "martiansXpBonusV219": true
             },
             "1161706018040971328": {
                 "jailCount": 0,
@@ -487,7 +523,8 @@
                 "xp": 132,
                 "level": 0,
                 "papel": 0,
-                "lastVoiceXp": 1794413928119
+                "lastVoiceXp": 1794413928119,
+                "martiansXpBonusV219": true
             },
             "1093196472239001771": {
                 "jailCount": 0,
@@ -497,7 +534,8 @@
                 "spamWarn": 0,
                 "lastJoin": 1794051890192,
                 "inviterId": null,
-                "inviteCode": null
+                "inviteCode": null,
+                "martiansXpBonusV219": true
             },
             "434662691387211777": {
                 "jailCount": 0,
@@ -510,7 +548,8 @@
                 "papel": 45,
                 "lastVoiceXp": 1794444109749,
                 "msgCount": 4,
-                "lastMsgTime": 1794351505155
+                "lastMsgTime": 1794351505155,
+                "martiansXpBonusV219": true
             },
             "714597116189605889": {
                 "jailCount": 0,
@@ -520,7 +559,8 @@
                 "spamWarn": 0,
                 "lastJoin": 1794095099720,
                 "inviterId": null,
-                "inviteCode": null
+                "inviteCode": null,
+                "martiansXpBonusV219": true
             },
             "1160198575142228028": {
                 "jailCount": 1,
@@ -535,7 +575,8 @@
                 "msgCount": 15,
                 "lastMsgTime": 1794423191169,
                 "lastKufurTime": 1794263126117,
-                "jailExpire": null
+                "jailExpire": null,
+                "martiansXpBonusV219": true
             },
             "374605969868455941": {
                 "jailCount": 0,
@@ -546,7 +587,8 @@
                 "xp": 44,
                 "level": 0,
                 "papel": 0,
-                "lastVoiceXp": 1794249715401
+                "lastVoiceXp": 1794249715401,
+                "martiansXpBonusV219": true
             },
             "465195053422215178": {
                 "jailCount": 0,
@@ -561,7 +603,8 @@
                 "lastMsgTime": 1794432504879,
                 "lastVoiceXp": 1794443509745,
                 "linkUyari": 1,
-                "lastLinkTime": 1794264294992
+                "lastLinkTime": 1794264294992,
+                "martiansXpBonusV219": true
             },
             "1478871923378098317": {
                 "jailCount": 0,
@@ -573,20 +616,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 4,
-                "lastMsgTime": 1794264600170
-            },
-            "332871677509894144": {
-                "jailCount": 0,
-                "minorJailCount": 0,
-                "sicilli": false,
-                "kufurUyari": 0,
-                "spamWarn": 0,
-                "xp": 92,
-                "level": 0,
-                "papel": 0,
-                "lastVoiceXp": 1794265226002,
-                "msgCount": 2,
-                "lastMsgTime": 1794265024615
+                "lastMsgTime": 1794264600170,
+                "martiansXpBonusV219": true
             },
             "328235081476866059": {
                 "jailCount": 0,
@@ -598,7 +629,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 1,
-                "lastMsgTime": 1794309869692
+                "lastMsgTime": 1794309869692,
+                "martiansXpBonusV219": true
             },
             "1538548872450674801": {
                 "jailCount": 0,
@@ -611,7 +643,8 @@
                 "papel": 2,
                 "msgCount": 13,
                 "lastMsgTime": 1794417103470,
-                "lastVoiceXp": 1794425718219
+                "lastVoiceXp": 1794425718219,
+                "martiansXpBonusV219": true
             },
             "753591553288699925": {
                 "jailCount": 0,
@@ -624,7 +657,8 @@
                 "papel": 1,
                 "msgCount": 1,
                 "lastMsgTime": 1794345851915,
-                "lastVoiceXp": 1794409068042
+                "lastVoiceXp": 1794409068042,
+                "martiansXpBonusV219": true
             },
             "693437698123497554": {
                 "jailCount": 0,
@@ -636,7 +670,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 1,
-                "lastMsgTime": 1794348582554
+                "lastMsgTime": 1794348582554,
+                "martiansXpBonusV219": true
             },
             "1215011029336199241": {
                 "jailCount": 0,
@@ -650,7 +685,8 @@
                 "xp": 1283,
                 "level": 0,
                 "papel": 9,
-                "lastVoiceXp": 1794400637891
+                "lastVoiceXp": 1794400637891,
+                "martiansXpBonusV219": true
             },
             "1376457299475828756": {
                 "jailCount": 0,
@@ -668,7 +704,8 @@
                 "msgCount": 1,
                 "lastMsgTime": 1794402260925,
                 "linkUyari": 1,
-                "lastLinkTime": 1794402261508
+                "lastLinkTime": 1794402261508,
+                "martiansXpBonusV219": true
             },
             "282179967759155201": {
                 "jailCount": 0,
@@ -681,7 +718,8 @@
                 "papel": 5,
                 "msgCount": 1,
                 "lastMsgTime": 1794416082981,
-                "lastVoiceXp": 1794421938192
+                "lastVoiceXp": 1794421938192,
+                "martiansXpBonusV219": true
             },
             "744223238673924110": {
                 "jailCount": 0,
@@ -692,7 +730,8 @@
                 "xp": 464,
                 "level": 0,
                 "papel": 4,
-                "lastVoiceXp": 1794432078249
+                "lastVoiceXp": 1794432078249,
+                "martiansXpBonusV219": true
             },
             "1532903821725012098": {
                 "jailCount": 0,
@@ -704,7 +743,8 @@
                 "level": 0,
                 "papel": 0,
                 "msgCount": 4,
-                "lastMsgTime": 1794428045482
+                "lastMsgTime": 1794428045482,
+                "martiansXpBonusV219": true
             },
             "217741659461386251": {
                 "jailCount": 0,
@@ -715,7 +755,8 @@
                 "xp": 360,
                 "level": 0,
                 "papel": 3,
-                "lastVoiceXp": 1794436474948
+                "lastVoiceXp": 1794436474948,
+                "martiansXpBonusV219": true
             }
         },
         "tempRooms": {},

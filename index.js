@@ -2966,6 +2966,45 @@ client.once('ready', async () => {
 
     if (dbUpdated) saveDB(db);
 
+    // Tek Seferlik Martians XP Telafisi (Dün yaşanan bug telafisi)
+    const martiansGuildId = '1538928601951633599';
+    if (db[martiansGuildId]) {
+        const mGuild = client.guilds.cache.get(martiansGuildId);
+        if (mGuild) {
+            mGuild.members.fetch().then(async members => {
+                let count = 0;
+                let updated = false;
+                for (const [, m] of members) {
+                    if (m.user.bot) continue;
+                    if (!db[martiansGuildId].users) db[martiansGuildId].users = {};
+                    if (!db[martiansGuildId].users[m.id]) {
+                        db[martiansGuildId].users[m.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0, xp: 0, level: 0, papel: 0 };
+                    }
+                    const uData = db[martiansGuildId].users[m.id];
+                    if (!uData.martiansBugTelafi5k15k) {
+                        uData.martiansBugTelafi5k15k = true;
+                        const addXp = (m.id === '810509659559165992') ? 15000 : 5000;
+                        uData.xp = (uData.xp || 0) + addXp;
+                        const newLvl = calculateLevel(uData.xp);
+                        if (newLvl > (uData.level || 0)) {
+                            uData.level = newLvl;
+                            const roleId = db[martiansGuildId]?.levelRoles?.[String(newLvl)];
+                            if (roleId) {
+                                await m.roles.add(roleId).catch(() => { });
+                            }
+                        }
+                        count++;
+                        updated = true;
+                    }
+                }
+                if (updated) {
+                    saveDB(db);
+                    addLiveLog(`✅ [XP TELAFİSİ]: Martians sunucusunda ${count} üyeye XP telafisi verildi (ygiido +15000, diğerleri +5000).`);
+                }
+            }).catch(err => addLiveLog(`[XP TELAFİSİ HATA]: ${err.message}`));
+        }
+    }
+
     // Bot açıldıktan 5 saniye sonra yayın kontrollerini anında başlat
     setTimeout(() => {
         checkAllStreamTrackers().catch(e => addLiveLog(`[YAYIN KONTROL HATA]: ${e.message}`));
