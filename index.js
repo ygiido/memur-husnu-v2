@@ -94,52 +94,7 @@ try {
     console.error('WebSocketManager gateway patch uygulanamadı:', e);
 }
 
-// REST kuyruğunun Cloudflare 429 kaynaklı aşırı bekletilmesini (25-40 dk donma) önleyici sınırlayıcı
-const origSetTimeout = global.setTimeout;
-global.setTimeout = function (fn, ms, ...args) {
-    if (typeof ms === 'number' && ms > 1500) {
-        const stack = new Error().stack || '';
-        if (stack.includes('BurstHandler') || stack.includes('SequentialHandler') || stack.includes('@discordjs/rest')) {
-            addLiveLog(`⚡ [REST RATE LIMIT UYKU KORUMASI]: ${ms}ms yapay uyku 1500ms sınırına çekildi.`);
-            return origSetTimeout(fn, 1500, ...args);
-        }
-    }
-    return origSetTimeout(fn, ms, ...args);
-};
 
-try {
-    const dummyRest = new REST();
-    const seq = dummyRest.createHandler('dummy_hash', 'dummy_major');
-    const burst = dummyRest.createHandler('dummy_hash', 'burst');
-
-    const seqProto = Object.getPrototypeOf(seq);
-    if (seqProto && seqProto.globalDelayFor) {
-        const origGlobalDelay = seqProto.globalDelayFor;
-        seqProto.globalDelayFor = function (time) {
-            return origGlobalDelay.call(this, Math.min(time, 1500));
-        };
-    }
-    if (seqProto && seqProto.getTimeToReset) {
-        const origGetTimeToReset = seqProto.getTimeToReset;
-        seqProto.getTimeToReset = function (routeId) {
-            const time = origGetTimeToReset.call(this, routeId);
-            return Math.min(time, 1500);
-        };
-    }
-
-    const burstProto = Object.getPrototypeOf(burst);
-    if (burstProto && burstProto.runRequest) {
-        const origRunRequest = burstProto.runRequest;
-        burstProto.runRequest = async function (routeId, url, options, requestData, retries = 0) {
-            if (retries >= 2) {
-                throw new Error('Etkileşim zaman aşımı koruması (429 beklemesi iptal)');
-            }
-            return origRunRequest.call(this, routeId, url, options, requestData, retries);
-        };
-    }
-} catch (e) {
-    console.error('REST handler patch uygulanamadı:', e);
-}
 
 const wsStatusMap = {
     0: 'READY (Aktif / Çevrimiçi)',
@@ -376,7 +331,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.4',
+        versiyon: 'v2.1.5',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -3474,23 +3429,14 @@ client.once('ready', async () => {
         }
     ];
 
-    try {
-        if (client.application) {
-            await client.application.commands.set(commands);
-            addLiveLog('✅ [ROZET]: Global slash komutları kaydedildi ("Supports Commands" {/} rozeti tetiklendi).');
-        }
-    } catch (e) { }
-
-    // Çift komut oluşmasını önlemek için sunucuya özel komutları temizle (Yalnızca global komutlar kalır)
-    for (const guild of client.guilds.cache.values()) {
+    // Global komutlar arka planda REST sınırını tüketmeden senkronize edilir
+    setTimeout(async () => {
         try {
-            const existingCmds = await guild.commands.fetch();
-            if (existingCmds && existingCmds.size > 0) {
-                await guild.commands.set([]);
-                addLiveLog(`[KOMUT]: ${guild.name} sunucusundaki ${existingCmds.size} yerel komut sıfırlandı.`);
+            if (client.application) {
+                await client.application.commands.set(commands).catch(() => {});
             }
         } catch (e) { }
-    }
+    }, 15000);
 });
 
 // ============================================================================
@@ -3522,14 +3468,14 @@ client.on('interactionCreate', async interaction => {
             const { commandName } = interaction;
 
             if (commandName === 'panel') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
                 await interaction.deferReply({ ephemeral: true });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.' });
                 return interaction.editReply({ ...buildHomeDashboard(interaction.guild) });
             }
 
             if (commandName === 'ses-odasi-paneli') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
                 await interaction.deferReply({ ephemeral: true });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const targetChannel = interaction.options.getChannel('kanal') || interaction.channel;
                 if (!targetChannel || !targetChannel.isTextBased()) {
                     return interaction.editReply({ content: '❌ Lütfen geçerli bir metin kanalı seçin.' });
