@@ -139,9 +139,27 @@ const server = http.createServer((req, res) => {
             const diag = {
                 timestamp: new Date().toISOString(),
                 wsStatus: client && client.ws ? client.ws.status : null,
+                dns: null,
+                ipv6Test: null,
                 fetchGateway: null,
                 restMe: null
             };
+
+            try {
+                diag.dns = await dns.promises.lookup('discord.com', { all: true });
+            } catch (e) {
+                diag.dns = { error: e.message };
+            }
+
+            try {
+                const ipv6Res = await fetch('https://[2606:4700::6810:8b63]/api/v10/gateway', {
+                    headers: { Host: 'discord.com' },
+                    signal: AbortSignal.timeout(4000)
+                });
+                diag.ipv6Test = { status: ipv6Res.status };
+            } catch (e) {
+                diag.ipv6Test = { error: e.message };
+            }
 
             if (process.env.TOKEN) {
                 try {
