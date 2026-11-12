@@ -94,6 +94,35 @@ try {
     console.error('WebSocketManager gateway patch uygulanamadı:', e);
 }
 
+// REST kuyruğunun Cloudflare 429 kaynaklı aşırı bekletilmesini (25-40 dk donma) önleyici sınırlayıcı
+try {
+    const dummyRest = new REST();
+    const seq = dummyRest.createHandler('dummy_hash', 'dummy_major');
+    const burst = dummyRest.createHandler('dummy_hash', 'burst');
+
+    const seqProto = Object.getPrototypeOf(seq);
+    if (seqProto && seqProto.globalDelayFor) {
+        const origGlobalDelay = seqProto.globalDelayFor;
+        seqProto.globalDelayFor = function (time) {
+            // Asla 2.5 saniyeden uzun yapay uykuya girme, botun donmasını engelle
+            return origGlobalDelay.call(this, Math.min(time, 2500));
+        };
+    }
+
+    const burstProto = Object.getPrototypeOf(burst);
+    if (burstProto && burstProto.runRequest) {
+        const origRunRequest = burstProto.runRequest;
+        burstProto.runRequest = async function (routeId, url, options, requestData, retries = 0) {
+            if (retries >= 2) {
+                throw new Error('Etkileşim zaman aşımı koruması (429 beklemesi iptal)');
+            }
+            return origRunRequest.call(this, routeId, url, options, requestData, retries);
+        };
+    }
+} catch (e) {
+    console.error('REST handler patch uygulanamadı:', e);
+}
+
 const wsStatusMap = {
     0: 'READY (Aktif / Çevrimiçi)',
     1: 'CONNECTING (Bağlanıyor)',
@@ -6913,6 +6942,11 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         const executor = await getAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate, member.id);
         sendLog(newState.guild, 'logSes', { title: 'Yetkili Sağırlaştırması Kaldırıldı', desc: `**Üye:** <@${member.id}>\n**Açan Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}`, color: 0x57f287 });
     }
+
+    if (!oldState.selfMute && newState.selfMute) sendLog(newState.guild, 'logSes', { title: 'Mikrofonunu Kapattı', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x95a5a6 });
+    if (oldState.selfMute && !newState.selfMute) sendLog(newState.guild, 'logSes', { title: 'Mikrofonunu Açtı', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x2ecc71 });
+    if (!oldState.selfDeaf && newState.selfDeaf) sendLog(newState.guild, 'logSes', { title: 'Kulaklığını Kapattı (Sağırlaştı)', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x95a5a6 });
+    if (oldState.selfDeaf && !newState.selfDeaf) sendLog(newState.guild, 'logSes', { title: 'Kulaklığını Açtı', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x2ecc71 });
 
     if (!oldState.streaming && newState.streaming) sendLog(newState.guild, 'logSes', { title: 'Ekran Paylaşımı Başlattı', desc: `<@${member.id}>, <#${newState.channelId}> kanalında yayın açtı.`, color: 0x3498db });
     if (oldState.streaming && !newState.streaming) sendLog(newState.guild, 'logSes', { title: 'Ekran Paylaşımını Kapattı', desc: `<@${member.id}>, <#${newState.channelId}> kanalındaki yayınını sonlandırdı.`, color: 0xe67e22 });
