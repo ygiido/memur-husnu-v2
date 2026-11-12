@@ -313,7 +313,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.2',
+        versiyon: 'v2.1.3',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -405,6 +405,27 @@ client.rest.on('rateLimited', info => {
 client.rest.on('invalidRequestWarning', info => {
     addLiveLog(`⚠️ [REST INVALID REQUEST]: ${info.count} geçersiz istek yapıldı (Kalan sınır: ${info.remainingTime}ms)`);
 });
+
+// Etkileşim (Slash komut / buton / modal) yanıtlarını dahili REST kuyruğuna takılmadan anında iletme
+const origRestPost = client.rest.post.bind(client.rest);
+client.rest.post = async function (fullRoute, options = {}) {
+    if (typeof fullRoute === 'string' && fullRoute.includes('/interactions/') && fullRoute.includes('/callback')) {
+        try {
+            const url = `https://discord.com/api/v10${fullRoute}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(options.body || {})
+            });
+            if (res.status === 204 || res.status === 200) {
+                return true;
+            }
+        } catch (e) {
+            console.error('Direct interaction callback forward error:', e.message);
+        }
+    }
+    return origRestPost(fullRoute, options);
+};
 client.on('debug', msg => {
     // Heartbeat ve gecikme mesajları logları doldurmasın
     if (msg.includes('Heartbeat') || msg.includes('Latency') || msg.includes('Swept')) return;
@@ -6892,11 +6913,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         const executor = await getAuditExecutor(newState.guild, AuditLogEvent.MemberUpdate, member.id);
         sendLog(newState.guild, 'logSes', { title: 'Yetkili Sağırlaştırması Kaldırıldı', desc: `**Üye:** <@${member.id}>\n**Açan Yetkili:** ${executor ? `<@${executor.id}>` : 'Bilinmiyor'}`, color: 0x57f287 });
     }
-
-    if (!oldState.selfMute && newState.selfMute) sendLog(newState.guild, 'logSes', { title: 'Mikrofonunu Kapattı', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x95a5a6 });
-    if (oldState.selfMute && !newState.selfMute) sendLog(newState.guild, 'logSes', { title: 'Mikrofonunu Açtı', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x2ecc71 });
-    if (!oldState.selfDeaf && newState.selfDeaf) sendLog(newState.guild, 'logSes', { title: 'Kulaklığını Kapattı (Sağırlaştı)', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x95a5a6 });
-    if (oldState.selfDeaf && !newState.selfDeaf) sendLog(newState.guild, 'logSes', { title: 'Kulaklığını Açtı', desc: `<@${member.id}> (<#${newState.channelId}>)`, color: 0x2ecc71 });
 
     if (!oldState.streaming && newState.streaming) sendLog(newState.guild, 'logSes', { title: 'Ekran Paylaşımı Başlattı', desc: `<@${member.id}>, <#${newState.channelId}> kanalında yayın açtı.`, color: 0x3498db });
     if (oldState.streaming && !newState.streaming) sendLog(newState.guild, 'logSes', { title: 'Ekran Paylaşımını Kapattı', desc: `<@${member.id}>, <#${newState.channelId}> kanalındaki yayınını sonlandırdı.`, color: 0xe67e22 });
