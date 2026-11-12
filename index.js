@@ -445,6 +445,7 @@ function ensureGuildDB(db, guildId) {
     if (!db[guildId].buttonRoles) db[guildId].buttonRoles = {};
     if (db[guildId].xpEnabled === undefined) db[guildId].xpEnabled = true;
     if (db[guildId].gamesEnabled === undefined) db[guildId].gamesEnabled = true;
+    if (db[guildId].otoRol === undefined) db[guildId].otoRol = null;
     if (db[guildId].kickKanal && !db[guildId].duyuruKanal) {
         db[guildId].duyuruKanal = db[guildId].kickKanal;
         delete db[guildId].kickKanal;
@@ -1477,7 +1478,7 @@ function buildHomeDashboard(guild) {
         .setDescription(
             `Bu kontrol paneli üzerinden sunucunun tüm moderasyon, güvenlik, geçici ses odası, log, çekiliş, destek (ticket) ve buton rol sistemlerini hiçbir komut ezberlemeden yapılandırabilirsiniz.\n\n` +
             `**1. Sistem Ayarları Butonu**\n` +
-            `Yetkili, muaf, cezalı ve sicilli rollerini; geçici ses odası oluşturucu kanalını, yayın duyuru sistemini, küfür/link engellerini ve bot korumasını buradan yönetebilirsiniz.\n\n` +
+            `Yetkili, muaf, cezalı, sicilli ve oto-rol rollerini; geçici ses odası oluşturucu kanalını, yayın duyuru sistemini, küfür/link engellerini ve bot korumasını buradan yönetebilirsiniz.\n\n` +
             `**2. Log Ayarları Butonu**\n` +
             `Sunucuda gerçekleşen tüm olayları 6 ayrı kategoride (Ceza, Mesaj, Ses, Üye, Sunucu, Güvenlik) hangi kanallara raporlanacağını buradan belirleyebilirsiniz.\n\n` +
             `**3. Ticket Kurulumu Butonu**\n` +
@@ -1516,11 +1517,12 @@ function buildAyarDashboard(guildDb) {
             `- **Yetkili Rolü:** \`/hapis\`, \`/af\`, \`/sil\` komutlarını ve destek taleplerini yöneten roldür.\n` +
             `- **Muaf Rolü:** Küfür, link, spam ve caps lock denetiminden muaf tutulur.\n` +
             `- **Cezalı (Jail) Rolü:** Ceza alan üyelere otomatik verilen kısıtlama rolüdür.\n` +
-            `- **Sicilli Rolü:** Sürekli kural ihlali yapanlara verilen kalıcı uyarı rolüdür.`
+            `- **Sicilli Rolü:** Sürekli kural ihlali yapanlara verilen kalıcı uyarı rolüdür.\n` +
+            `- **Oto-Rol:** Sunucuya yeni katılan üyelere otomatik tanımlanan roldür.`
         )
         .setColor(0x2b2d31)
         .addFields(
-            { name: '👥 Rol Yapılandırması', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
+            { name: '👥 Rol Yapılandırması', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}\nOto-Rol: ${getRole(guildDb.otoRol)}`, inline: true },
             { name: '🎙️ Ses ve Yayın', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
             { name: '🛡️ Güvenlik ve Koruma Durumu', value: `Link/Reklam: **${guildDb.linkEngel ? '🟢 AÇIK' : '🔴 KAPALI'}**\nKüfür Koruması: **${guildDb.kufurEngel ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${customKufurCount} özel kelime)*\nCaps Lock: **${guildDb.capsEngel !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**\nİzinsiz Bot Engeli: **${guildDb.antiBot !== false ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${botWhitelistCount} beyaz listede)*\nOto-Cevap: **${guildDb.otoCevap !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**`, inline: false }
         );
@@ -1558,6 +1560,8 @@ function buildAyarDashboard(guildDb) {
                 { label: 'Muaf Rolü Seç', description: 'Küfür, link ve spam korumalarından muaf tutulan rol.', value: 'muafRol' },
                 { label: 'Cezalı (Jail) Rolü Seç', description: 'Hapis cezası alan üyelere verilen kısıtlama rolü.', value: 'jailRol' },
                 { label: 'Sicilli Rolü Seç', description: 'Sicili bozulan üyelere verilecek uyarı rolü.', value: 'sicilRol' },
+                { label: 'Oto-Rol (Giriş Rolü) Seç', description: 'Sunucuya yeni katılan üyelere otomatik verilecek rol.', value: 'otoRol' },
+                { label: 'Oto-Rolü Sıfırla / Kaldır', description: 'Otomatik giriş rolü vermeyi kapatır.', value: 'reset_oto_rol' },
                 { label: 'Geçici Oda Oluşturucu Ses Kanalı Seç', description: 'Üyelerin tıkladığında özel oda açacağı ses kanalı.', value: 'odaKanal' },
                 { label: 'Geçici Oda Kategorisi Seç', description: 'Açılan özel ses odalarının toplanacağı kategori.', value: 'odaKategori' },
                 { label: 'Yayın & İçerik Duyuru Kanalı Seç', description: 'YouTube, Kick ve Twitch bildirimlerinin paylaşılacağı metin kanalı.', value: 'duyuruKanal' },
@@ -1670,7 +1674,7 @@ function buildInfoDashboard(guild, guildDb) {
         .setThumbnail(guild.iconURL({ dynamic: true }))
         .addFields(
             { name: 'Sunucu İstatistikleri', value: `Üye Sayısı: **${guild.memberCount}** | Açık Ticket: **${activeTickets}** | Açık Geçici Oda: **${activeRooms}**`, inline: false },
-            { name: 'Rol Ayarları', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
+            { name: 'Rol Ayarları', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}\nOto-Rol: ${getRole(guildDb.otoRol)}`, inline: true },
             { name: 'Kanal ve Yayın Ayarları', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
             { name: 'Log Kanalları', value: `**Ceza:** ${getCh(guildDb.logCeza)}\n**Mesaj:** ${getCh(guildDb.logMesaj)}\n**Ses:** ${getCh(guildDb.logSes)}\n**Üye:** ${getCh(guildDb.logUye)}\n**Sunucu:** ${getCh(guildDb.logSunucu)}\n**Güvenlik:** ${getCh(guildDb.logGuvenlik)}`, inline: false },
             { name: 'Koruma Filtreleri', value: `Link Engeli: **${guildDb.linkEngel ? 'Aktif' : 'Kapalı'}** | Küfür Engeli: **${guildDb.kufurEngel ? 'Aktif' : 'Kapalı'}** | Oto-Cevap: **${guildDb.otoCevap !== false ? 'Aktif' : 'Kapalı'}**`, inline: false }
@@ -4105,7 +4109,7 @@ client.on('interactionCreate', async interaction => {
                     return interaction.update(buildAyarDashboard(db[guildId]));
                 }
 
-                if (['yetkiliRol', 'muafRol', 'jailRol', 'sicilRol', 'duyuruRol'].includes(secim)) {
+                if (['yetkiliRol', 'muafRol', 'jailRol', 'sicilRol', 'duyuruRol', 'otoRol'].includes(secim)) {
                     const roleSelect = new ActionRowBuilder().addComponents(
                         new RoleSelectMenuBuilder()
                             .setCustomId(`set_ayar_rol_${secim}`)
@@ -4115,6 +4119,12 @@ client.on('interactionCreate', async interaction => {
                     const panelData = buildAyarDashboard(db[guildId]);
                     panelData.components.push(roleSelect);
                     return interaction.update(panelData);
+                }
+
+                if (secim === 'reset_oto_rol') {
+                    db[guildId].otoRol = null;
+                    saveDB(db);
+                    return interaction.update(buildAyarDashboard(db[guildId]));
                 }
 
                 if (secim === 'add_custom_kufur') {
@@ -6922,6 +6932,17 @@ client.on('guildMemberAdd', async member => {
         }
     }
 
+    // Yeni Katılan Üyeye Otomatik Rol (Oto-Rol) Verme
+    const isJailed = userData.jailExpire && Date.now() < userData.jailExpire;
+    let otoRolVerildi = false;
+    if (db[guildId].otoRol && !isJailed) {
+        const otoRoleId = db[guildId].otoRol;
+        const roleObj = member.guild.roles.cache.get(otoRoleId);
+        if (roleObj) {
+            await member.roles.add(otoRoleId).then(() => { otoRolVerildi = true; }).catch(() => { });
+        }
+    }
+
     let inviteMsg = "Davet eden bulunamadı (Özel URL veya süresi dolmuş).";
     let inviterId = null;
     let inviteCode = null;
@@ -6961,9 +6982,10 @@ client.on('guildMemberAdd', async member => {
         });
     }
 
+    const otoRolBilgisi = (db[guildId].otoRol && otoRolVerildi) ? `\n**Verilen Oto-Rol:** <@&${db[guildId].otoRol}>` : '';
     sendLog(member.guild, 'logUye', {
         title: 'Sunucuya Katıldı',
-        desc: `**Üye:** <@${member.id}> (${member.user.tag})\n**Hesap Kuruluş:** ${hesapYasiGun} gün önce (<t:${Math.floor(member.user.createdTimestamp / 1000)}:D>)\n**Davet Eden:** ${inviteMsg}`,
+        desc: `**Üye:** <@${member.id}> (${member.user.tag})\n**Hesap Kuruluş:** ${hesapYasiGun} gün önce (<t:${Math.floor(member.user.createdTimestamp / 1000)}:D>)\n**Davet Eden:** ${inviteMsg}${otoRolBilgisi}`,
         color: 0x57f287,
         thumbnail: member.user.displayAvatarURL()
     });
