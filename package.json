@@ -1,6 +1,6 @@
 {
   "name": "memur-husnu",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Memur Hüsnü v2.1.4 - Gelişmiş moderasyon, akıllı link/küfür koruması, detaylı kanal izin logları, çoklu yayın duyurusu, izinsiz bot engeli, log ve butonlu geçici ses odası sistemi.",
   "main": "index.js",
   "scripts": {

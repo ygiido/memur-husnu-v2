@@ -331,7 +331,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.5',
+        versiyon: 'v2.1.6',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -440,7 +440,11 @@ client.rest.post = async function (fullRoute, options = {}) {
                 addLiveLog(`✅ [DOĞRUDAN ETKİLEŞİM YANITI]: HTTP ${res.status} ile Discord'a iletildi.`);
                 return true;
             } else {
-                addLiveLog(`⚠️ [DOĞRUDAN ETKİLEŞİM YANITI]: HTTP ${res.status} ${res.statusText}`);
+                const errText = await res.text().catch(() => '');
+                addLiveLog(`⚠️ [DOĞRUDAN ETKİLEŞİM YANITI]: HTTP ${res.status} ${res.statusText} ${errText}`);
+                if (res.status === 404 || res.status === 400) {
+                    return false;
+                }
             }
         } catch (e) {
             addLiveLog(`❌ [DOĞRUDAN ETKİLEŞİM YANITI HATASI]: ${e.message}`);
@@ -3027,12 +3031,6 @@ client.once('ready', async () => {
     let dbUpdated = false;
 
     for (const guild of client.guilds.cache.values()) {
-        if (guild.members.me?.permissions.has(PermissionFlagsBits.ManageGuild)) {
-            guild.invites.fetch().then(firstInvites => {
-                invitesCache.set(guild.id, new Map(firstInvites.map(inv => [inv.code, inv.uses])));
-            }).catch(() => { });
-        }
-
         guild.voiceStates.cache.forEach(vs => {
             if (vs.channelId && vs.member && !vs.member.user.bot) {
                 voiceTimerMap.set(`${guild.id}-${vs.id}`, Date.now());
@@ -3502,7 +3500,8 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (['hapis', 'af', 'sil'].includes(commandName)) {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
+                if (!isAdmin && !isYetkili) return interaction.editReply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.' });
 
                 if (commandName === 'hapis') {
                     const user = interaction.options.getUser('kullanici');
@@ -3511,8 +3510,8 @@ client.on('interactionCreate', async interaction => {
                     const sebep = interaction.options.getString('sebep');
                     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-                    if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
-                    if (!member.manageable) return interaction.reply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.', ephemeral: true });
+                    if (!member) return interaction.editReply({ content: 'Kullanıcı sunucuda bulunamadı.' });
+                    if (!member.manageable) return interaction.editReply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.' });
 
                     let sureMs = 0;
                     if (kavram === 'saniye') sureMs = sayi * 1000;
@@ -3558,7 +3557,7 @@ client.on('interactionCreate', async interaction => {
                         thumbnail: user.displayAvatarURL()
                     });
 
-                    return interaction.reply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.`, ephemeral: true });
+                    return interaction.editReply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.` });
                 }
 
                 if (commandName === 'af') {
@@ -3573,32 +3572,32 @@ client.on('interactionCreate', async interaction => {
                                 if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
                             }
                             sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
-                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
+                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.` });
                         } else {
-                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.`, ephemeral: true });
+                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.` });
                         }
                     } else {
-                        if (!isAdmin) return interaction.reply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.', ephemeral: true });
+                        if (!isAdmin) return interaction.editReply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.' });
                         db[guildId].users = {};
                         saveDB(db);
                         sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı.`, color: 0x57f287 });
-                        return interaction.reply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.', ephemeral: true });
+                        return interaction.editReply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.' });
                     }
                 }
 
                 if (commandName === 'sil') {
                     const miktar = interaction.options.getInteger('miktar');
-                    if (miktar < 1 || miktar > 100) return interaction.reply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.', ephemeral: true });
+                    if (miktar < 1 || miktar > 100) return interaction.editReply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.' });
                     const deleted = await interaction.channel.bulkDelete(miktar, true).catch(() => null);
                     const count = deleted ? deleted.size : 0;
                     sendLog(interaction.guild, 'logMesaj', { title: 'Toplu Mesaj Silme (/sil)', desc: `**Yetkili:** <@${interaction.user.id}>\n**Kanal:** <#${interaction.channel.id}>\n**Miktar:** ${count} adet mesaj silindi.`, color: 0xed4245 });
-                    return interaction.reply({ content: `**${count}** adet mesaj silindi.`, ephemeral: true });
+                    return interaction.editReply({ content: `**${count}** adet mesaj silindi.` });
                 }
             }
 
             if (commandName === 'durum') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
                 await interaction.deferReply({ ephemeral: true }).catch(() => { });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const yeniDurum = interaction.options.getString('mesaj')?.trim() || '';
 
                 if (yeniDurum.length > 0) {
@@ -3621,9 +3620,10 @@ client.on('interactionCreate', async interaction => {
             // XP & PAPEL (EKONOMİ) KOMUTLARI (KİŞİYE ÖZEL / EPHEMERAL)
             // ----------------------------------------------------------------
             if (commandName === 'rank' || commandName === 'profil') {
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 const targetUser = interaction.options.getUser('kullanici') || interaction.user;
                 ensureGuildDB(db, guildId);
-                return interaction.reply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
+                return interaction.editReply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
             }
 
             if (commandName === 'siralama' || commandName === 'top') {
@@ -3973,11 +3973,13 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (commandName === 'market') {
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 ensureGuildDB(db, guildId);
-                return interaction.reply(buildMarketView(interaction.guild, db[guildId], interaction.user));
+                return interaction.editReply(buildMarketView(interaction.guild, db[guildId], interaction.user));
             }
 
             if (commandName === 'gunluk') {
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 ensureGuildDB(db, guildId);
                 if (!db[guildId].users[interaction.user.id]) {
                     db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
@@ -3993,9 +3995,8 @@ client.on('interactionCreate', async interaction => {
                     const remainingMs = cooldown - (now - uData.lastDaily);
                     const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
                     const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-                    return interaction.reply({
-                        content: `⏳ Günlük papel ödülünü zaten aldınız! Tekrar alabilmek için **${remHours} saat ${remMins} dakika** beklemelisiniz. *(Günlük papel alımı günde 1 adetle sınırlıdır)*`,
-                        ephemeral: true
+                    return interaction.editReply({
+                        content: `⏳ Günlük papel ödülünü zaten aldınız! Tekrar alabilmek için **${remHours} saat ${remMins} dakika** beklemelisiniz. *(Günlük papel alımı günde 1 adetle sınırlıdır)*`
                     });
                 }
 
@@ -4003,9 +4004,8 @@ client.on('interactionCreate', async interaction => {
                 uData.papel += 1;
                 saveDB(db);
 
-                return interaction.reply({
-                    content: `🎉 Tebrikler! 24 saatlik günlük **1 Papel** 💵 ödülünüzü aldınız.\nGüncel Bakiyeniz: **${uData.papel} Papel**`,
-                    ephemeral: true
+                return interaction.editReply({
+                    content: `🎉 Tebrikler! 24 saatlik günlük **1 Papel** 💵 ödülünüzü aldınız.\nGüncel Bakiyeniz: **${uData.papel} Papel**`
                 });
             }
 
