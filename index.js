@@ -8,31 +8,12 @@ if (dns.setDefaultResultOrder) {
     dns.setDefaultResultOrder('ipv4first');
 }
 
-let undiciIpv4Agent = null;
-try {
-    const { Agent: UndiciAgent, setGlobalDispatcher } = require('undici');
-    undiciIpv4Agent = new UndiciAgent({
-        connect: {
-            lookup: (hostname, opts, cb) => {
-                dns.lookup(hostname, { ...opts, family: 4 }, cb);
-            },
-            timeout: 15000
-        },
-        headersTimeout: 20000,
-        bodyTimeout: 20000
-    });
-    setGlobalDispatcher(undiciIpv4Agent);
-} catch (e) {
-    console.error('Undici IPv4 dispatcher başlatılamadı:', e);
-}
-
 const {
     Client, GatewayIntentBits, Partials, PermissionsBitField, PermissionFlagsBits,
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
     RoleSelectMenuBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder,
-    AttachmentBuilder, ChannelType, AuditLogEvent, ActivityType,
-    REST, Routes
+    AttachmentBuilder, ChannelType, AuditLogEvent, ActivityType
 } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
@@ -94,8 +75,6 @@ try {
     console.error('WebSocketManager gateway patch uygulanamadı:', e);
 }
 
-
-
 const wsStatusMap = {
     0: 'READY (Aktif / Çevrimiçi)',
     1: 'CONNECTING (Bağlanıyor)',
@@ -151,131 +130,9 @@ async function getAudioStreamForUrl(url) {
     return Readable.fromWeb(response.body);
 }
 
-// Sunucuya özel (guild) komutları temizleyip çift komut çıkmasını engelleyen yardımcı fonksiyon
-async function cleanGuildSlashCommands(token) {
-    if (!token) return { success: false, error: 'Token bulunamadı' };
-    const cleaned = [];
-    try {
-        const rest = new REST({ version: '10' }).setToken(token);
-        const app = await rest.get(Routes.oauth2CurrentApplication());
-        if (!app || !app.id) {
-            return { success: false, error: 'Bot uygulama bilgisi alınamadı' };
-        }
-        addLiveLog(`[REST]: Bot Application ID: ${app.id}. Sunucu özel komutları taranıyor...`);
-
-        const knownGuildIds = ['1538928601951633599'];
-        try {
-            const botGuilds = await rest.get(Routes.userGuilds());
-            if (Array.isArray(botGuilds)) {
-                for (const g of botGuilds) {
-                    if (!knownGuildIds.includes(g.id)) knownGuildIds.push(g.id);
-                }
-            }
-        } catch (e) { }
-
-        for (const gid of knownGuildIds) {
-            try {
-                const existing = await rest.get(Routes.applicationGuildCommands(app.id, gid)).catch(() => []);
-                if (Array.isArray(existing) && existing.length > 0) {
-                    await rest.put(Routes.applicationGuildCommands(app.id, gid), { body: [] });
-                    cleaned.push(gid);
-                    addLiveLog(`[REST]: Sunucu (${gid}) özel komutları sıfırlandı (${existing.length} komut kaldırıldı).`);
-                }
-            } catch (err) {
-                addLiveLog(`[REST]: Sunucu (${gid}) komut temizleme uyarısı: ${err.message}`);
-            }
-        }
-        return { success: true, appId: app.id, cleanedGuilds: cleaned };
-    } catch (err) {
-        addLiveLog(`[REST TEMİZLEME HATASI]: ${err.message}`);
-        return { success: false, error: err.message };
-    }
-}
-
 // Render vb. bulut sunucularda botun aktif kalması ve canlı durum izleme HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
-    // Çift komutları anında REST üzerinden sıfırlama endpoint'i
-    if (req.url.startsWith('/clean-commands')) {
-        (async () => {
-            const result = await cleanGuildSlashCommands(process.env.TOKEN);
-            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-            res.end(JSON.stringify(result, null, 2));
-        })();
-        return;
-    }
-
-    // Discord bağlantı ve ağ tanı testi endpoint'i
-    if (req.url.startsWith('/test-discord')) {
-        (async () => {
-            const diag = {
-                timestamp: new Date().toISOString(),
-                dns: {},
-                fetchBotGateway: null,
-                restApplication: null,
-                wsStatus: client && client.ws ? client.ws.status : null
-            };
-
-            try {
-                const discordAddresses = await dns.promises.lookup('discord.com', { all: true });
-                diag.dns['discord.com'] = discordAddresses;
-            } catch (e) {
-                diag.dns['discord.com'] = { error: e.message };
-            }
-
-            try {
-                const gwAddresses = await dns.promises.lookup('gateway.discord.gg', { all: true });
-                diag.dns['gateway.discord.gg'] = gwAddresses;
-            } catch (e) {
-                diag.dns['gateway.discord.gg'] = { error: e.message };
-            }
-
-            if (process.env.TOKEN) {
-                try {
-                    const fetchRes = await fetch('https://discord.com/api/v10/gateway/bot', {
-                        headers: { Authorization: `Bot ${process.env.TOKEN.trim()}` },
-                        signal: AbortSignal.timeout(8000)
-                    });
-                    diag.fetchBotGateway = {
-                        status: fetchRes.status,
-                        statusText: fetchRes.statusText,
-                        body: await fetchRes.json()
-                    };
-                } catch (e) {
-                    diag.fetchBotGateway = { error: e.message };
-                }
-
-                try {
-                    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN.trim());
-                    const app = await rest.get(Routes.oauth2CurrentApplication());
-                    diag.restApplication = { id: app.id, name: app.name };
-                } catch (e) {
-                    diag.restApplication = { error: e.message };
-                }
-            }
-
-            if (client && client.guilds && client.guilds.cache) {
-                const targetGuild = client.guilds.cache.get('1538928601951633599');
-                if (targetGuild) {
-                    diag.targetGuild = {
-                        name: targetGuild.name,
-                        id: targetGuild.id,
-                        channels: Array.from(targetGuild.channels.cache.values()).map(c => ({
-                            id: c.id,
-                            name: c.name,
-                            type: c.type,
-                            parentId: c.parentId
-                        }))
-                    };
-                }
-            }
-
-            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-            res.end(JSON.stringify(diag, null, 2));
-        })();
-        return;
-    }
-
     // Canlı test endpoint'i: ffmpeg ile radyo akış testini doğrudan çalıştırıp sonucu JSON verir
     if (req.url.startsWith('/test-radio')) {
         const u = new URL(req.url, 'http://localhost');
@@ -331,7 +188,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.6',
+        versiyon: 'v2.1.2',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -344,26 +201,6 @@ const server = http.createServer((req, res) => {
             playerDurum: r.player?.state?.status,
             processAlive: !r.process?.killed
         })),
-        geciciOdaAyar: Array.from(client && client.guilds && client.guilds.cache ? client.guilds.cache.values() : []).map(g => {
-            const dbRef = getDB();
-            const gDb = dbRef[g.id] || {};
-            const creator = g.channels.cache.get(gDb.odaKanal);
-            const cat = g.channels.cache.get(gDb.odaKategori);
-            const botMe = g.members.me;
-            return {
-                sunucu: g.name,
-                guildId: g.id,
-                odaKanalId: gDb.odaKanal || 'YOK',
-                odaKanalVarMi: Boolean(creator),
-                odaKanalAdi: creator?.name || 'BULUNAMADI',
-                odaKategoriId: gDb.odaKategori || 'YOK',
-                odaKategoriVarMi: Boolean(cat),
-                odaKategoriAdi: cat?.name || 'BULUNAMADI',
-                botAdminMi: Boolean(botMe?.permissions.has(PermissionsBitField.Flags.Administrator)),
-                botKanalYonetebilirMi: Boolean(botMe?.permissions.has(PermissionsBitField.Flags.ManageChannels)),
-                botUyeTasiyabilirMi: Boolean(botMe?.permissions.has(PermissionsBitField.Flags.MoveMembers))
-            };
-        }),
         canliGunlukler: liveLogs
     };
 
@@ -386,7 +223,6 @@ setInterval(async () => {
 }, 8 * 60 * 1000);
 
 const client = new Client({
-    rest: undiciIpv4Agent ? { agent: undiciIpv4Agent, timeout: 25000 } : { timeout: 25000 },
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
@@ -407,51 +243,6 @@ client.on('error', error => addLiveLog(`Discord İstemci Hatası: ${error.messag
 client.on('shardError', (error, shardId) => addLiveLog(`[Shard ${shardId} Hatası]: ${error.message}`));
 client.on('shardDisconnect', (event, shardId) => addLiveLog(`[Shard ${shardId} Kesildi]: Kod ${event.code} (${event.reason || 'Sebep Yok'})`));
 client.on('shardReconnecting', shardId => addLiveLog(`[Shard ${shardId}] Yeniden bağlanılıyor...`));
-client.rest.on('restDebug', msg => {
-    if (msg.includes('Sweep')) return;
-    addLiveLog(`[REST DEBUG] ${msg}`);
-});
-client.rest.on('rateLimited', info => {
-    addLiveLog(`⚠️ [REST RATE LIMIT]: ${info.method} ${info.route} - ${info.timeToReset}ms beklemede (Global: ${info.global})`);
-    if (info.timeToReset > 10000) {
-        addLiveLog(`[RATE LIMIT SIFIRLANDI]: ${info.timeToReset}ms yapay kuyruk beklemesi temizlendi.`);
-        client.rest.globalRemaining = 50;
-        client.rest.globalReset = -1;
-        client.rest.globalDelay = null;
-    }
-});
-client.rest.on('invalidRequestWarning', info => {
-    addLiveLog(`⚠️ [REST INVALID REQUEST]: ${info.count} geçersiz istek yapıldı (Kalan sınır: ${info.remainingTime}ms)`);
-});
-
-// Etkileşim (Slash komut / buton / modal) yanıtlarını dahili REST kuyruğuna takılmadan anında iletme
-const origRestPost = client.rest.post.bind(client.rest);
-client.rest.post = async function (fullRoute, options = {}) {
-    if (typeof fullRoute === 'string' && fullRoute.includes('/interactions/') && fullRoute.includes('/callback')) {
-        try {
-            const qs = options.query ? `?${options.query.toString()}` : '';
-            const url = `https://discord.com/api/v10${fullRoute}${qs}`;
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(options.body || {})
-            });
-            if (res.status === 204 || res.status === 200) {
-                addLiveLog(`✅ [DOĞRUDAN ETKİLEŞİM YANITI]: HTTP ${res.status} ile Discord'a iletildi.`);
-                return true;
-            } else {
-                const errText = await res.text().catch(() => '');
-                addLiveLog(`⚠️ [DOĞRUDAN ETKİLEŞİM YANITI]: HTTP ${res.status} ${res.statusText} ${errText}`);
-                if (res.status === 404 || res.status === 400) {
-                    return false;
-                }
-            }
-        } catch (e) {
-            addLiveLog(`❌ [DOĞRUDAN ETKİLEŞİM YANITI HATASI]: ${e.message}`);
-        }
-    }
-    return origRestPost(fullRoute, options);
-};
 client.on('debug', msg => {
     // Heartbeat ve gecikme mesajları logları doldurmasın
     if (msg.includes('Heartbeat') || msg.includes('Latency') || msg.includes('Swept')) return;
@@ -1657,7 +1448,7 @@ function buildAyarDashboard(guildDb) {
         .setColor(0x2b2d31)
         .addFields(
             { name: '👥 Rol Yapılandırması', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
-            { name: '🎙️ Ses ve Yayın', value: `Oda Paneli: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
+            { name: '🎙️ Ses ve Yayın', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
             { name: '🛡️ Güvenlik ve Koruma Durumu', value: `Link/Reklam: **${guildDb.linkEngel ? '🟢 AÇIK' : '🔴 KAPALI'}**\nKüfür Koruması: **${guildDb.kufurEngel ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${customKufurCount} özel kelime)*\nCaps Lock: **${guildDb.capsEngel !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**\nİzinsiz Bot Engeli: **${guildDb.antiBot !== false ? '🟢 AÇIK' : '🔴 KAPALI'}** *(+${botWhitelistCount} beyaz listede)*\nOto-Cevap: **${guildDb.otoCevap !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**`, inline: false }
         );
 
@@ -1694,7 +1485,7 @@ function buildAyarDashboard(guildDb) {
                 { label: 'Muaf Rolü Seç', description: 'Küfür, link ve spam korumalarından muaf tutulan rol.', value: 'muafRol' },
                 { label: 'Cezalı (Jail) Rolü Seç', description: 'Hapis cezası alan üyelere verilen kısıtlama rolü.', value: 'jailRol' },
                 { label: 'Sicilli Rolü Seç', description: 'Sicili bozulan üyelere verilecek uyarı rolü.', value: 'sicilRol' },
-                { label: 'Geçici Oda Paneli Gönder (Metin Kanalı)', description: 'Oda oluşturma butonunu belirtilen metin kanalına gönderir.', value: 'send_oda_panel' },
+                { label: 'Geçici Oda Oluşturucu Ses Kanalı Seç', description: 'Üyelerin tıkladığında özel oda açacağı ses kanalı.', value: 'odaKanal' },
                 { label: 'Geçici Oda Kategorisi Seç', description: 'Açılan özel ses odalarının toplanacağı kategori.', value: 'odaKategori' },
                 { label: 'Yayın & İçerik Duyuru Kanalı Seç', description: 'YouTube, Kick ve Twitch bildirimlerinin paylaşılacağı metin kanalı.', value: 'duyuruKanal' },
                 { label: 'Duyuru Bildirim Rolü Seç', description: 'Duyurularda etiketlenecek rol (Atanmazsa @everyone).', value: 'duyuruRol' },
@@ -1807,7 +1598,7 @@ function buildInfoDashboard(guild, guildDb) {
         .addFields(
             { name: 'Sunucu İstatistikleri', value: `Üye Sayısı: **${guild.memberCount}** | Açık Ticket: **${activeTickets}** | Açık Geçici Oda: **${activeRooms}**`, inline: false },
             { name: 'Rol Ayarları', value: `Yetkili: ${getRole(guildDb.yetkiliRol)}\nMuaf: ${getRole(guildDb.muafRol)}\nCezalı (Jail): ${getRole(guildDb.jailRol)}\nSicilli: ${getRole(guildDb.sicilRol)}`, inline: true },
-            { name: 'Kanal ve Yayın Ayarları', value: `Oda Paneli: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
+            { name: 'Kanal ve Yayın Ayarları', value: `Oda Oluşturucu: ${getCh(guildDb.odaKanal)}\nOda Kategorisi: ${getCh(guildDb.odaKategori)}\nDuyuru Kanalı: ${getCh(guildDb.duyuruKanal)}\nTakip Edilen: **${trackerCount} kanal**`, inline: true },
             { name: 'Log Kanalları', value: `**Ceza:** ${getCh(guildDb.logCeza)}\n**Mesaj:** ${getCh(guildDb.logMesaj)}\n**Ses:** ${getCh(guildDb.logSes)}\n**Üye:** ${getCh(guildDb.logUye)}\n**Sunucu:** ${getCh(guildDb.logSunucu)}\n**Güvenlik:** ${getCh(guildDb.logGuvenlik)}`, inline: false },
             { name: 'Koruma Filtreleri', value: `Link Engeli: **${guildDb.linkEngel ? 'Aktif' : 'Kapalı'}** | Küfür Engeli: **${guildDb.kufurEngel ? 'Aktif' : 'Kapalı'}** | Oto-Cevap: **${guildDb.otoCevap !== false ? 'Aktif' : 'Kapalı'}**`, inline: false }
         )
@@ -2902,36 +2693,6 @@ function buildTempVoiceEmbed(roomData) {
         .setTimestamp();
 }
 
-function buildTempVoiceCreatorPanel() {
-    const embed = new EmbedBuilder()
-        .setTitle('🔊 Özel Ses Odası Sistemi')
-        .setDescription(
-            'Kendine ait özel bir ses odası oluşturmak için aşağıdaki butona tıkla!\n\n' +
-            '🚀 **Nasıl Kullanılır?**\n' +
-            '• **Odanı Oluştur!** butonuna tıkla ve odan için bir ad yaz.\n' +
-            '• Bot odanı anında oluştursun ve seni doğrudan yeni odana taşısın.\n' +
-            '• Oda içindeki kontrol panelinden kişi sınırı, kilit ve gizlilik gibi tüm ayarları yönetebilirsin!\n\n' +
-            '*(Oda tamamen boşaldığında otomatik olarak silinir.)*'
-        )
-        .setColor(0x5865F2)
-        .setFooter({ text: 'Memur Hüsnü • Özel Ses Odası Sistemi' });
-
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('btn_temp_vc_create')
-            .setLabel('Odanı Oluştur!')
-            .setEmoji('🔊')
-            .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-            .setCustomId('btn_temp_vc_info')
-            .setLabel('Bilgi')
-            .setEmoji('ℹ️')
-            .setStyle(ButtonStyle.Secondary)
-    );
-
-    return { embeds: [embed], components: [row] };
-}
-
 // Otomatik Tahliye ve Hayalet Geçici Oda Süpürücü Döngüsü (Her 30 saniyede bir çalışır)
 setInterval(() => {
     const db = getDB();
@@ -3030,7 +2791,15 @@ client.once('ready', async () => {
     }
     let dbUpdated = false;
 
+    // Yalnızca izinli 3 sunucuda kal (bot deneme, baraka, MARTIANS), diğer tüm sunuculardan ayrıl
+    const ALLOWED_GUILDS = ['977315836714971187', '825075341629718589', '1538928601951633599'];
     for (const guild of client.guilds.cache.values()) {
+        if (!ALLOWED_GUILDS.includes(guild.id)) {
+            addLiveLog(`[İZİNSİZ SUNUCUDAN AYRILMA]: ${guild.name} (${guild.id}) ayrılınıyor...`);
+            guild.leave().catch(() => { });
+            continue;
+        }
+
         guild.voiceStates.cache.forEach(vs => {
             if (vs.channelId && vs.member && !vs.member.user.bot) {
                 voiceTimerMap.set(`${guild.id}-${vs.id}`, Date.now());
@@ -3096,36 +2865,6 @@ client.once('ready', async () => {
                 }
             }
         }
-
-        // Geçici Ses Odası paneli otomatik senkronizasyon:
-        // Eğer kayıtlı panel kanalı yoksa veya silinmişse, sunucudaki "oluştur" metin kanalını otomatik bul ve paneli gönder
-        const gDb = db[guild.id];
-        if (gDb) {
-            const currentPanelChannel = guild.channels.cache.get(gDb.odaKanal);
-            if (!currentPanelChannel) {
-                const olusturChannel = guild.channels.cache.find(c =>
-                    c.isTextBased() &&
-                    (c.name.toLocaleLowerCase('tr-TR').includes('oluştur') || c.name.toLowerCase().includes('olustur'))
-                );
-                if (olusturChannel) {
-                    addLiveLog(`[OTO-SES-PANEL]: ${guild.name} sunucusunda #${olusturChannel.name} kanalı tespit edildi, panel senkronize ediliyor.`);
-                    gDb.odaKanal = olusturChannel.id;
-                    dbUpdated = true;
-                    olusturChannel.messages.fetch({ limit: 15 }).then(messages => {
-                        const alreadyHasPanel = messages.some(m => m.author.id === client.user.id && m.components && m.components.length > 0);
-                        if (!alreadyHasPanel) {
-                            olusturChannel.send(buildTempVoiceCreatorPanel()).then(() => {
-                                addLiveLog(`✅ [OTO-SES-PANEL]: #${olusturChannel.name} kanalına ses odası açma paneli gönderildi.`);
-                            }).catch(err => {
-                                addLiveLog(`❌ [OTO-SES-PANEL] Gönderim hatası: ${err.message}`);
-                            });
-                        }
-                    }).catch(() => {
-                        olusturChannel.send(buildTempVoiceCreatorPanel()).catch(() => { });
-                    });
-                }
-            }
-        }
     }
 
     if (dbUpdated) saveDB(db);
@@ -3140,20 +2879,6 @@ client.once('ready', async () => {
             name: 'panel',
             description: 'Sunucu sistem ayarları, log kanalları ve ticket kurulum kontrol panelini açar (Sadece Yöneticiler).',
             default_member_permissions: PermissionsBitField.Flags.Administrator.toString()
-        },
-        {
-            name: 'ses-odasi-paneli',
-            description: 'Belirtilen metin kanalına "Oda Oluştur" butonlu paneli gönderir (Sadece Yöneticiler).',
-            default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
-            options: [
-                {
-                    name: 'kanal',
-                    description: 'Panonun gönderileceği metin kanalı (Seçilmezse bu kanala gönderilir)',
-                    type: 7,
-                    required: false,
-                    channel_types: [ChannelType.GuildText, ChannelType.GuildAnnouncement]
-                }
-            ]
         },
         {
             name: 'yaz',
@@ -3427,14 +3152,16 @@ client.once('ready', async () => {
         }
     ];
 
-    // Global komutlar arka planda REST sınırını tüketmeden senkronize edilir
-    setTimeout(async () => {
-        try {
-            if (client.application) {
-                await client.application.commands.set(commands).catch(() => {});
-            }
-        } catch (e) { }
-    }, 15000);
+    try {
+        if (client.application) {
+            await client.application.commands.set(commands);
+            addLiveLog('✅ [ROZET]: Global slash komutları kaydedildi ("Supports Commands" {/} rozeti tetiklendi).');
+        }
+    } catch (e) { }
+
+    for (const guild of client.guilds.cache.values()) {
+        await guild.commands.set(commands).catch(() => { });
+    }
 });
 
 // ============================================================================
@@ -3466,42 +3193,19 @@ client.on('interactionCreate', async interaction => {
             const { commandName } = interaction;
 
             if (commandName === 'panel') {
-                await interaction.deferReply({ ephemeral: true });
-                if (!isAdmin) return interaction.editReply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.' });
-                return interaction.editReply({ ...buildHomeDashboard(interaction.guild) });
-            }
-
-            if (commandName === 'ses-odasi-paneli') {
-                await interaction.deferReply({ ephemeral: true });
-                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
-                const targetChannel = interaction.options.getChannel('kanal') || interaction.channel;
-                if (!targetChannel || !targetChannel.isTextBased()) {
-                    return interaction.editReply({ content: '❌ Lütfen geçerli bir metin kanalı seçin.' });
-                }
-
-                try {
-                    await targetChannel.send(buildTempVoiceCreatorPanel());
-                    db[guildId].odaKanal = targetChannel.id;
-                    saveDB(db);
-                    return interaction.editReply({
-                        content: `✅ Özel ses odası oluşturma paneli başarıyla <#${targetChannel.id}> kanalına gönderildi!`
-                    });
-                } catch (sendErr) {
-                    return interaction.editReply({ content: `❌ Panel gönderilemedi: ${sendErr.message}` });
-                }
+                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
+                return interaction.reply({ ...buildHomeDashboard(interaction.guild), ephemeral: true });
             }
 
             if (commandName === 'yaz') {
                 if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 const mesaj = interaction.options.getString('mesaj');
                 await interaction.channel.send(mesaj);
-                return interaction.editReply({ content: 'Mesaj başarıyla kanala gönderildi.' });
+                return interaction.reply({ content: 'Mesaj başarıyla kanala gönderildi.', ephemeral: true });
             }
 
             if (['hapis', 'af', 'sil'].includes(commandName)) {
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
-                if (!isAdmin && !isYetkili) return interaction.editReply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.' });
+                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.', ephemeral: true });
 
                 if (commandName === 'hapis') {
                     const user = interaction.options.getUser('kullanici');
@@ -3510,8 +3214,8 @@ client.on('interactionCreate', async interaction => {
                     const sebep = interaction.options.getString('sebep');
                     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-                    if (!member) return interaction.editReply({ content: 'Kullanıcı sunucuda bulunamadı.' });
-                    if (!member.manageable) return interaction.editReply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.' });
+                    if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+                    if (!member.manageable) return interaction.reply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.', ephemeral: true });
 
                     let sureMs = 0;
                     if (kavram === 'saniye') sureMs = sayi * 1000;
@@ -3557,7 +3261,7 @@ client.on('interactionCreate', async interaction => {
                         thumbnail: user.displayAvatarURL()
                     });
 
-                    return interaction.editReply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.` });
+                    return interaction.reply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.`, ephemeral: true });
                 }
 
                 if (commandName === 'af') {
@@ -3572,32 +3276,32 @@ client.on('interactionCreate', async interaction => {
                                 if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
                             }
                             sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
-                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.` });
+                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
                         } else {
-                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.` });
+                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.`, ephemeral: true });
                         }
                     } else {
-                        if (!isAdmin) return interaction.editReply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.' });
+                        if (!isAdmin) return interaction.reply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.', ephemeral: true });
                         db[guildId].users = {};
                         saveDB(db);
                         sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı.`, color: 0x57f287 });
-                        return interaction.editReply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.' });
+                        return interaction.reply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.', ephemeral: true });
                     }
                 }
 
                 if (commandName === 'sil') {
                     const miktar = interaction.options.getInteger('miktar');
-                    if (miktar < 1 || miktar > 100) return interaction.editReply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.' });
+                    if (miktar < 1 || miktar > 100) return interaction.reply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.', ephemeral: true });
                     const deleted = await interaction.channel.bulkDelete(miktar, true).catch(() => null);
                     const count = deleted ? deleted.size : 0;
                     sendLog(interaction.guild, 'logMesaj', { title: 'Toplu Mesaj Silme (/sil)', desc: `**Yetkili:** <@${interaction.user.id}>\n**Kanal:** <#${interaction.channel.id}>\n**Miktar:** ${count} adet mesaj silindi.`, color: 0xed4245 });
-                    return interaction.editReply({ content: `**${count}** adet mesaj silindi.` });
+                    return interaction.reply({ content: `**${count}** adet mesaj silindi.`, ephemeral: true });
                 }
             }
 
             if (commandName === 'durum') {
+                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
                 await interaction.deferReply({ ephemeral: true }).catch(() => { });
-                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const yeniDurum = interaction.options.getString('mesaj')?.trim() || '';
 
                 if (yeniDurum.length > 0) {
@@ -3620,10 +3324,9 @@ client.on('interactionCreate', async interaction => {
             // XP & PAPEL (EKONOMİ) KOMUTLARI (KİŞİYE ÖZEL / EPHEMERAL)
             // ----------------------------------------------------------------
             if (commandName === 'rank' || commandName === 'profil') {
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 const targetUser = interaction.options.getUser('kullanici') || interaction.user;
                 ensureGuildDB(db, guildId);
-                return interaction.editReply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
+                return interaction.reply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
             }
 
             if (commandName === 'siralama' || commandName === 'top') {
@@ -3973,13 +3676,11 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (commandName === 'market') {
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 ensureGuildDB(db, guildId);
-                return interaction.editReply(buildMarketView(interaction.guild, db[guildId], interaction.user));
+                return interaction.reply(buildMarketView(interaction.guild, db[guildId], interaction.user));
             }
 
             if (commandName === 'gunluk') {
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 ensureGuildDB(db, guildId);
                 if (!db[guildId].users[interaction.user.id]) {
                     db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
@@ -3995,8 +3696,9 @@ client.on('interactionCreate', async interaction => {
                     const remainingMs = cooldown - (now - uData.lastDaily);
                     const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
                     const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-                    return interaction.editReply({
-                        content: `⏳ Günlük papel ödülünü zaten aldınız! Tekrar alabilmek için **${remHours} saat ${remMins} dakika** beklemelisiniz. *(Günlük papel alımı günde 1 adetle sınırlıdır)*`
+                    return interaction.reply({
+                        content: `⏳ Günlük papel ödülünü zaten aldınız! Tekrar alabilmek için **${remHours} saat ${remMins} dakika** beklemelisiniz. *(Günlük papel alımı günde 1 adetle sınırlıdır)*`,
+                        ephemeral: true
                     });
                 }
 
@@ -4004,8 +3706,9 @@ client.on('interactionCreate', async interaction => {
                 uData.papel += 1;
                 saveDB(db);
 
-                return interaction.editReply({
-                    content: `🎉 Tebrikler! 24 saatlik günlük **1 Papel** 💵 ödülünüzü aldınız.\nGüncel Bakiyeniz: **${uData.papel} Papel**`
+                return interaction.reply({
+                    content: `🎉 Tebrikler! 24 saatlik günlük **1 Papel** 💵 ödülünüzü aldınız.\nGüncel Bakiyeniz: **${uData.papel} Papel**`,
+                    ephemeral: true
                 });
             }
 
@@ -4357,22 +4060,10 @@ client.on('interactionCreate', async interaction => {
                     return interaction.showModal(modal);
                 }
 
-                if (secim === 'send_oda_panel') {
-                    const chSelect = new ActionRowBuilder().addComponents(
-                        new ChannelSelectMenuBuilder()
-                            .setCustomId('set_send_oda_panel_ch')
-                            .setPlaceholder('Oda oluşturma panelinin gönderileceği metin kanalını seçin...')
-                            .setChannelTypes([ChannelType.GuildText, ChannelType.GuildAnnouncement])
-                            .setMaxValues(1)
-                    );
-                    const panelData = buildAyarDashboard(db[guildId]);
-                    panelData.components.push(chSelect);
-                    return interaction.update(panelData);
-                }
-
                 // Topluluk Duyuru Kanalları (GuildAnnouncement) Desteği
                 const chTypeMap = {
                     'duyuruKanal': [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+                    'odaKanal': [ChannelType.GuildVoice],
                     'odaKategori': [ChannelType.GuildCategory]
                 };
                 if (chTypeMap[secim]) {
@@ -4832,20 +4523,6 @@ client.on('interactionCreate', async interaction => {
                 return interaction.update(buildButtonRoleDashboard(interaction.guild, db[guildId], targetChId)).catch(() => { });
             }
 
-            if (interaction.customId === 'set_send_oda_panel_ch') {
-                if (!isAdmin) return;
-                const targetChId = interaction.values[0];
-                const targetCh = interaction.guild.channels.cache.get(targetChId);
-                if (targetCh && targetCh.isTextBased()) {
-                    await targetCh.send(buildTempVoiceCreatorPanel()).catch(err => {
-                        addLiveLog(`❌ Geçici oda paneli gönderilemedi: ${err.message}`);
-                    });
-                    db[guildId].odaKanal = targetChId;
-                    saveDB(db);
-                }
-                return interaction.update(buildAyarDashboard(db[guildId]));
-            }
-
             if (interaction.customId.startsWith('set_ayar_ch_')) {
                 if (!isAdmin) return;
                 const key = interaction.customId.replace('set_ayar_ch_', '');
@@ -4926,46 +4603,6 @@ client.on('interactionCreate', async interaction => {
         // ------------------------------------------------------------------------
         if (interaction.isButton()) {
             const customId = interaction.customId;
-
-            // --- GEÇİCİ SES ODASI OLUŞTURMA BUTONU ---
-            if (customId === 'btn_temp_vc_create') {
-                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
-                const hasManage = botMember && (botMember.permissions.has(PermissionsBitField.Flags.ManageChannels) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
-                const hasMove = botMember && (botMember.permissions.has(PermissionsBitField.Flags.MoveMembers) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
-                if (!hasManage || !hasMove) {
-                    return interaction.reply({
-                        content: '❌ Botun ses odası açabilmesi için **Kanalları Yönet** ve **Üyeleri Taşı** yetkisine sahip olması gerekir.',
-                        ephemeral: true
-                    });
-                }
-
-                const modal = new ModalBuilder()
-                    .setCustomId('modal_temp_vc_create')
-                    .setTitle('Odanı aç');
-
-                const nameInput = new TextInputBuilder()
-                    .setCustomId('modal_temp_vc_name')
-                    .setLabel('Odanın adı')
-                    .setPlaceholder('Odan için bir ad yaz')
-                    .setStyle(TextInputStyle.Short)
-                    .setMinLength(1)
-                    .setMaxLength(32)
-                    .setRequired(true);
-
-                modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
-                return interaction.showModal(modal);
-            }
-
-            if (customId === 'btn_temp_vc_info') {
-                return interaction.reply({
-                    content: 'ℹ️ **Özel Ses Odası Sistemi:**\n' +
-                        '• **Odanı Oluştur!** butonuna tıklayarak kendi özel ses odanızı açabilirsiniz.\n' +
-                        '• Butona bastığınızda açılan ekranda odanız için bir ad belirleyin.\n' +
-                        '• Odanız açıldığında oda sohbetindeki panelden odayı kilitleyebilir, gizleyebilir veya üye sınırını değiştirebilirsiniz.\n' +
-                        '• Odadaki tüm kullanıcılar çıktığında oda otomatik olarak silinir.',
-                    ephemeral: true
-                });
-            }
 
             // --- CANLI RADYO BUTONLARI ---
             if (customId === 'btn_radio_stop') {
@@ -5819,139 +5456,6 @@ client.on('interactionCreate', async interaction => {
         // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA, YAYINCI EKLEME & TEMP VC)
         // ------------------------------------------------------------------------
         if (interaction.isModalSubmit()) {
-            if (interaction.customId === 'modal_temp_vc_create') {
-                await interaction.deferReply({ ephemeral: true });
-
-                const rawName = interaction.fields.getTextInputValue('modal_temp_vc_name')?.trim();
-                const roomName = (rawName || `${interaction.user.username} Odası`).slice(0, 95);
-
-                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
-                const hasManage = botMember && (botMember.permissions.has(PermissionsBitField.Flags.ManageChannels) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
-                const hasMove = botMember && (botMember.permissions.has(PermissionsBitField.Flags.MoveMembers) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
-
-                if (!hasManage || !hasMove) {
-                    return interaction.editReply({
-                        content: '❌ Botun ses odası açabilmesi için **Kanalları Yönet** ve **Üyeleri Taşı** yetkisine sahip olması gerekir.'
-                    });
-                }
-
-                // Hedef Kategori Belirleme
-                let targetParent = null;
-                const configuredCatId = db[guildId]?.odaKategori;
-                if (configuredCatId) {
-                    const cat = interaction.guild.channels.cache.get(configuredCatId);
-                    if (cat && cat.type === ChannelType.GuildCategory) {
-                        const childCount = interaction.guild.channels.cache.filter(c => c.parentId === cat.id).size;
-                        if (childCount < 50) {
-                            targetParent = cat.id;
-                        } else {
-                            addLiveLog(`⚠️ [SES ODASI]: ${cat.name} kategorisi 50 kanal sınırına ulaştığı için alternatif aranıyor...`);
-                        }
-                    }
-                }
-
-                // Eğer özel kategori bulunamadıysa veya doluysa, butonun bulunduğu kanalın kategorisini dene
-                if (!targetParent && interaction.channel && interaction.channel.parentId) {
-                    const parentCat = interaction.guild.channels.cache.get(interaction.channel.parentId);
-                    if (parentCat && parentCat.type === ChannelType.GuildCategory) {
-                        const childCount = interaction.guild.channels.cache.filter(c => c.parentId === parentCat.id).size;
-                        if (childCount < 50) {
-                            targetParent = parentCat.id;
-                        }
-                    }
-                }
-
-                try {
-                    const channelOptions = {
-                        name: roomName,
-                        type: ChannelType.GuildVoice,
-                        permissionOverwrites: [
-                            {
-                                id: interaction.guild.id,
-                                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
-                            },
-                            {
-                                id: interaction.member.id,
-                                allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
-                            },
-                            {
-                                id: client.user.id,
-                                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ReadMessageHistory]
-                            }
-                        ]
-                    };
-
-                    if (targetParent) {
-                        channelOptions.parent = targetParent;
-                    }
-
-                    const newChannel = await interaction.guild.channels.create(channelOptions);
-
-                    const roomData = {
-                        ownerId: interaction.member.id,
-                        locked: false,
-                        hidden: false,
-                        chatClosed: false,
-                        panelMsgId: null
-                    };
-
-                    if (!db[guildId].tempRooms) db[guildId].tempRooms = {};
-                    db[guildId].tempRooms[newChannel.id] = roomData;
-                    saveDB(db);
-
-                    // Kullanıcı seste mi? Sesteyse yeni odaya taşı
-                    let moved = false;
-                    if (interaction.member.voice && interaction.member.voice.channelId) {
-                        await interaction.member.voice.setChannel(newChannel).catch(() => { });
-                        moved = true;
-                    }
-
-                    if (moved) {
-                        await interaction.editReply({
-                            content: `✅ **${newChannel.name}** ses odanız başarıyla oluşturuldu ve odaya taşındınız! (<#${newChannel.id}>)`
-                        });
-                    } else {
-                        await interaction.editReply({
-                            content: `✅ **${newChannel.name}** ses odanız başarıyla oluşturuldu!\n👉 Odanıza katılmak için tıklayın: <#${newChannel.id}>\n*(Odaya 1 dakika içinde kimse girmezse boş kaldığı için otomatik silinir.)*`
-                        });
-                    }
-
-                    // Ses odası içine aynı yönetim panelini gönder
-                    setTimeout(async () => {
-                        try {
-                            const panelMsg = await newChannel.send({
-                                content: `<@${interaction.member.id}>, oda kontrol paneliniz aşağıdadır:`,
-                                embeds: [buildTempVoiceEmbed(roomData)],
-                                components: buildTempVoiceComponents(roomData, false)
-                            });
-                            if (panelMsg) {
-                                const freshDb = getDB();
-                                ensureGuildDB(freshDb, guildId);
-                                if (freshDb[guildId].tempRooms && freshDb[guildId].tempRooms[newChannel.id]) {
-                                    freshDb[guildId].tempRooms[newChannel.id].panelMsgId = panelMsg.id;
-                                    saveDB(freshDb);
-                                }
-                            }
-                        } catch (sendErr) {
-                            console.error("Geçici oda paneli gönderilemedi:", sendErr);
-                        }
-                    }, 500);
-
-                    sendLog(interaction.guild, 'logSunucu', {
-                        title: 'Geçici Ses Odası Açıldı',
-                        desc: `**Oda:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Sahibi:** <@${interaction.member.id}>\n**Yöntem:** Buton Paneli`,
-                        color: 0x57f287
-                    });
-
-                    addLiveLog(`✅ [SES ODASI]: Buton ile <#${newChannel.id}> açıldı (${interaction.user.tag})`);
-                } catch (e) {
-                    addLiveLog(`❌ [SES ODASI HATA]: ${e.message}`);
-                    return interaction.editReply({
-                        content: `❌ Ses odası oluşturulurken bir hata meydana geldi: ${e.message}`
-                    });
-                }
-                return;
-            }
             if (interaction.customId === 'modal_start_cekilis') {
                 if (!isAdmin && !isYetkili) {
                     return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** yapabilir.', ephemeral: true });
@@ -6883,6 +6387,80 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
     }
 
+    // GEÇİCİ ODA OLUŞTURMA (15 Saniye Cooldown Korumalı)
+    if (db[guildId].odaKanal && db[guildId].odaKategori) {
+        if (newState.channelId === db[guildId].odaKanal && newState.member && !newState.member.user.bot) {
+            const member = newState.member;
+            const now = Date.now();
+            const cdKey = `${guildId}-${member.id}`;
+            const lastCreated = vcCooldownMap.get(cdKey) || 0;
+
+            if (now - lastCreated < 15000) {
+                await member.voice.disconnect().catch(() => { });
+                return;
+            }
+            vcCooldownMap.set(cdKey, now);
+
+            const roomName = `${member.user.username} Odası`;
+            try {
+                const newChannel = await newState.guild.channels.create({
+                    name: roomName,
+                    type: ChannelType.GuildVoice,
+                    parent: db[guildId].odaKategori,
+                    permissionOverwrites: [
+                        {
+                            id: newState.guild.id,
+                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+                        },
+                        {
+                            id: member.id,
+                            allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+                        },
+                        {
+                            id: client.user.id,
+                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ReadMessageHistory]
+                        }
+                    ]
+                });
+
+                await member.voice.setChannel(newChannel);
+
+                const roomData = {
+                    ownerId: member.id,
+                    locked: false,
+                    hidden: false,
+                    chatClosed: false,
+                    panelMsgId: null
+                };
+
+                db[guildId].tempRooms[newChannel.id] = roomData;
+                saveDB(db);
+
+                setTimeout(async () => {
+                    try {
+                        const panelMsg = await newChannel.send({
+                            content: `<@${member.id}>, oda kontrol paneliniz aşağıdadır:`,
+                            embeds: [buildTempVoiceEmbed(roomData)],
+                            components: buildTempVoiceComponents(roomData, false)
+                        });
+                        if (panelMsg) {
+                            const freshDb = getDB();
+                            ensureGuildDB(freshDb, guildId);
+                            if (freshDb[guildId].tempRooms[newChannel.id]) {
+                                freshDb[guildId].tempRooms[newChannel.id].panelMsgId = panelMsg.id;
+                                saveDB(freshDb);
+                            }
+                        }
+                    } catch (sendErr) {
+                        console.error("Geçici oda paneli gönderilemedi:", sendErr);
+                    }
+                }, 1000);
+
+                sendLog(newState.guild, 'logSunucu', { title: 'Geçici Ses Odası Açıldı', desc: `**Oda:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Sahibi:** <@${member.id}>`, color: 0x57f287 });
+            } catch (e) { console.error("Geçici oda oluşturma hatası:", e); }
+        }
+    }
+
     // GEÇİCİ ODA SİLME VEYA SAHİPLİK DEVRİ AKTİFLEŞTİRME
     if (oldState.channelId && oldState.channelId !== newState.channelId) {
         const guild = oldState.guild;
@@ -7663,23 +7241,17 @@ if (!botToken) {
         isLoggingIn = true;
         try {
             await initMongoDB();
-            // Sunuculardaki çift slash komutları REST üzerinden arka planda sıfırla
-            cleanGuildSlashCommands(botToken).catch(err => {
-                addLiveLog(`[REST BAŞLANGIÇ TEMİZLEME UYARISI]: ${err.message}`);
-            });
-
             addLiveLog('Discord Gateway bağlantısı başlatılıyor...');
             await client.login(botToken);
             addLiveLog('✅ client.login() başarıyla tamamlandı.');
         } catch (err) {
             addLiveLog(`❌ Discord Giriş Hatası: ${err.message || err}`);
-            setTimeout(() => {
-                isLoggingIn = false;
-                startBot();
-            }, 15000);
-            return;
+            isLoggingIn = false;
+            // Bağlantı koparsa veya hata verirse 10 saniye sonra otomatik yeniden dene
+            setTimeout(startBot, 10000);
+        } finally {
+            isLoggingIn = false;
         }
-        isLoggingIn = false;
     }
 
     startBot();
