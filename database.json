@@ -9,13 +9,719 @@
                 "spamWarn": 0,
                 "lastJoin": 1793190417051,
                 "inviterId": "810509659559165992",
-                "inviteCode": "5Xat2rJSU"
+                "inviteCode": "5Xat2rJSU",
+                "xp": 19,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1794346877230
+            },
+            "998344341657501736": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 11111,
+                "level": 0,
+                "papel": 106,
+                "lastVoiceXp": 1794427458225,
+                "lastDaily": 1794049483232,
+                "msgCount": 5,
+                "lastMsgTime": 1794417605779
+            },
+            "810509659559165992": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 41882,
+                "level": 0,
+                "papel": 339,
+                "msgCount": 150,
+                "lastMsgTime": 1794433509724,
+                "lastVoiceXp": 1794487966024,
+                "lastDaily": 1793541193968,
+                "spentPapel": 315,
+                "xpDisabled": false
+            },
+            "1143497130409996328": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 2749,
+                "level": 0,
+                "papel": 25,
+                "lastVoiceXp": 1794424278206,
+                "lastJoin": 1793551631998,
+                "inviterId": null,
+                "inviteCode": null
+            },
+            "1386808277735702528": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 40316,
+                "level": 0,
+                "papel": 343,
+                "msgCount": 94,
+                "lastMsgTime": 1794432591112,
+                "lastVoiceXp": 1794432828252
+            },
+            "767134521262080022": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 60941,
+                "level": 1,
+                "papel": 111,
+                "lastVoiceXp": 1794487996025,
+                "msgCount": 2,
+                "lastMsgTime": 1794343416247
+            },
+            "813052742724616232": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 1,
+                "xp": 17,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 2,
+                "lastMsgTime": 1793550569492
+            },
+            "1460607721790378039": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 17997,
+                "level": 0,
+                "papel": 150,
+                "lastVoiceXp": 1794424278206,
+                "msgCount": 1,
+                "lastMsgTime": 1793917383746
+            },
+            "728584306984878132": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793554829618,
+                "inviterId": "1460607721790378039",
+                "inviteCode": "edDpPqtJp",
+                "xp": 11,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1793554855100
+            },
+            "1255633582270058630": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793554836698,
+                "inviterId": "1460607721790378039",
+                "inviteCode": "edDpPqtJp"
+            },
+            "1105511115934400564": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793554889665,
+                "inviterId": "1460607721790378039",
+                "inviteCode": "edDpPqtJp"
+            },
+            "1235968288694075425": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793555085184,
+                "inviterId": "1460607721790378039",
+                "inviteCode": "edDpPqtJp",
+                "xp": 12,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 1,
+                "lastMsgTime": 1793657355773
+            },
+            "373172325140529154": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793555690197,
+                "inviterId": null,
+                "inviteCode": null,
+                "xp": 881,
+                "level": 0,
+                "papel": 8,
+                "lastVoiceXp": 1793561005178
+            },
+            "861152832845643806": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 699,
+                "level": 0,
+                "papel": 5,
+                "lastVoiceXp": 1794348857242,
+                "msgCount": 1,
+                "lastMsgTime": 1794345391361
+            },
+            "899291348019060766": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 3813,
+                "level": 0,
+                "papel": 28,
+                "lastVoiceXp": 1794162325466,
+                "msgCount": 48,
+                "lastMsgTime": 1794337797702
+            },
+            "1564020784345776150": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793567435276,
+                "inviterId": null,
+                "inviteCode": null,
+                "xp": 1055,
+                "level": 0,
+                "papel": 10,
+                "lastVoiceXp": 1793574058716
+            },
+            "592693420485640193": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 1,
+                "spamWarn": 0,
+                "xp": 23426,
+                "level": 0,
+                "papel": 221,
+                "lastVoiceXp": 1794443929748,
+                "msgCount": 48,
+                "lastMsgTime": 1794476702618,
+                "lastDaily": 1794259705362,
+                "lastKufurTime": 1794085493684
+            },
+            "971802605909057546": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 1,
+                "spamWarn": 0,
+                "lastJoin": 1793596494074,
+                "inviterId": "1386808277735702528",
+                "inviteCode": "fUTmZs45ZP",
+                "xp": 3509,
+                "level": 0,
+                "papel": 15,
+                "msgCount": 295,
+                "lastMsgTime": 1794461888949,
+                "lastDaily": 1794378351712,
+                "lastVoiceXp": 1794420228172,
+                "lastKufurTime": 1793873399480
+            },
+            "527526738201411592": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 5,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 1,
+                "lastMsgTime": 1793649992548
+            },
+            "321935928534761472": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 20,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 2,
+                "lastMsgTime": 1793947909746
+            },
+            "1356024695216013483": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793715005216,
+                "inviterId": "1538548872450674801",
+                "inviteCode": "vuB39v5XC"
+            },
+            "852987449793183815": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 816,
+                "level": 0,
+                "papel": 7,
+                "lastVoiceXp": 1793743647685
+            },
+            "1105882521415192617": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 25,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 3,
+                "lastMsgTime": 1794411380039
+            },
+            "710483348455424022": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793810725941,
+                "inviterId": "592693420485640193",
+                "inviteCode": "H95HFNp9y",
+                "xp": 14913,
+                "level": 0,
+                "papel": 149,
+                "lastVoiceXp": 1794443749746,
+                "msgCount": 5,
+                "lastMsgTime": 1794349254870
+            },
+            "1301247159336833127": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 2,
+                "spamWarn": 0,
+                "lastJoin": 1793828666445,
+                "inviterId": null,
+                "inviteCode": null,
+                "xp": 22,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 3,
+                "lastMsgTime": 1793910039081,
+                "lastKufurTime": 1793826218052
+            },
+            "1058115431342292992": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 5531,
+                "level": 0,
+                "papel": 49,
+                "lastVoiceXp": 1794444109749,
+                "msgCount": 3,
+                "lastMsgTime": 1794419017610
+            },
+            "819148633022136362": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 9,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 1,
+                "lastMsgTime": 1793892760582,
+                "linkUyari": 1,
+                "lastLinkTime": 1793892760896
+            },
+            "1333481128052523028": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793915437086,
+                "inviterId": "1386808277735702528",
+                "inviteCode": "dxXwuRxBb",
+                "xp": 2467,
+                "level": 0,
+                "papel": 24,
+                "lastVoiceXp": 1793996643232,
+                "msgCount": 9,
+                "lastMsgTime": 1793964253348
+            },
+            "481804688845570049": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 3791,
+                "level": 0,
+                "papel": 109,
+                "lastVoiceXp": 1794345227219,
+                "msgCount": 1,
+                "lastMsgTime": 1794344282535
+            },
+            "1387501110302085181": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793922270950,
+                "inviterId": null,
+                "inviteCode": null,
+                "xp": 13,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1793922301426
+            },
+            "1383610466076459038": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793968125383,
+                "inviterId": null,
+                "inviteCode": null,
+                "xp": 1318,
+                "level": 0,
+                "papel": 13,
+                "lastVoiceXp": 1794400637891
+            },
+            "1566848437578895394": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793968617893,
+                "inviterId": null,
+                "inviteCode": null,
+                "xp": 61,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1793969012699
+            },
+            "344160086865739789": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 622,
+                "level": 0,
+                "papel": 5,
+                "lastVoiceXp": 1793988423050
+            },
+            "619811404135792686": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793993388941,
+                "inviterId": "217741659461386251",
+                "inviteCode": "KPYUxaYfN"
+            },
+            "928370035280449597": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1794001413468,
+                "inviterId": "1386808277735702528",
+                "inviteCode": "dxXwuRxBb"
+            },
+            "1004755638024421478": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1794026062991,
+                "inviterId": "767134521262080022",
+                "inviteCode": "cExHwYTsj",
+                "xp": 613,
+                "level": 0,
+                "papel": 6,
+                "lastVoiceXp": 1794029853701
+            },
+            "1161706018040971328": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 132,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1794413928119
+            },
+            "1093196472239001771": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1794051890192,
+                "inviterId": null,
+                "inviteCode": null
+            },
+            "434662691387211777": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 6031,
+                "level": 0,
+                "papel": 45,
+                "lastVoiceXp": 1794444109749,
+                "msgCount": 4,
+                "lastMsgTime": 1794351505155
+            },
+            "714597116189605889": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1794095099720,
+                "inviterId": null,
+                "inviteCode": null
+            },
+            "1160198575142228028": {
+                "jailCount": 1,
+                "minorJailCount": 1,
+                "sicilli": false,
+                "kufurUyari": 1,
+                "spamWarn": 0,
+                "xp": 177,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1794435994945,
+                "msgCount": 15,
+                "lastMsgTime": 1794423191169,
+                "lastKufurTime": 1794263126117,
+                "jailExpire": null
+            },
+            "374605969868455941": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 44,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1794249715401
+            },
+            "465195053422215178": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 11876,
+                "level": 0,
+                "papel": 119,
+                "msgCount": 7,
+                "lastMsgTime": 1794432504879,
+                "lastVoiceXp": 1794443509745,
+                "linkUyari": 1,
+                "lastLinkTime": 1794264294992
+            },
+            "1478871923378098317": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 33,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 4,
+                "lastMsgTime": 1794264600170
+            },
+            "332871677509894144": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 92,
+                "level": 0,
+                "papel": 0,
+                "lastVoiceXp": 1794265226002,
+                "msgCount": 2,
+                "lastMsgTime": 1794265024615
+            },
+            "328235081476866059": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 8,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 1,
+                "lastMsgTime": 1794309869692
+            },
+            "1538548872450674801": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 427,
+                "level": 0,
+                "papel": 2,
+                "msgCount": 13,
+                "lastMsgTime": 1794417103470,
+                "lastVoiceXp": 1794425718219
+            },
+            "753591553288699925": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 159,
+                "level": 0,
+                "papel": 1,
+                "msgCount": 1,
+                "lastMsgTime": 1794345851915,
+                "lastVoiceXp": 1794409068042
+            },
+            "693437698123497554": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 6,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 1,
+                "lastMsgTime": 1794348582554
+            },
+            "1215011029336199241": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1794394998380,
+                "inviterId": "767134521262080022",
+                "inviteCode": "HdG6ryN3Q",
+                "xp": 1283,
+                "level": 0,
+                "papel": 9,
+                "lastVoiceXp": 1794400637891
+            },
+            "1376457299475828756": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1794402148322,
+                "inviterId": "1386808277735702528",
+                "inviteCode": "dxXwuRxBb",
+                "xp": 220,
+                "level": 0,
+                "papel": 2,
+                "lastVoiceXp": 1794403307950,
+                "msgCount": 1,
+                "lastMsgTime": 1794402260925,
+                "linkUyari": 1,
+                "lastLinkTime": 1794402261508
+            },
+            "282179967759155201": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 683,
+                "level": 0,
+                "papel": 5,
+                "msgCount": 1,
+                "lastMsgTime": 1794416082981,
+                "lastVoiceXp": 1794421938192
+            },
+            "744223238673924110": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 464,
+                "level": 0,
+                "papel": 4,
+                "lastVoiceXp": 1794432078249
+            },
+            "1532903821725012098": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 32,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 4,
+                "lastMsgTime": 1794428045482
+            },
+            "217741659461386251": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 360,
+                "level": 0,
+                "papel": 3,
+                "lastVoiceXp": 1794436474948
             }
         },
         "tempRooms": {},
         "tickets": {},
         "ticketPanels": {},
-        "odaKanal": "1557704478629691422",
+        "odaKanal": "1570210886852022413",
         "odaKategori": "1557704477312684102",
         "jailRol": "1557759431679279124",
         "muafRol": "1558956324728082486",
@@ -27,25 +733,624 @@
                 "slug": "martianderox",
                 "name": "martianderox",
                 "url": "https://kick.com/martianderox",
-                "lastSeenId": "135288393"
+                "lastSeenId": null
             }
         ],
         "linkEngel": true,
         "kufurEngel": true,
         "yetkiliRol": "1545835991053631639",
-        "logCeza": "1558956540965294120",
-        "logMesaj": "1558956540965294120",
-        "logSes": "1558956540965294120",
-        "logUye": "1558956540965294120",
-        "logSunucu": "1558956540965294120",
-        "logGuvenlik": "1558956540965294120"
+        "logCeza": "1566103894340149378",
+        "logMesaj": "1566104192618209280",
+        "logSes": "1566103961055010969",
+        "logUye": "1566104164793065595",
+        "logSunucu": "1566103932672020622",
+        "logGuvenlik": "1566104312906645697",
+        "customKufurler": [],
+        "botWhitelist": [
+            "975787510502424576",
+            "1386808277735702528"
+        ],
+        "antiBot": true,
+        "levelRoles": {
+            "1": "1566235685801955398",
+            "2": "1566235824578633748",
+            "3": "1566235831809736876",
+            "4": "1566235824905916489",
+            "5": "1566235822787661954",
+            "6": "1566235823886700655",
+            "7": "1566235823353892956"
+        },
+        "marketRoles": [
+            {
+                "roleId": "1566248117278351430",
+                "price": 200,
+                "durationDays": 0
+            },
+            {
+                "roleId": "1566248945309454376",
+                "price": 700,
+                "durationDays": 0
+            },
+            {
+                "roleId": "1566426644594294924",
+                "price": 500,
+                "durationDays": 0
+            },
+            {
+                "roleId": "1566431968927948820",
+                "price": 500,
+                "durationDays": 0
+            },
+            {
+                "roleId": "1565465700779298856",
+                "price": 3000,
+                "durationDays": 0
+            }
+        ],
+        "tempUserRoles": [],
+        "xpEnabled": true,
+        "gamesEnabled": true,
+        "giveaways": {},
+        "buttonRoles": {
+            "1569377245003518075": {
+                "id": "1569377245003518075",
+                "messageId": "1569377245003518075",
+                "channelId": "1538928603067187386",
+                "title": "**RENK ROLLERİ**",
+                "description": "**Aşağıdaki butonlardan istediğiniz renkleri alabilirsiniz!**\n\n**Desteğiniz için teşekkürler.**",
+                "color": "Mor",
+                "imageUrl": "https://cdn.discordapp.com/attachments/1537933764477456549/1569377058243608728/5724b3c2-15d5-4a24-908e-ae83f835731f.png?ex=6af33bc8&is=6af1ea48&hm=eb971ede9280361f488505590c76b45e9f1b1c9846b10e8a4a0779689ececb7a&",
+                "buttonColor": "Mavi",
+                "roles": [
+                    {
+                        "roleId": "1538928601985196048",
+                        "label": "✦ Siyah"
+                    },
+                    {
+                        "roleId": "1538928601985196045",
+                        "label": "✦  Mor"
+                    },
+                    {
+                        "roleId": "1538928601985196047",
+                        "label": "✦ Kırmızı"
+                    },
+                    {
+                        "roleId": "1538928601985196046",
+                        "label": "✦ Sarı"
+                    },
+                    {
+                        "roleId": "1538928601985196043",
+                        "label": "✦ Mavi"
+                    },
+                    {
+                        "roleId": "1538928601985196044",
+                        "label": "✦ Yeşil"
+                    },
+                    {
+                        "roleId": "1569376039338250410",
+                        "label": "✦ Pembe"
+                    },
+                    {
+                        "roleId": "1569376042018279464",
+                        "label": "✦  Beyaz"
+                    }
+                ],
+                "createdAt": 1794239092971
+            },
+            "1569378373317296329": {
+                "id": "1569378373317296329",
+                "messageId": "1569378373317296329",
+                "channelId": "1538928603067187385",
+                "title": "**DUYURU ROLLERİ**",
+                "description": "Aşağıdaki rolleri alırsanız etkinliklerden haberdar olabilirsiniz.",
+                "color": "Mor",
+                "imageUrl": "https://cdn.discordapp.com/attachments/1537933764477456549/1569377077944127569/d82b04de-dea6-4115-8d6b-8e66168093ac.png?ex=6af33bcc&is=6af1ea4c&hm=cc869856d698145c2d987a72b751e77a07b6b66dade0bdba74143dd66628b296&",
+                "buttonColor": "Mavi",
+                "roles": [
+                    {
+                        "roleId": "1538928601951633604",
+                        "label": "Etkinlik Duyuru"
+                    },
+                    {
+                        "roleId": "1538928601951633602",
+                        "label": "LOL Duyuru"
+                    },
+                    {
+                        "roleId": "1545829938026774548",
+                        "label": "Minecraft Duyuru"
+                    },
+                    {
+                        "roleId": "1538928601951633603",
+                        "label": "Valorant Duyuru"
+                    }
+                ],
+                "createdAt": 1794239362162
+            },
+            "1569379024386523269": {
+                "id": "1569379024386523269",
+                "messageId": "1569379024386523269",
+                "channelId": "1538928603067187385",
+                "title": "**DUYURU ROLLERİ**",
+                "description": "**Aşağıdaki butonlara tıklayarak duyuru rolleri alabilirsiniz. **",
+                "color": "Mor",
+                "imageUrl": "https://cdn.discordapp.com/attachments/1537933764477456549/1569377077944127569/d82b04de-dea6-4115-8d6b-8e66168093ac.png?ex=6af33bcc&is=6af1ea4c&hm=cc869856d698145c2d987a72b751e77a07b6b66dade0bdba74143dd66628b296&",
+                "buttonColor": "Mavi",
+                "roles": [
+                    {
+                        "roleId": "1538928601951633604",
+                        "label": "Etkinlik Duyuru"
+                    },
+                    {
+                        "roleId": "1545829938026774548",
+                        "label": "Minecraft Duyuru"
+                    },
+                    {
+                        "roleId": "1538928601951633602",
+                        "label": "LOL Duyuru"
+                    },
+                    {
+                        "roleId": "1538928601951633603",
+                        "label": "Valorant Duyuru"
+                    }
+                ],
+                "createdAt": 1794239517288
+            }
+        }
     },
     "1265700826387714153": {
-        "users": {},
+        "users": {
+            "899699978316943420": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 7912,
+                "level": 0,
+                "papel": 70,
+                "lastVoiceXp": 1794423288197,
+                "msgCount": 2,
+                "lastMsgTime": 1794146460575
+            },
+            "1479128505387319532": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793549976356,
+                "inviterId": "899699978316943420",
+                "inviteCode": "F2bTTJfVKY"
+            },
+            "861152832845643806": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 4084,
+                "level": 0,
+                "papel": 33,
+                "lastVoiceXp": 1794423258197,
+                "msgCount": 1,
+                "lastMsgTime": 1793634957419
+            },
+            "744223238673924110": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 369,
+                "level": 0,
+                "papel": 3,
+                "lastVoiceXp": 1794417738144
+            },
+            "282179967759155201": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 426,
+                "level": 0,
+                "papel": 3,
+                "lastVoiceXp": 1793650687933
+            },
+            "658054032253911041": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 3350,
+                "level": 0,
+                "papel": 29,
+                "lastVoiceXp": 1794423978205
+            },
+            "1474129414022496408": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1793915313782,
+                "inviterId": "899699978316943420",
+                "inviteCode": "F2bTTJfVKY",
+                "xp": 16,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 2,
+                "lastMsgTime": 1793915677580
+            },
+            "947187712492961814": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 2497,
+                "level": 0,
+                "papel": 22,
+                "lastVoiceXp": 1794423288197
+            },
+            "810509659559165992": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 12,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 1,
+                "lastMsgTime": 1794146398568
+            },
+            "871427809250279515": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "lastJoin": 1794413754788,
+                "inviterId": "899699978316943420",
+                "inviteCode": "EgXrHpZzE",
+                "xp": 232,
+                "level": 0,
+                "papel": 2,
+                "lastVoiceXp": 1794415308124
+            }
+        },
         "tempRooms": {},
         "tickets": {},
         "ticketPanels": {},
         "yetkiliRol": "1267241616750546984",
-        "muafRol": "1267237958457495653"
-    }
+        "muafRol": "1267237958457495653",
+        "trackers": [],
+        "customKufurler": [],
+        "botWhitelist": [
+            "975787510502424576",
+            "899699978316943420"
+        ],
+        "antiBot": true,
+        "levelRoles": {},
+        "marketRoles": [],
+        "tempUserRoles": [],
+        "xpEnabled": true,
+        "gamesEnabled": true,
+        "giveaways": {},
+        "buttonRoles": {}
+    },
+    "825075341629718589": {
+        "users": {
+            "810509659559165992": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 18,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 2,
+                "lastMsgTime": 1793999472663
+            }
+        },
+        "tempRooms": {},
+        "tickets": {},
+        "ticketPanels": {},
+        "trackers": [],
+        "customKufurler": [],
+        "botWhitelist": [
+            "975787510502424576",
+            "810509659559165992"
+        ],
+        "antiBot": true,
+        "levelRoles": {},
+        "marketRoles": [],
+        "tempUserRoles": [],
+        "xpEnabled": true,
+        "gamesEnabled": true,
+        "giveaways": {},
+        "buttonRoles": {}
+    },
+    "977315836714971187": {
+        "users": {
+            "810509659559165992": {
+                "papel": 50001,
+                "xp": 8,
+                "level": 0,
+                "msgCount": 1,
+                "lastMsgTime": 1794174123753
+            },
+            "1386808277735702528": {
+                "jailCount": 0,
+                "minorJailCount": 0,
+                "sicilli": false,
+                "kufurUyari": 0,
+                "spamWarn": 0,
+                "xp": 13,
+                "level": 0,
+                "papel": 0,
+                "msgCount": 2,
+                "lastMsgTime": 1794176233688,
+                "lastJoin": 1794173996429,
+                "inviterId": "810509659559165992",
+                "inviteCode": "WjuByF8bv"
+            }
+        },
+        "tempRooms": {},
+        "tickets": {},
+        "ticketPanels": {},
+        "trackers": [],
+        "customKufurler": [],
+        "botWhitelist": [
+            "975787510502424576",
+            "810509659559165992"
+        ],
+        "antiBot": true,
+        "levelRoles": {},
+        "marketRoles": [],
+        "tempUserRoles": [],
+        "xpEnabled": true,
+        "gamesEnabled": true,
+        "giveaways": {
+            "1568784714343383123": {
+                "messageId": "1568784714343383123",
+                "channelId": "977322740145090640",
+                "guildId": "977315836714971187",
+                "prize": "50000 papel",
+                "winnersCount": 1,
+                "endsAt": 1794097882392,
+                "createdAt": 1794097823642,
+                "hostedBy": "810509659559165992",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [
+                    "810509659559165992"
+                ],
+                "ended": true,
+                "winners": [
+                    "810509659559165992"
+                ],
+                "endedAt": 1794097890886
+            },
+            "1568784897101926543": {
+                "messageId": "1568784897101926543",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "denem",
+                "winnersCount": 1,
+                "endsAt": 1794099245971,
+                "createdAt": 1794097866555,
+                "hostedBy": "810509659559165992",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [],
+                "ended": true,
+                "winners": [],
+                "endedAt": 1794099254824
+            },
+            "1568784979486318714": {
+                "messageId": "1568784979486318714",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "denem2",
+                "winnersCount": 1,
+                "endsAt": 1794101485594,
+                "createdAt": 1794097886233,
+                "hostedBy": "810509659559165992",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [],
+                "ended": true,
+                "winners": [],
+                "endedAt": 1794101494932
+            },
+            "1568785062605099169": {
+                "messageId": "1568785062605099169",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "deneme",
+                "winnersCount": 1,
+                "endsAt": 1794184305419,
+                "createdAt": 1794097906077,
+                "hostedBy": "810509659559165992",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [],
+                "ended": true,
+                "winners": [],
+                "endedAt": 1794176060134
+            },
+            "1569104467834441771": {
+                "messageId": "1569104467834441771",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "1",
+                "winnersCount": 1,
+                "endsAt": 1794260457554,
+                "createdAt": 1794174058171,
+                "hostedBy": "1386808277735702528",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [
+                    "810509659559165992",
+                    "1386808277735702528"
+                ],
+                "ended": true,
+                "winners": [
+                    "810509659559165992"
+                ],
+                "endedAt": 1794176103439
+            },
+            "1569104885675200513": {
+                "messageId": "1569104885675200513",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "1",
+                "winnersCount": 1,
+                "endsAt": 1794174167177,
+                "createdAt": 1794174157729,
+                "hostedBy": "1386808277735702528",
+                "requiredRoleId": null,
+                "minLevel": 1,
+                "participants": [],
+                "ended": true,
+                "winners": [],
+                "endedAt": 1794174168872
+            },
+            "1569111011460644948": {
+                "messageId": "1569111011460644948",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "1",
+                "winnersCount": 1,
+                "endsAt": 1794262017638,
+                "createdAt": 1794175618562,
+                "hostedBy": "1386808277735702528",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [
+                    "1386808277735702528",
+                    "810509659559165992"
+                ],
+                "ended": true,
+                "winners": [],
+                "cancelled": true,
+                "endedAt": 1794175709608
+            },
+            "1569111624545992736": {
+                "messageId": "1569111624545992736",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "nitro",
+                "winnersCount": 1,
+                "endsAt": 1794175773878,
+                "createdAt": 1794175765205,
+                "hostedBy": "810509659559165992",
+                "requiredRoleId": "977316232107806750",
+                "minLevel": null,
+                "participants": [],
+                "ended": true,
+                "winners": [],
+                "endedAt": 1794175776005
+            },
+            "1569111817165479997": {
+                "messageId": "1569111817165479997",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "porno",
+                "winnersCount": 1,
+                "endsAt": 1794175819771,
+                "createdAt": 1794175810316,
+                "hostedBy": "1386808277735702528",
+                "requiredRoleId": "1565061623272574986",
+                "minLevel": null,
+                "participants": [],
+                "ended": true,
+                "winners": [],
+                "endedAt": 1794175826015
+            },
+            "1569112783675592806": {
+                "messageId": "1569112783675592806",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "1 papel",
+                "winnersCount": 1,
+                "endsAt": 1794176050194,
+                "createdAt": 1794176040850,
+                "hostedBy": "810509659559165992",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [
+                    "810509659559165992"
+                ],
+                "ended": true,
+                "winners": [
+                    "810509659559165992"
+                ],
+                "endedAt": 1794176044042
+            },
+            "1569116834203041954": {
+                "messageId": "1569116834203041954",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "1",
+                "winnersCount": 1,
+                "endsAt": 1794177020894,
+                "createdAt": 1794177006539,
+                "hostedBy": "810509659559165992",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [],
+                "ended": true,
+                "winners": [],
+                "endedAt": 1794177026497
+            },
+            "1569116837604626493": {
+                "messageId": "1569116837604626493",
+                "channelId": "977315836714971190",
+                "guildId": "977315836714971187",
+                "prize": "yiğitin amcıgıı",
+                "winnersCount": 1,
+                "endsAt": 1794177021752,
+                "createdAt": 1794177007300,
+                "hostedBy": "1386808277735702528",
+                "requiredRoleId": null,
+                "minLevel": null,
+                "participants": [
+                    "1386808277735702528"
+                ],
+                "ended": true,
+                "winners": [
+                    "1386808277735702528"
+                ],
+                "endedAt": 1794177026500
+            }
+        },
+        "buttonRoles": {},
+        "odaKanal": "1565061628611792946"
+    },
+    "1167555121723490466": {
+        "users": {},
+        "tempRooms": {},
+        "tickets": {},
+        "ticketPanels": {},
+        "trackers": [],
+        "customKufurler": [],
+        "botWhitelist": [
+            "975787510502424576",
+            "394179738303987713"
+        ],
+        "antiBot": true,
+        "levelRoles": {},
+        "marketRoles": [],
+        "tempUserRoles": [],
+        "xpEnabled": true,
+        "gamesEnabled": true,
+        "giveaways": {},
+        "buttonRoles": {}
+    },
+    "botStatus": "made by ygiido"
 }

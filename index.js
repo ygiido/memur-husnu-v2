@@ -252,7 +252,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.7',
+        versiyon: 'v2.1.8',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -2763,6 +2763,31 @@ function buildTempVoiceEmbed(roomData) {
         .setTimestamp();
 }
 
+function buildTempVoiceCreatorPanel() {
+    const embed = new EmbedBuilder()
+        .setTitle('🔊 Özel Ses Odası Oluştur')
+        .setDescription(
+            'Kendinize ait özel bir ses odası oluşturmak için aşağıdaki **"Oda Oluştur"** butonuna tıklayın.\n\n' +
+            '📝 **Nasıl Çalışır?**\n' +
+            '• Butona tıkladığınızda gelen pencereye odanızın adını yazın.\n' +
+            '• Bot sizin için ses odasını anında açar ve (eğer bir sesteyseniz) sizi odaya taşır.\n' +
+            '• Oda içerisindeki kontrol panelinden oda kilidi, kişi sınırı ve üye izinlerini dilediğiniz gibi yönetebilirsiniz.\n\n' +
+            '*(Oda tamamen boşaldığında otomatik olarak silinir.)*'
+        )
+        .setColor(0x5865F2)
+        .setFooter({ text: 'Memur Hüsnü • Geçici Ses Odası Sistemi' });
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('btn_temp_vc_create')
+            .setLabel('Oda Oluştur')
+            .setEmoji('🔊')
+            .setStyle(ButtonStyle.Success)
+    );
+
+    return { embeds: [embed], components: [row] };
+}
+
 // Otomatik Tahliye ve Hayalet Geçici Oda Süpürücü Döngüsü (Her 30 saniyede bir çalışır)
 setInterval(() => {
     const db = getDB();
@@ -3246,6 +3271,19 @@ client.on('guildCreate', guild => {
     }
 });
 
+// Güvenli etkileşim yanıt yardımcısı (Hem deferred hem doğrudan yanıtı hatasız yönetir)
+async function safeReply(interaction, payload) {
+    try {
+        if (interaction.deferred) {
+            return await interaction.editReply(payload);
+        } else if (!interaction.replied) {
+            return await interaction.reply(payload);
+        }
+    } catch (err) {
+        console.error('safeReply Hatası:', err.message);
+    }
+}
+
 // ============================================================================
 // INTERACTION (KOMUT, PANEL, MENÜ, BUTON VE MODAL) YÖNETİMİ
 // ============================================================================
@@ -3276,19 +3314,19 @@ client.on('interactionCreate', async interaction => {
             const { commandName } = interaction;
 
             if (commandName === 'panel') {
-                if (!isAdmin) return interaction.editReply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.' });
-                return interaction.editReply({ ...buildHomeDashboard(interaction.guild) });
+                if (!isAdmin) return safeReply(interaction, { content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
+                return safeReply(interaction, { ...buildHomeDashboard(interaction.guild), ephemeral: true });
             }
 
             if (commandName === 'yaz') {
-                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
+                if (!isAdmin) return safeReply(interaction, { content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
                 const mesaj = interaction.options.getString('mesaj');
                 await interaction.channel.send(mesaj);
-                return interaction.editReply({ content: 'Mesaj başarıyla kanala gönderildi.' });
+                return safeReply(interaction, { content: 'Mesaj başarıyla kanala gönderildi.', ephemeral: true });
             }
 
             if (['hapis', 'af', 'sil'].includes(commandName)) {
-                if (!isAdmin && !isYetkili) return interaction.editReply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.' });
+                if (!isAdmin && !isYetkili) return safeReply(interaction, { content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.', ephemeral: true });
 
                 if (commandName === 'hapis') {
                     const user = interaction.options.getUser('kullanici');
@@ -3297,8 +3335,8 @@ client.on('interactionCreate', async interaction => {
                     const sebep = interaction.options.getString('sebep');
                     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-                    if (!member) return interaction.editReply({ content: 'Kullanıcı sunucuda bulunamadı.' });
-                    if (!member.manageable) return interaction.editReply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.' });
+                    if (!member) return safeReply(interaction, { content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+                    if (!member.manageable) return safeReply(interaction, { content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.', ephemeral: true });
 
                     let sureMs = 0;
                     if (kavram === 'saniye') sureMs = sayi * 1000;
@@ -3344,7 +3382,7 @@ client.on('interactionCreate', async interaction => {
                         thumbnail: user.displayAvatarURL()
                     });
 
-                    return interaction.editReply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.` });
+                    return safeReply(interaction, { content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.`, ephemeral: true });
                 }
 
                 if (commandName === 'af') {
@@ -3359,31 +3397,31 @@ client.on('interactionCreate', async interaction => {
                                 if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
                             }
                             sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
-                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.` });
+                            return safeReply(interaction, { content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
                         } else {
-                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.` });
+                            return safeReply(interaction, { content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.`, ephemeral: true });
                         }
                     } else {
-                        if (!isAdmin) return interaction.editReply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.' });
+                        if (!isAdmin) return safeReply(interaction, { content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.', ephemeral: true });
                         db[guildId].users = {};
                         saveDB(db);
                         sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı.`, color: 0x57f287 });
-                        return interaction.editReply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.' });
+                        return safeReply(interaction, { content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.', ephemeral: true });
                     }
                 }
 
                 if (commandName === 'sil') {
                     const miktar = interaction.options.getInteger('miktar');
-                    if (miktar < 1 || miktar > 100) return interaction.editReply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.' });
+                    if (miktar < 1 || miktar > 100) return safeReply(interaction, { content: 'Lütfen 1 ile 100 arasında bir sayı girin.', ephemeral: true });
                     const deleted = await interaction.channel.bulkDelete(miktar, true).catch(() => null);
                     const count = deleted ? deleted.size : 0;
                     sendLog(interaction.guild, 'logMesaj', { title: 'Toplu Mesaj Silme (/sil)', desc: `**Yetkili:** <@${interaction.user.id}>\n**Kanal:** <#${interaction.channel.id}>\n**Miktar:** ${count} adet mesaj silindi.`, color: 0xed4245 });
-                    return interaction.editReply({ content: `**${count}** adet mesaj silindi.` });
+                    return safeReply(interaction, { content: `**${count}** adet mesaj silindi.`, ephemeral: true });
                 }
             }
 
             if (commandName === 'durum') {
-                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
+                if (!isAdmin) return safeReply(interaction, { content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
                 const yeniDurum = interaction.options.getString('mesaj')?.trim() || '';
 
                 if (yeniDurum.length > 0) {
@@ -3393,12 +3431,12 @@ client.on('interactionCreate', async interaction => {
                     });
                     db.botStatus = yeniDurum;
                     saveDB(db);
-                    return interaction.editReply({ content: `✅ Botun durumu başarıyla **"${yeniDurum}"** *(Oynuyor)* olarak güncellendi.` });
+                    return safeReply(interaction, { content: `✅ Botun durumu başarıyla **"${yeniDurum}"** *(Oynuyor)* olarak güncellendi.`, ephemeral: true });
                 } else {
                     client.user.setPresence({ activities: [] });
                     delete db.botStatus;
                     saveDB(db);
-                    return interaction.editReply({ content: '✅ Botun durum mesajı temizlendi/sıfırlandı.' });
+                    return safeReply(interaction, { content: '✅ Botun durum mesajı temizlendi/sıfırlandı.', ephemeral: true });
                 }
             }
 
@@ -4664,6 +4702,37 @@ client.on('interactionCreate', async interaction => {
         if (interaction.isButton()) {
             const customId = interaction.customId;
 
+            // --- GEÇİCİ SES ODASI OLUŞTURMA BUTONU ---
+            if (customId === 'btn_temp_vc_create') {
+                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+                const hasManage = botMember && (botMember.permissions.has(PermissionsBitField.Flags.ManageChannels) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
+                const hasMove = botMember && (botMember.permissions.has(PermissionsBitField.Flags.MoveMembers) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
+                if (!hasManage || !hasMove) {
+                    return safeReply(interaction, {
+                        content: '❌ Botun ses odası açabilmesi için **Kanalları Yönet** ve **Üyeleri Taşı** yetkisine sahip olması gerekir.',
+                        ephemeral: true
+                    });
+                }
+
+                const modal = new ModalBuilder()
+                    .setCustomId('modal_temp_vc_create')
+                    .setTitle('Özel Ses Odası Oluştur');
+
+                const nameInput = new TextInputBuilder()
+                    .setCustomId('modal_temp_vc_name')
+                    .setLabel('Oda İsmini Yazın')
+                    .setPlaceholder(`Örn: ${interaction.user.username} Odası`)
+                    .setStyle(TextInputStyle.Short)
+                    .setMinLength(1)
+                    .setMaxLength(32)
+                    .setRequired(true);
+
+                modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
+                return interaction.showModal(modal).catch(err => {
+                    console.error('showModal hatası:', err.message);
+                });
+            }
+
             // --- CANLI RADYO BUTONLARI ---
             if (customId === 'btn_radio_stop') {
                 const voiceChannel = interaction.member?.voice?.channel;
@@ -5516,6 +5585,133 @@ client.on('interactionCreate', async interaction => {
         // 5. MODAL (FORM) ETKİLEŞİMLERİ (TICKET KURULUMU, TICKET AÇMA, YAYINCI EKLEME & TEMP VC)
         // ------------------------------------------------------------------------
         if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'modal_temp_vc_create') {
+                await interaction.deferReply({ ephemeral: true }).catch(() => { });
+
+                const rawName = interaction.fields.getTextInputValue('modal_temp_vc_name')?.trim();
+                const roomName = (rawName || `${interaction.user.username} Odası`).slice(0, 95);
+
+                const botMember = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+                const hasManage = botMember && (botMember.permissions.has(PermissionsBitField.Flags.ManageChannels) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
+                const hasMove = botMember && (botMember.permissions.has(PermissionsBitField.Flags.MoveMembers) || botMember.permissions.has(PermissionsBitField.Flags.Administrator));
+
+                if (!hasManage || !hasMove) {
+                    return safeReply(interaction, {
+                        content: '❌ Botun ses odası açabilmesi için **Kanalları Yönet** ve **Üyeleri Taşı** yetkisine sahip olması gerekir.'
+                    });
+                }
+
+                // Hedef Kategori Belirleme
+                let targetParent = null;
+                const configuredCatId = db[guildId]?.odaKategori;
+                if (configuredCatId) {
+                    const cat = interaction.guild.channels.cache.get(configuredCatId);
+                    if (cat && cat.type === ChannelType.GuildCategory) {
+                        const childCount = interaction.guild.channels.cache.filter(c => c.parentId === cat.id).size;
+                        if (childCount < 50) {
+                            targetParent = cat.id;
+                        }
+                    }
+                }
+
+                if (!targetParent && interaction.channel && interaction.channel.parentId) {
+                    const parentCat = interaction.guild.channels.cache.get(interaction.channel.parentId);
+                    if (parentCat && parentCat.type === ChannelType.GuildCategory) {
+                        const childCount = interaction.guild.channels.cache.filter(c => c.parentId === parentCat.id).size;
+                        if (childCount < 50) {
+                            targetParent = parentCat.id;
+                        }
+                    }
+                }
+
+                try {
+                    const channelOptions = {
+                        name: roomName,
+                        type: ChannelType.GuildVoice,
+                        permissionOverwrites: [
+                            {
+                                id: interaction.guild.id,
+                                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+                            },
+                            {
+                                id: interaction.member.id,
+                                allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
+                            },
+                            {
+                                id: client.user.id,
+                                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ReadMessageHistory]
+                            }
+                        ]
+                    };
+
+                    if (targetParent) {
+                        channelOptions.parent = targetParent;
+                    }
+
+                    const newChannel = await interaction.guild.channels.create(channelOptions);
+
+                    const roomData = {
+                        ownerId: interaction.member.id,
+                        locked: false,
+                        hidden: false,
+                        chatClosed: false,
+                        panelMsgId: null
+                    };
+
+                    if (!db[guildId].tempRooms) db[guildId].tempRooms = {};
+                    db[guildId].tempRooms[newChannel.id] = roomData;
+                    saveDB(db);
+
+                    let moved = false;
+                    if (interaction.member.voice && interaction.member.voice.channelId) {
+                        await interaction.member.voice.setChannel(newChannel).catch(() => { });
+                        moved = true;
+                    }
+
+                    if (moved) {
+                        await safeReply(interaction, {
+                            content: `✅ **${newChannel.name}** ses odanız başarıyla oluşturuldu ve odaya taşındınız! (<#${newChannel.id}>)`
+                        });
+                    } else {
+                        await safeReply(interaction, {
+                            content: `✅ **${newChannel.name}** ses odanız başarıyla oluşturuldu!\n👉 Odanıza katılmak için tıklayın: <#${newChannel.id}>\n*(Odaya 1 dakika içinde kimse girmezse boş kaldığı için otomatik silinir.)*`
+                        });
+                    }
+
+                    setTimeout(async () => {
+                        try {
+                            const panelMsg = await newChannel.send({
+                                content: `<@${interaction.member.id}>, oda kontrol paneliniz aşağıdadır:`,
+                                embeds: [buildTempVoiceEmbed(roomData)],
+                                components: buildTempVoiceComponents(roomData, false)
+                            });
+                            if (panelMsg) {
+                                const freshDb = getDB();
+                                ensureGuildDB(freshDb, guildId);
+                                if (freshDb[guildId].tempRooms && freshDb[guildId].tempRooms[newChannel.id]) {
+                                    freshDb[guildId].tempRooms[newChannel.id].panelMsgId = panelMsg.id;
+                                    saveDB(freshDb);
+                                }
+                            }
+                        } catch (sendErr) {
+                            console.error("Geçici oda paneli gönderilemedi:", sendErr);
+                        }
+                    }, 500);
+
+                    sendLog(interaction.guild, 'logSunucu', {
+                        title: 'Geçici Ses Odası Açıldı',
+                        desc: `**Oda:** <#${newChannel.id}> (\`${newChannel.name}\`)\n**Sahibi:** <@${interaction.member.id}>`,
+                        color: 0x57f287
+                    });
+                } catch (createErr) {
+                    console.error('Oda oluşturma hatası:', createErr);
+                    return safeReply(interaction, {
+                        content: `❌ Oda oluşturulurken hata meydana geldi: ${createErr.message}`
+                    });
+                }
+                return;
+            }
+
             if (interaction.customId === 'modal_start_cekilis') {
                 if (!isAdmin && !isYetkili) {
                     return interaction.reply({ content: '❌ Bu işlemi sadece **Yöneticiler ve Yetkililer** yapabilir.', ephemeral: true });
@@ -6130,11 +6326,7 @@ client.on('interactionCreate', async interaction => {
         addLiveLog(`❌ Etkileşim Hatası: ${err.message}`);
         console.error('Etkileşim Hatası:', err);
         try {
-            if (interaction.deferred) {
-                await interaction.editReply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.' }).catch(() => { });
-            } else if (!interaction.replied) {
-                await interaction.reply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.', ephemeral: true }).catch(() => { });
-            }
+            await safeReply(interaction, { content: 'İşlem sırasında beklenmeyen bir hata oluştu.', ephemeral: true });
         } catch (e) { }
     }
 });
