@@ -133,6 +133,52 @@ async function getAudioStreamForUrl(url) {
 // Render vb. bulut sunucularda botun aktif kalması ve canlı durum izleme HTTP sunucusu
 const serverPort = process.env.PORT ? process.env.PORT : 3000;
 const server = http.createServer((req, res) => {
+    // Discord REST ve Gateway tanı testi endpoint'i
+    if (req.url.startsWith('/test-discord')) {
+        (async () => {
+            const diag = {
+                timestamp: new Date().toISOString(),
+                wsStatus: client && client.ws ? client.ws.status : null,
+                fetchGateway: null,
+                restMe: null
+            };
+
+            if (process.env.TOKEN) {
+                try {
+                    const fetchRes = await fetch('https://discord.com/api/v10/gateway/bot', {
+                        headers: { Authorization: `Bot ${process.env.TOKEN.trim()}` },
+                        signal: AbortSignal.timeout(6000)
+                    });
+                    diag.fetchGateway = {
+                        status: fetchRes.status,
+                        statusText: fetchRes.statusText,
+                        body: await fetchRes.json()
+                    };
+                } catch (e) {
+                    diag.fetchGateway = { error: e.message };
+                }
+
+                try {
+                    const restRes = await fetch('https://discord.com/api/v10/users/@me', {
+                        headers: { Authorization: `Bot ${process.env.TOKEN.trim()}` },
+                        signal: AbortSignal.timeout(6000)
+                    });
+                    diag.restMe = {
+                        status: restRes.status,
+                        statusText: restRes.statusText,
+                        body: await restRes.json()
+                    };
+                } catch (e) {
+                    diag.restMe = { error: e.message };
+                }
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify(diag, null, 2));
+        })();
+        return;
+    }
+
     // Canlı test endpoint'i: ffmpeg ile radyo akış testini doğrudan çalıştırıp sonucu JSON verir
     if (req.url.startsWith('/test-radio')) {
         const u = new URL(req.url, 'http://localhost');
@@ -188,7 +234,7 @@ const server = http.createServer((req, res) => {
     const wsText = wsStatusMap[wsCode] || (wsCode !== null ? `Kod: ${wsCode}` : 'Bilinmiyor');
 
     const statusData = {
-        versiyon: 'v2.1.2',
+        versiyon: 'v2.1.7',
         durum: isBotReady ? 'ONLINE (Çevrimiçi)' : 'BEKLENİYOR / KESİK',
         botIsmi: client && client.user ? client.user.tag : 'Giriş Yapılmadı',
         discordWebsocketDurumu: wsText,
@@ -247,6 +293,12 @@ client.on('debug', msg => {
     // Heartbeat ve gecikme mesajları logları doldurmasın
     if (msg.includes('Heartbeat') || msg.includes('Latency') || msg.includes('Swept')) return;
     addLiveLog(`[DEBUG] ${msg}`);
+});
+client.rest.on('rateLimited', info => {
+    addLiveLog(`⚠️ [REST RATE LIMIT]: ${info.method} ${info.route} - ${info.timeToReset}ms beklemede (Global: ${info.global})`);
+});
+client.rest.on('invalidRequestWarning', info => {
+    addLiveLog(`⚠️ [REST GEÇERSİZ İSTEK]: Kalan hak: ${info.remainingTime}ms, Sayaç: ${info.count}`);
 });
 
 // ============================================================================
@@ -3157,10 +3209,22 @@ client.once('ready', async () => {
             await client.application.commands.set(commands);
             addLiveLog('✅ [ROZET]: Global slash komutları kaydedildi ("Supports Commands" {/} rozeti tetiklendi).');
         }
-    } catch (e) { }
+    } catch (e) {
+        addLiveLog(`⚠️ [KOMUT KAYIT UYARISI]: ${e.message}`);
+    }
 
+    // Çift komut oluşmaması için sunucuya özel komutları temizle
     for (const guild of client.guilds.cache.values()) {
-        await guild.commands.set(commands).catch(() => { });
+        guild.commands.set([]).catch(() => { });
+    }
+});
+
+// Sunucuya yeni eklendiğinde izinli değilse derhal ayrıl
+client.on('guildCreate', guild => {
+    const ALLOWED_GUILDS = ['977315836714971187', '825075341629718589', '1538928601951633599'];
+    if (!ALLOWED_GUILDS.includes(guild.id)) {
+        addLiveLog(`[İZİNSİZ SUNUCU]: ${guild.name} (${guild.id}) ayrılınıyor...`);
+        guild.leave().catch(() => { });
     }
 });
 
@@ -3190,22 +3254,23 @@ client.on('interactionCreate', async interaction => {
         // 1. SLASH KOMUTLARI (/panel, /yaz, /hapis, /af, /sil)
         // ------------------------------------------------------------------------
         if (interaction.isChatInputCommand()) {
+            await interaction.deferReply({ ephemeral: true }).catch(() => { });
             const { commandName } = interaction;
 
             if (commandName === 'panel') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.', ephemeral: true });
-                return interaction.reply({ ...buildHomeDashboard(interaction.guild), ephemeral: true });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu kontrol panelini sadece Sunucu Yöneticileri açabilir.' });
+                return interaction.editReply({ ...buildHomeDashboard(interaction.guild) });
             }
 
             if (commandName === 'yaz') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const mesaj = interaction.options.getString('mesaj');
                 await interaction.channel.send(mesaj);
-                return interaction.reply({ content: 'Mesaj başarıyla kanala gönderildi.', ephemeral: true });
+                return interaction.editReply({ content: 'Mesaj başarıyla kanala gönderildi.' });
             }
 
             if (['hapis', 'af', 'sil'].includes(commandName)) {
-                if (!isAdmin && !isYetkili) return interaction.reply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.', ephemeral: true });
+                if (!isAdmin && !isYetkili) return interaction.editReply({ content: 'Bu komutu kullanmak için Yetkili Rolüne veya Yönetici iznine sahip olmalısınız.' });
 
                 if (commandName === 'hapis') {
                     const user = interaction.options.getUser('kullanici');
@@ -3214,8 +3279,8 @@ client.on('interactionCreate', async interaction => {
                     const sebep = interaction.options.getString('sebep');
                     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
-                    if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
-                    if (!member.manageable) return interaction.reply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.', ephemeral: true });
+                    if (!member) return interaction.editReply({ content: 'Kullanıcı sunucuda bulunamadı.' });
+                    if (!member.manageable) return interaction.editReply({ content: 'Bu kullanıcının rolü benden yüksek veya eşit olduğu için işlem yapılamıyor.' });
 
                     let sureMs = 0;
                     if (kavram === 'saniye') sureMs = sayi * 1000;
@@ -3261,7 +3326,7 @@ client.on('interactionCreate', async interaction => {
                         thumbnail: user.displayAvatarURL()
                     });
 
-                    return interaction.reply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.`, ephemeral: true });
+                    return interaction.editReply({ content: `<@${user.id}> adlı kullanıcıya **${sayi} ${kavram}** uzaklaştırma cezası uygulandı.` });
                 }
 
                 if (commandName === 'af') {
@@ -3276,32 +3341,31 @@ client.on('interactionCreate', async interaction => {
                                 if (db[guildId].sicilRol) member.roles.remove(db[guildId].sicilRol).catch(() => { });
                             }
                             sendLog(interaction.guild, 'logCeza', { title: 'Ceza ve Sicil Affı', desc: `**Yetkili:** <@${interaction.user.id}>\n**Affedilen:** <@${user.id}>\nKullanıcının tüm ceza ve sicil kayıtları temizlendi.`, color: 0x57f287 });
-                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.`, ephemeral: true });
+                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının cezası kaldırıldı ve sicili temizlendi.` });
                         } else {
-                            return interaction.reply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.`, ephemeral: true });
+                            return interaction.editReply({ content: `**${user.tag}** adlı kullanıcının aktif bir ceza veya sicil kaydı bulunmuyor.` });
                         }
                     } else {
-                        if (!isAdmin) return interaction.reply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.', ephemeral: true });
+                        if (!isAdmin) return interaction.editReply({ content: 'Genel af işlemini sadece Sunucu Yöneticileri uygulayabilir.' });
                         db[guildId].users = {};
                         saveDB(db);
                         sendLog(interaction.guild, 'logCeza', { title: 'Genel Af Uygulandı', desc: `**Yetkili:** <@${interaction.user.id}>\nSunucudaki tüm üyelerin ceza ve sicil kayıtları sıfırlandı.`, color: 0x57f287 });
-                        return interaction.reply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.', ephemeral: true });
+                        return interaction.editReply({ content: 'Sunucudaki tüm sicil ve ceza kayıtları sıfırlandı.' });
                     }
                 }
 
                 if (commandName === 'sil') {
                     const miktar = interaction.options.getInteger('miktar');
-                    if (miktar < 1 || miktar > 100) return interaction.reply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.', ephemeral: true });
+                    if (miktar < 1 || miktar > 100) return interaction.editReply({ content: 'Lütfen 1 ile 100 arasında bir sayı girin.' });
                     const deleted = await interaction.channel.bulkDelete(miktar, true).catch(() => null);
                     const count = deleted ? deleted.size : 0;
                     sendLog(interaction.guild, 'logMesaj', { title: 'Toplu Mesaj Silme (/sil)', desc: `**Yetkili:** <@${interaction.user.id}>\n**Kanal:** <#${interaction.channel.id}>\n**Miktar:** ${count} adet mesaj silindi.`, color: 0xed4245 });
-                    return interaction.reply({ content: `**${count}** adet mesaj silindi.`, ephemeral: true });
+                    return interaction.editReply({ content: `**${count}** adet mesaj silindi.` });
                 }
             }
 
             if (commandName === 'durum') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const yeniDurum = interaction.options.getString('mesaj')?.trim() || '';
 
                 if (yeniDurum.length > 0) {
@@ -3326,18 +3390,16 @@ client.on('interactionCreate', async interaction => {
             if (commandName === 'rank' || commandName === 'profil') {
                 const targetUser = interaction.options.getUser('kullanici') || interaction.user;
                 ensureGuildDB(db, guildId);
-                return interaction.reply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
+                return interaction.editReply(buildUserProfileCard(targetUser, interaction.guild, db[guildId]));
             }
 
             if (commandName === 'siralama' || commandName === 'top') {
-                await interaction.deferReply().catch(() => { });
                 ensureGuildDB(db, guildId);
                 const view = buildLeaderboardView(interaction.guild, db[guildId], 'xp', interaction.user.id);
                 return interaction.editReply(view).catch(() => { });
             }
 
             if (commandName === 'top-invite') {
-                await interaction.deferReply({ ephemeral: true }).catch(() => { });
                 const isAdmin = Boolean(interaction.memberPermissions && interaction.memberPermissions.has(PermissionsBitField.Flags.Administrator));
                 if (!isAdmin) {
                     return interaction.editReply({ content: '❌ Bu komutu sadece **Sunucu Yöneticileri** kullanabilir.' });
@@ -3349,15 +3411,13 @@ client.on('interactionCreate', async interaction => {
 
             if (commandName === 'cekilis') {
                 if (!isAdmin && !isYetkili) {
-                    return interaction.reply({ content: '❌ Çekiliş komutlarını sadece **Yöneticiler ve Yetkililer** kullanabilir.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ Çekiliş komutlarını sadece **Yöneticiler ve Yetkililer** kullanabilir.' });
                 }
 
                 const sub = interaction.options.getSubcommand();
                 ensureGuildDB(db, guildId);
 
                 if (sub === 'baslat') {
-                    await interaction.deferReply({ ephemeral: true }).catch(() => { });
-
                     const prize = interaction.options.getString('odul');
                     const durationStr = interaction.options.getString('sure');
                     let winnersCount = interaction.options.getInteger('kazanan') || 1;
@@ -3435,7 +3495,6 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 if (sub === 'bitir') {
-                    await interaction.deferReply({ ephemeral: true }).catch(() => { });
                     let msgId = interaction.options.getString('mesaj_id')?.trim();
                     if (!msgId) {
                         const activeList = Object.values(db[guildId].giveaways || {}).filter(g => !g.ended);
@@ -3454,7 +3513,6 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 if (sub === 'reroll') {
-                    await interaction.deferReply({ ephemeral: true }).catch(() => { });
                     let msgId = interaction.options.getString('mesaj_id')?.trim();
                     if (!msgId) {
                         const endedList = Object.values(db[guildId].giveaways || {}).filter(g => g.ended && !g.cancelled);
@@ -3470,7 +3528,6 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 if (sub === 'iptal') {
-                    await interaction.deferReply({ ephemeral: true }).catch(() => { });
                     let msgId = interaction.options.getString('mesaj_id')?.trim();
                     if (!msgId) {
                         const activeList = Object.values(db[guildId].giveaways || {}).filter(g => !g.ended);
@@ -3489,7 +3546,6 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 if (sub === 'liste') {
-                    await interaction.deferReply({ ephemeral: true }).catch(() => { });
                     const gwList = Object.values(db[guildId].giveaways || {}).filter(g => !g.ended);
                     if (gwList.length === 0) {
                         return interaction.editReply({ content: 'ℹ️ Sunucuda şu an devam eden aktif bir çekiliş yok.' });
@@ -3501,18 +3557,17 @@ client.on('interactionCreate', async interaction => {
 
             if (commandName === 'butonrol') {
                 if (!isAdmin && !isYetkili) {
-                    return interaction.reply({ content: '❌ Buton rol komutlarını sadece **Yöneticiler ve Yetkililer** kullanabilir.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ Buton rol komutlarını sadece **Yöneticiler ve Yetkililer** kullanabilir.' });
                 }
 
                 const sub = interaction.options.getSubcommand();
                 ensureGuildDB(db, guildId);
 
                 if (sub === 'liste') {
-                    return interaction.reply({ ...buildButtonRoleDashboard(interaction.guild, db[guildId]), ephemeral: true });
+                    return interaction.editReply({ ...buildButtonRoleDashboard(interaction.guild, db[guildId]) });
                 }
 
                 if (sub === 'kur') {
-                    await interaction.deferReply({ ephemeral: true }).catch(() => { });
                     const targetChannel = interaction.options.getChannel('kanal');
                     if (!targetChannel || !targetChannel.isTextBased()) {
                         return interaction.editReply({ content: '❌ Lütfen geçerli bir metin veya duyuru kanalı seçin.' });
@@ -3677,7 +3732,7 @@ client.on('interactionCreate', async interaction => {
 
             if (commandName === 'market') {
                 ensureGuildDB(db, guildId);
-                return interaction.reply(buildMarketView(interaction.guild, db[guildId], interaction.user));
+                return interaction.editReply(buildMarketView(interaction.guild, db[guildId], interaction.user));
             }
 
             if (commandName === 'gunluk') {
@@ -3696,9 +3751,8 @@ client.on('interactionCreate', async interaction => {
                     const remainingMs = cooldown - (now - uData.lastDaily);
                     const remHours = Math.floor(remainingMs / (1000 * 60 * 60));
                     const remMins = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-                    return interaction.reply({
-                        content: `⏳ Günlük papel ödülünü zaten aldınız! Tekrar alabilmek için **${remHours} saat ${remMins} dakika** beklemelisiniz. *(Günlük papel alımı günde 1 adetle sınırlıdır)*`,
-                        ephemeral: true
+                    return interaction.editReply({
+                        content: `⏳ Günlük papel ödülünü zaten aldınız! Tekrar alabilmek için **${remHours} saat ${remMins} dakika** beklemelisiniz. *(Günlük papel alımı günde 1 adetle sınırlıdır)*`
                     });
                 }
 
@@ -3706,22 +3760,21 @@ client.on('interactionCreate', async interaction => {
                 uData.papel += 1;
                 saveDB(db);
 
-                return interaction.reply({
-                    content: `🎉 Tebrikler! 24 saatlik günlük **1 Papel** 💵 ödülünüzü aldınız.\nGüncel Bakiyeniz: **${uData.papel} Papel**`,
-                    ephemeral: true
+                return interaction.editReply({
+                    content: `🎉 Tebrikler! 24 saatlik günlük **1 Papel** 💵 ödülünüzü aldınız.\nGüncel Bakiyeniz: **${uData.papel} Papel**`
                 });
             }
 
             if (commandName === 'yazitura') {
                 ensureGuildDB(db, guildId);
                 if (db[guildId].gamesEnabled === false) {
-                    return interaction.reply({ content: 'Bu sunucuda kumar ve şans oyunları yönetici tarafından kapatılmıştır.', ephemeral: true });
+                    return interaction.editReply({ content: 'Bu sunucuda kumar ve şans oyunları yönetici tarafından kapatılmıştır.' });
                 }
 
                 const miktar = interaction.options.getInteger('miktar');
                 const secim = interaction.options.getString('secim');
 
-                if (miktar < 1) return interaction.reply({ content: 'Bahis miktarı en az **1 Papel** olmalıdır.', ephemeral: true });
+                if (miktar < 1) return interaction.editReply({ content: 'Bahis miktarı en az **1 Papel** olmalıdır.' });
 
                 if (!db[guildId].users[interaction.user.id]) {
                     db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
@@ -3730,7 +3783,7 @@ client.on('interactionCreate', async interaction => {
                 if (uData.papel === undefined) uData.papel = 0;
 
                 if (uData.papel < miktar) {
-                    return interaction.reply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**.`, ephemeral: true });
+                    return interaction.editReply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**.` });
                 }
 
                 const roll = Math.random() * 100;
@@ -3758,15 +3811,13 @@ client.on('interactionCreate', async interaction => {
                         const kazanc = miktar * 25;
                         uData.papel += kazanc;
                         saveDB(db);
-                        return interaction.reply({
-                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙⚡\nTahmininiz: **${secimText}**\n\n🎉 **İNANILMAZ ŞANS!** Paranın dik duracağını doğru tahmin ettiniz!\n🔥 Bahsinizin tam **25 katı** ödendi: **+${kazanc.toLocaleString('tr-TR')} Papel**!\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
-                            ephemeral: true
+                        return interaction.editReply({
+                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙⚡\nTahmininiz: **${secimText}**\n\n🎉 **İNANILMAZ ŞANS!** Paranın dik duracağını doğru tahmin ettiniz!\n🔥 Bahsinizin tam **25 katı** ödendi: **+${kazanc.toLocaleString('tr-TR')} Papel**!\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`
                         });
                     } else {
                         // Dik geldi ama oyuncu yazı veya tura seçmişti: Kasa kazanmasın, bahis iade!
-                        return interaction.reply({
-                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙\nTahmininiz: **${secimText}**\n\n⚖️ **Kasa Kazanamadı (Berabere)!** Para dik durduğu için kasa kazanamaz; **${miktar.toLocaleString('tr-TR')} Papel** bahsiniz iade edildi.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
-                            ephemeral: true
+                        return interaction.editReply({
+                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙\nTahmininiz: **${secimText}**\n\n⚖️ **Kasa Kazanamadı (Berabere)!** Para dik durduğu için kasa kazanamaz; **${miktar.toLocaleString('tr-TR')} Papel** bahsiniz iade edildi.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`
                         });
                     }
                 } else {
@@ -3774,16 +3825,14 @@ client.on('interactionCreate', async interaction => {
                     if (secim === outcome) {
                         uData.papel += miktar;
                         saveDB(db);
-                        return interaction.reply({
-                            content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n🎉 **Tebrikler, kazandınız!** +${miktar.toLocaleString('tr-TR')} Papel kazandınız.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
-                            ephemeral: true
+                        return interaction.editReply({
+                            content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n🎉 **Tebrikler, kazandınız!** +${miktar.toLocaleString('tr-TR')} Papel kazandınız.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`
                         });
                     } else {
                         uData.papel -= miktar;
                         saveDB(db);
-                        return interaction.reply({
-                            content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n💀 **Maalesef kaybettiniz!** -${miktar.toLocaleString('tr-TR')} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
-                            ephemeral: true
+                        return interaction.editReply({
+                            content: `🪙 **Yazı-Tura Sonucu:** ${outcomeText}\nTahmininiz: **${secimText}**\n\n💀 **Maalesef kaybettiniz!** -${miktar.toLocaleString('tr-TR')} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`
                         });
                     }
                 }
@@ -3792,11 +3841,11 @@ client.on('interactionCreate', async interaction => {
             if (commandName === 'slot') {
                 ensureGuildDB(db, guildId);
                 if (db[guildId].gamesEnabled === false) {
-                    return interaction.reply({ content: 'Bu sunucuda kumar ve şans oyunları yönetici tarafından kapatılmıştır.', ephemeral: true });
+                    return interaction.editReply({ content: 'Bu sunucuda kumar ve şans oyunları yönetici tarafından kapatılmıştır.' });
                 }
 
                 const miktar = interaction.options.getInteger('miktar');
-                if (miktar < 1) return interaction.reply({ content: 'Bahis miktarı en az **1 Papel** olmalıdır.', ephemeral: true });
+                if (miktar < 1) return interaction.editReply({ content: 'Bahis miktarı en az **1 Papel** olmalıdır.' });
 
                 if (!db[guildId].users[interaction.user.id]) {
                     db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
@@ -3805,7 +3854,7 @@ client.on('interactionCreate', async interaction => {
                 if (uData.papel === undefined) uData.papel = 0;
 
                 if (uData.papel < miktar) {
-                    return interaction.reply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel} Papel**.`, ephemeral: true });
+                    return interaction.editReply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel} Papel**.` });
                 }
 
                 const symbols = ['🍒', '🍋', '🍇', '🔔', '💎', '7️⃣'];
@@ -3836,25 +3885,23 @@ client.on('interactionCreate', async interaction => {
                     const netKar = Math.max(1, kazanilan - miktar);
                     uData.papel += netKar;
                     saveDB(db);
-                    return interaction.reply({
-                        content: `🎰 **Slot Makinesi Çevrildi:**\n\`\`\`\n${slotVisual}\n\`\`\`\n🎉 **Tebrikler! (${winMultiplier}x Kazanç)**\n+${netKar} Papel kazandınız!\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
-                        ephemeral: true
+                    return interaction.editReply({
+                        content: `🎰 **Slot Makinesi Çevrildi:**\n\`\`\`\n${slotVisual}\n\`\`\`\n🎉 **Tebrikler! (${winMultiplier}x Kazanç)**\n+${netKar} Papel kazandınız!\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`
                     });
                 } else {
                     uData.papel -= miktar;
                     saveDB(db);
-                    return interaction.reply({
-                        content: `🎰 **Slot Makinesi Çevrildi:**\n\`\`\`\n${slotVisual}\n\`\`\`\n💀 **Maalesef kaybettiniz!**\n-${miktar} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`,
-                        ephemeral: true
+                    return interaction.editReply({
+                        content: `🎰 **Slot Makinesi Çevrildi:**\n\`\`\`\n${slotVisual}\n\`\`\`\n💀 **Maalesef kaybettiniz!**\n-${miktar} Papel kaybettiniz.\n💵 Güncel Bakiyeniz: **${uData.papel} Papel**`
                     });
                 }
             }
 
             if (commandName === 'papel-ver') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const targetUser = interaction.options.getUser('kullanici');
                 const miktar = interaction.options.getInteger('miktar');
-                if (miktar < 1) return interaction.reply({ content: 'Lütfen en az 1 Papel girin.', ephemeral: true });
+                if (miktar < 1) return interaction.editReply({ content: 'Lütfen en az 1 Papel girin.' });
 
                 ensureGuildDB(db, guildId);
                 if (!db[guildId].users[targetUser.id]) {
@@ -3867,17 +3914,16 @@ client.on('interactionCreate', async interaction => {
                 saveDB(db);
 
                 addLiveLog(`[PAPEL VERİLDİ] ${interaction.user.tag} -> ${targetUser.tag}: +${miktar} Papel`);
-                return interaction.reply({
-                    content: `✅ <@${targetUser.id}> adlı kullanıcıya **+${miktar.toLocaleString('tr-TR')} Papel** 💵 hediye edildi.\nKullanıcının Yeni Bakiyesi: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
-                    ephemeral: true
+                return interaction.editReply({
+                    content: `✅ <@${targetUser.id}> adlı kullanıcıya **+${miktar.toLocaleString('tr-TR')} Papel** 💵 hediye edildi.\nKullanıcının Yeni Bakiyesi: **${uData.papel.toLocaleString('tr-TR')} Papel**`
                 });
             }
 
             if (commandName === 'papel-al') {
-                if (!isAdmin) return interaction.reply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.', ephemeral: true });
+                if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const targetUser = interaction.options.getUser('kullanici');
                 const miktar = interaction.options.getInteger('miktar');
-                if (miktar < 1) return interaction.reply({ content: 'Lütfen en az 1 Papel girin.', ephemeral: true });
+                if (miktar < 1) return interaction.editReply({ content: 'Lütfen en az 1 Papel girin.' });
 
                 ensureGuildDB(db, guildId);
                 if (!db[guildId].users[targetUser.id]) {
@@ -3890,9 +3936,8 @@ client.on('interactionCreate', async interaction => {
                 saveDB(db);
 
                 addLiveLog(`[PAPEL KESİLDİ] ${interaction.user.tag} -> ${targetUser.tag}: -${miktar} Papel`);
-                return interaction.reply({
-                    content: `✅ <@${targetUser.id}> adlı kullanıcıdan **-${miktar.toLocaleString('tr-TR')} Papel** 💵 kesildi.\nKullanıcının Kalan Bakiyesi: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
-                    ephemeral: true
+                return interaction.editReply({
+                    content: `✅ <@${targetUser.id}> adlı kullanıcıdan **-${miktar.toLocaleString('tr-TR')} Papel** 💵 kesildi.\nKullanıcının Kalan Bakiyesi: **${uData.papel.toLocaleString('tr-TR')} Papel**`
                 });
             }
 
@@ -3902,26 +3947,23 @@ client.on('interactionCreate', async interaction => {
 
                 if (islem === 'kapat') {
                     if (!radioPlayers.has(guildId)) {
-                        return interaction.reply({
-                            content: '📻 Zaten şu anda bu sunucuda çalan aktif bir radyo yayını bulunmuyor.',
-                            ephemeral: true
+                        return interaction.editReply({
+                            content: '📻 Zaten şu anda bu sunucuda çalan aktif bir radyo yayını bulunmuyor.'
                         });
                     }
                     stopRadio(guildId);
-                    return interaction.reply({
-                        content: '⏹️ Canlı radyo yayını sonlandırıldı ve ses odasından ayrılındı.',
-                        ephemeral: false
+                    return interaction.editReply({
+                        content: '⏹️ Canlı radyo yayını sonlandırıldı ve ses odasından ayrılındı.'
                     });
                 }
 
                 if (!voiceChannel) {
-                    return interaction.reply({
-                        content: '⚠️ Radyo dinleyebilmek için lütfen önce herhangi bir **ses kanalına** katılın.',
-                        ephemeral: true
+                    return interaction.editReply({
+                        content: '⚠️ Radyo dinleyebilmek için lütfen önce herhangi bir **ses kanalına** katılın.'
                     });
                 }
 
-                return interaction.reply(buildRadioView(interaction.guild, voiceChannel.id));
+                return interaction.editReply(buildRadioView(interaction.guild, voiceChannel.id));
             }
         }
 
@@ -6069,9 +6111,13 @@ client.on('interactionCreate', async interaction => {
     } catch (err) {
         addLiveLog(`❌ Etkileşim Hatası: ${err.message}`);
         console.error('Etkileşim Hatası:', err);
-        if (!interaction.replied && !interaction.deferred) {
-            interaction.reply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.', ephemeral: true }).catch(() => { });
-        }
+        try {
+            if (interaction.deferred) {
+                await interaction.editReply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.' }).catch(() => { });
+            } else if (!interaction.replied) {
+                await interaction.reply({ content: 'İşlem sırasında beklenmeyen bir hata oluştu.', ephemeral: true }).catch(() => { });
+            }
+        } catch (e) { }
     }
 });
 
@@ -6387,7 +6433,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
     }
 
-    // GEÇİCİ ODA OLUŞTURMA (15 Saniye Cooldown Korumalı)
+    // GEÇİCİ ODA OLUŞTURMA (Güvenli Cooldown Korumalı)
     if (db[guildId].odaKanal && db[guildId].odaKategori) {
         if (newState.channelId === db[guildId].odaKanal && newState.member && !newState.member.user.bot) {
             const member = newState.member;
@@ -6395,8 +6441,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             const cdKey = `${guildId}-${member.id}`;
             const lastCreated = vcCooldownMap.get(cdKey) || 0;
 
-            if (now - lastCreated < 15000) {
-                await member.voice.disconnect().catch(() => { });
+            if (now - lastCreated < 2500) {
                 return;
             }
             vcCooldownMap.set(cdKey, now);
