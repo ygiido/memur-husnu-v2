@@ -3264,7 +3264,7 @@ client.once('ready', async () => {
                     name: 'secim', type: 3, description: 'Tahmininiz', required: true, choices: [
                         { name: 'Yazı', value: 'yazi' },
                         { name: 'Tura', value: 'tura' },
-                        { name: 'Dik (%2 Şans - 50x Kazanç!)', value: 'dik' }
+                        { name: 'Dik (%2 Şans - 25x Kazanç!)', value: 'dik' }
                     ]
                 }
             ]
@@ -4108,12 +4108,12 @@ client.on('interactionCreate', async interaction => {
 
                 if (outcome === 'dik') {
                     if (secim === 'dik') {
-                        // Dik bildi -> Yapılan bahsin 50 katı kazanç
-                        const kazanc = miktar * 50;
+                        // Dik bildi -> Yapılan bahsin 25 katı kazanç
+                        const kazanc = miktar * 25;
                         uData.papel += kazanc;
                         saveDB(db);
                         return interaction.editReply({
-                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙⚡\nTahmininiz: **${secimText}**\n\n🎉 **İNANILMAZ ŞANS!** Paranın dik duracağını doğru tahmin ettiniz!\n🔥 Bahsinizin tam **50 katı** ödendi: **+${kazanc.toLocaleString('tr-TR')} Papel**!\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`
+                            content: `🪙 **Yazı-Tura Sonucu:** Para **DİK** geldi! 🪙⚡\nTahmininiz: **${secimText}**\n\n🎉 **İNANILMAZ ŞANS!** Paranın dik duracağını doğru tahmin ettiniz!\n🔥 Bahsinizin tam **25 katı** ödendi: **+${kazanc.toLocaleString('tr-TR')} Papel**!\n💵 Güncel Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`
                         });
                     } else {
                         // Dik geldi ama oyuncu yazı veya tura seçmişti: Kasa kazanmasın, bahis iade!
