@@ -1057,6 +1057,147 @@ function formatDurationRemaining(ms) {
     return `${mins} dakika`;
 }
 
+// ============================================================================
+// BLACKJACK (21) OYUN MOTORU VE KART YAPISI
+// ============================================================================
+const activeBlackjackGames = new Map();
+
+const BJ_SUITS = ['♠️', '♥️', '♦️', '♣️'];
+const BJ_VALUES = [
+    { name: '2', val: 2 },
+    { name: '3', val: 3 },
+    { name: '4', val: 4 },
+    { name: '5', val: 5 },
+    { name: '6', val: 6 },
+    { name: '7', val: 7 },
+    { name: '8', val: 8 },
+    { name: '9', val: 9 },
+    { name: '10', val: 10 },
+    { name: 'J', val: 10 },
+    { name: 'Q', val: 10 },
+    { name: 'K', val: 10 },
+    { name: 'A', val: 11 }
+];
+
+function createBlackjackDeck() {
+    const deck = [];
+    for (const suit of BJ_SUITS) {
+        for (const v of BJ_VALUES) {
+            deck.push({ suit, name: v.name, val: v.val, label: `${suit} ${v.name}` });
+        }
+    }
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+}
+
+function calculateHand(cards) {
+    let sum = 0;
+    let aceCount = 0;
+    for (const c of cards) {
+        sum += c.val;
+        if (c.name === 'A') aceCount++;
+    }
+    while (sum > 21 && aceCount > 0) {
+        sum -= 10;
+        aceCount--;
+    }
+    return sum;
+}
+
+function formatBlackjackHand(cards, hideSecond = false) {
+    if (hideSecond) {
+        return `\`${cards[0].label}\` \`🂠 [Gizli Kart]\``;
+    }
+    return cards.map(c => `\`${c.label}\``).join(' ');
+}
+
+function buildBlackjackEmbed(game, statusText, isEnded = false, color = 0x5865F2) {
+    const pTotal = calculateHand(game.playerCards);
+    const dTotal = isEnded ? calculateHand(game.dealerCards) : null;
+    const dHandStr = formatBlackjackHand(game.dealerCards, !isEnded);
+
+    const embed = new EmbedBuilder()
+        .setTitle('🃏 Blackjack (21) Masası')
+        .setColor(color)
+        .addFields(
+            {
+                name: `🤖 Krupiye (Bot) ${isEnded ? `[${dTotal}]` : ''}`,
+                value: dHandStr,
+                inline: false
+            },
+            {
+                name: `👤 ${game.userTag} [${pTotal}]`,
+                value: formatBlackjackHand(game.playerCards),
+                inline: false
+            }
+        )
+        .setFooter({ text: `Bahis: ${game.bet.toLocaleString('tr-TR')} Papel • Memur Hüsnü Casino` })
+        .setTimestamp();
+
+    if (statusText) {
+        embed.setDescription(statusText);
+    }
+    return embed;
+}
+
+function buildBlackjackButtons(canDouble = false) {
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('btn_bj_hit')
+            .setLabel('Kart Çek (Hit)')
+            .setEmoji('🃏')
+            .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+            .setCustomId('btn_bj_stand')
+            .setLabel('Kal (Stand)')
+            .setEmoji('🛑')
+            .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+            .setCustomId('btn_bj_double')
+            .setLabel('İkiye Katla (2x)')
+            .setEmoji('✖️')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(!canDouble)
+    );
+    return [row];
+}
+
+function resolveBlackjackDealer(game, db, guildId, uData) {
+    while (calculateHand(game.dealerCards) < 17) {
+        game.dealerCards.push(game.deck.pop());
+    }
+
+    const pTotal = calculateHand(game.playerCards);
+    const dTotal = calculateHand(game.dealerCards);
+
+    let statusText = '';
+    let color = 0x57F287;
+    if (dTotal > 21) {
+        const win = game.bet * 2;
+        uData.papel += win;
+        statusText = `🎉 **TEBRİKLER, KAZANDINIZ!**\nKrupiye 21'i aştı ve battı (${dTotal})!\n💵 Kazanç: **+${game.bet.toLocaleString('tr-TR')} Papel**\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`;
+        color = 0x57F287;
+    } else if (pTotal > dTotal) {
+        const win = game.bet * 2;
+        uData.papel += win;
+        statusText = `🎉 **TEBRİKLER, KAZANDINIZ!**\nEliniz (${pTotal}) krupiyeden (${dTotal}) daha yüksek!\n💵 Kazanç: **+${game.bet.toLocaleString('tr-TR')} Papel**\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`;
+        color = 0x57F287;
+    } else if (dTotal > pTotal) {
+        statusText = `💀 **KAYBETTİNİZ!**\nKrupiyenin eli (${dTotal}) sizinkinden (${pTotal}) yüksek.\n💸 Kayıp: **-${game.bet.toLocaleString('tr-TR')} Papel**\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`;
+        color = 0xED4245;
+    } else {
+        uData.papel += game.bet;
+        statusText = `🤝 **BERABERE (PUSH)!**\nPuanlar eşit (${pTotal} - ${dTotal}). Bahsiniz iade edildi.\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`;
+        color = 0x95A5A6;
+    }
+
+    saveDB(db);
+    return { embed: buildBlackjackEmbed(game, statusText, true, color) };
+}
+
 const voiceSecondsMap = new Map();
 
 // Ses Odası XP ve Papel Kazanım Döngüsü + Süreli Rol Kontrolü (Her 30 saniyede bir kontrol eder)
@@ -1714,7 +1855,7 @@ function buildEkonomiDashboard(guildDb) {
         .addFields(
             { name: '🎖️ 7 Kademeli Seviye Rol Ödülleri', value: levelFields, inline: false },
             { name: '🛒 Satışta Olan Market Rolleri', value: marketText, inline: false },
-            { name: '⚙️ Sistem Durumu', value: `XP ve Seviye Kazanımı: **${guildDb.xpEnabled !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**\nKumar Oyunları (/slot, /yazitura): **${guildDb.gamesEnabled !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**`, inline: false }
+            { name: '⚙️ Sistem Durumu', value: `XP ve Seviye Kazanımı: **${guildDb.xpEnabled !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**\nKumar Oyunları (/slot, /yazitura, /blackjack): **${guildDb.gamesEnabled !== false ? '🟢 AÇIK' : '🔴 KAPALI'}**`, inline: false }
         )
         .setTimestamp();
 
@@ -3136,6 +3277,20 @@ client.once('ready', async () => {
             ]
         },
         {
+            name: 'blackjack',
+            description: 'Krupiyeye (bot) karşı Papel bahsiyle Blackjack (21) oynarsınız.',
+            options: [
+                { name: 'miktar', type: 4, description: 'Bahse gireceğiniz Papel miktarı', required: true }
+            ]
+        },
+        {
+            name: 'bj',
+            description: 'Blackjack (21) hızlı başlatma komutu.',
+            options: [
+                { name: 'miktar', type: 4, description: 'Bahse gireceğiniz Papel miktarı', required: true }
+            ]
+        },
+        {
             name: 'papel-ver',
             description: 'Belirtilen kullanıcıya Papel hediye eder (Sadece Yöneticiler).',
             default_member_permissions: PermissionsBitField.Flags.Administrator.toString(),
@@ -4040,6 +4195,101 @@ client.on('interactionCreate', async interaction => {
                 }
             }
 
+            if (['blackjack', 'bj'].includes(commandName)) {
+                ensureGuildDB(db, guildId);
+                if (db[guildId].gamesEnabled === false) {
+                    return interaction.editReply({ content: 'Bu sunucuda kumar ve şans oyunları yönetici tarafından kapatılmıştır.' });
+                }
+
+                const miktar = interaction.options.getInteger('miktar');
+                if (miktar < 1) return interaction.editReply({ content: 'Bahis miktarı en az **1 Papel** olmalıdır.' });
+
+                if (!db[guildId].users[interaction.user.id]) {
+                    db[guildId].users[interaction.user.id] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0 };
+                }
+                const uData = db[guildId].users[interaction.user.id];
+                if (uData.papel === undefined) uData.papel = 0;
+
+                if (uData.papel < miktar) {
+                    return interaction.editReply({ content: `❌ Yetersiz bakiye! Mevcut bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**.` });
+                }
+
+                if (activeBlackjackGames.has(interaction.user.id)) {
+                    return interaction.editReply({ content: '❌ Zaten devam eden bir Blackjack oyununuz var! Lütfen önce mevcut oyunu tamamlayın.' });
+                }
+
+                uData.papel -= miktar;
+                saveDB(db);
+
+                const deck = createBlackjackDeck();
+                const playerCards = [deck.pop(), deck.pop()];
+                const dealerCards = [deck.pop(), deck.pop()];
+                const pTotal = calculateHand(playerCards);
+                const dTotal = calculateHand(dealerCards);
+
+                const game = {
+                    userId: interaction.user.id,
+                    userTag: interaction.user.username,
+                    guildId,
+                    bet: miktar,
+                    deck,
+                    playerCards,
+                    dealerCards,
+                    message: null,
+                    messageId: null,
+                    timeout: null,
+                    isProcessing: false
+                };
+
+                // Doğal Blackjack Kontrolü (Natural 21)
+                if (pTotal === 21) {
+                    if (dTotal === 21) {
+                        uData.papel += miktar;
+                        saveDB(db);
+                        const embed = buildBlackjackEmbed(
+                            game,
+                            `🤝 **İKİ TARAF DA BLACKJACK YAPTI (PUSH)!**\nPuanlar eşit (21 - 21). Bahsiniz (**${miktar.toLocaleString('tr-TR')} Papel**) iade edildi.\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            true,
+                            0x95A5A6
+                        );
+                        return interaction.editReply({ embeds: [embed], components: [] });
+                    } else {
+                        const totalWin = Math.floor(miktar * 2.5);
+                        uData.papel += totalWin;
+                        saveDB(db);
+                        const embed = buildBlackjackEmbed(
+                            game,
+                            `👑 **BLACKJACK! DOĞAL 21 İLE KAZANDINIZ!**\nİlk dağıtımda 21 yakaladınız (3:2 oranla kazanç)!\n💵 Net Kazanç: **+${(totalWin - miktar).toLocaleString('tr-TR')} Papel**\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            true,
+                            0xF1C40F
+                        );
+                        return interaction.editReply({ embeds: [embed], components: [] });
+                    }
+                }
+
+                const canDouble = uData.papel >= miktar;
+                const embed = buildBlackjackEmbed(game, '👉 **Sıra sizde!** Kart çekmek, durmak veya ikiye katlamak için aşağıdaki butonları kullanın.');
+                const components = buildBlackjackButtons(canDouble);
+
+                const replyMsg = await interaction.editReply({ embeds: [embed], components });
+                game.message = replyMsg;
+                game.messageId = replyMsg.id;
+
+                game.timeout = setTimeout(async () => {
+                    if (!activeBlackjackGames.has(game.userId)) return;
+                    activeBlackjackGames.delete(game.userId);
+                    const currentDb = getDB();
+                    const cData = currentDb[game.guildId]?.users[game.userId];
+                    if (!cData) return;
+                    const r = resolveBlackjackDealer(game, currentDb, game.guildId, cData);
+                    r.embed.setDescription((r.embed.data.description || '') + '\n\n*(⏱️ 60 saniye işlem yapılmadığı için otomatik olarak "Kal" seçildi)*');
+                    if (game.message) await game.message.edit({ embeds: [r.embed], components: [] }).catch(() => { });
+                }, 60000);
+
+                activeBlackjackGames.set(interaction.user.id, game);
+                return;
+            }
+
             if (commandName === 'papel-ver') {
                 if (!isAdmin) return interaction.editReply({ content: 'Bu komutu sadece Sunucu Yöneticileri kullanabilir.' });
                 const targetUser = interaction.options.getUser('kullanici');
@@ -4794,6 +5044,97 @@ client.on('interactionCreate', async interaction => {
         // ------------------------------------------------------------------------
         if (interaction.isButton()) {
             const customId = interaction.customId;
+
+            // --- BLACKJACK (21) BUTONLARI ---
+            if (['btn_bj_hit', 'btn_bj_stand', 'btn_bj_double'].includes(customId)) {
+                const game = activeBlackjackGames.get(interaction.user.id);
+                if (!game || (game.messageId && game.messageId !== interaction.message.id)) {
+                    return safeReply(interaction, { content: '❌ Bu oyun oturumu sona ermiş veya size ait değil.', ephemeral: true });
+                }
+
+                if (game.isProcessing) return;
+                game.isProcessing = true;
+
+                ensureGuildDB(db, guildId);
+                const uData = db[guildId].users[interaction.user.id];
+
+                if (customId === 'btn_bj_hit') {
+                    if (game.timeout) clearTimeout(game.timeout);
+                    game.playerCards.push(game.deck.pop());
+                    const pTotal = calculateHand(game.playerCards);
+
+                    if (pTotal > 21) {
+                        activeBlackjackGames.delete(interaction.user.id);
+                        saveDB(db);
+                        const embed = buildBlackjackEmbed(
+                            game,
+                            `💥 **BATTINIZ! (BUST)**\nEliniz 21'i aştı (${pTotal})!\n💸 Kayıp: **-${game.bet.toLocaleString('tr-TR')} Papel**\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            true,
+                            0xED4245
+                        );
+                        return interaction.update({ embeds: [embed], components: [] });
+                    }
+
+                    if (pTotal === 21) {
+                        activeBlackjackGames.delete(interaction.user.id);
+                        const result = resolveBlackjackDealer(game, db, guildId, uData);
+                        return interaction.update({ embeds: [result.embed], components: [] });
+                    }
+
+                    game.isProcessing = false;
+                    game.timeout = setTimeout(async () => {
+                        if (!activeBlackjackGames.has(game.userId)) return;
+                        activeBlackjackGames.delete(game.userId);
+                        const currentDb = getDB();
+                        const cData = currentDb[game.guildId]?.users[game.userId];
+                        if (!cData) return;
+                        const r = resolveBlackjackDealer(game, currentDb, game.guildId, cData);
+                        r.embed.setDescription((r.embed.data.description || '') + '\n\n*(⏱️ 60 saniye işlem yapılmadığı için otomatik olarak "Kal" seçildi)*');
+                        if (game.message) await game.message.edit({ embeds: [r.embed], components: [] }).catch(() => { });
+                    }, 60000);
+
+                    const embed = buildBlackjackEmbed(game, '👉 **Sıra sizde!** Kart çekmeye devam edebilir veya **Kal** diyebilirsiniz.');
+                    return interaction.update({ embeds: [embed], components: buildBlackjackButtons(false) });
+                }
+
+                if (customId === 'btn_bj_double') {
+                    if (game.timeout) clearTimeout(game.timeout);
+                    if (uData.papel < game.bet) {
+                        game.isProcessing = false;
+                        return safeReply(interaction, { content: `❌ İkiye katlamak için yeterli bakiyeniz yok! Gereken: **${game.bet.toLocaleString('tr-TR')} Papel**, Bakiyeniz: **${uData.papel.toLocaleString('tr-TR')} Papel**`, ephemeral: true });
+                    }
+
+                    uData.papel -= game.bet;
+                    game.bet *= 2;
+                    saveDB(db);
+
+                    game.playerCards.push(game.deck.pop());
+                    const pTotal = calculateHand(game.playerCards);
+
+                    activeBlackjackGames.delete(interaction.user.id);
+
+                    if (pTotal > 21) {
+                        saveDB(db);
+                        const embed = buildBlackjackEmbed(
+                            game,
+                            `💥 **BATTINIZ! (BUST)**\nİkiye katladınız ve çektiğiniz kartla eliniz 21'i aştı (${pTotal})!\n💸 Kayıp: **-${game.bet.toLocaleString('tr-TR')} Papel**\n💰 Güncel Bakiye: **${uData.papel.toLocaleString('tr-TR')} Papel**`,
+                            true,
+                            0xED4245
+                        );
+                        return interaction.update({ embeds: [embed], components: [] });
+                    }
+
+                    const result = resolveBlackjackDealer(game, db, guildId, uData);
+                    return interaction.update({ embeds: [result.embed], components: [] });
+                }
+
+                if (customId === 'btn_bj_stand') {
+                    if (game.timeout) clearTimeout(game.timeout);
+                    activeBlackjackGames.delete(interaction.user.id);
+                    const result = resolveBlackjackDealer(game, db, guildId, uData);
+                    return interaction.update({ embeds: [result.embed], components: [] });
+                }
+            }
 
             // --- GEÇİCİ SES ODASI OLUŞTURMA BUTONU ---
             if (customId === 'btn_temp_vc_create') {
