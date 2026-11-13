@@ -1839,6 +1839,7 @@ async function endGiveaway(guild, giveawayId, isReroll = false) {
     let autoDeliverNote = '';
     let dmExplain = '';
     const papelMatch = gw.prize.match(/(\d[\d\.\,]*)\s*papel/i);
+    const xpMatch = gw.prize.match(/(\d[\d\.\,]*)\s*(xp|exp|deneyim)/i);
     let matchingRole = null;
 
     if (papelMatch) {
@@ -1852,6 +1853,30 @@ async function endGiveaway(guild, giveawayId, isReroll = false) {
             saveDB(db);
             autoDeliverNote = `\n💰 **Otomatik Teslim:** Kazananların Papel cüzdanına **+${papelAmount.toLocaleString('tr-TR')} Papel** aktarıldı!`;
             dmExplain = `Cüzdanınıza **+${papelAmount.toLocaleString('tr-TR')} Papel** otomatik olarak aktarılmıştır. /profil komutundan bakiyenizi görebilirsiniz.`;
+        }
+    } else if (xpMatch) {
+        const rawNum = xpMatch[1].replace(/\./g, '').replace(/,/g, '');
+        const xpAmount = parseInt(rawNum, 10);
+        if (xpAmount > 0) {
+            for (const wId of winners) {
+                if (!guildDb.users[wId]) guildDb.users[wId] = { jailCount: 0, minorJailCount: 0, sicilli: false, kufurUyari: 0, spamWarn: 0, xp: 0, level: 0, papel: 0 };
+                const uData = guildDb.users[wId];
+                uData.xp = (uData.xp || 0) + xpAmount;
+                const newLvl = calculateLevel(uData.xp);
+                if (newLvl > (uData.level || 0)) {
+                    uData.level = newLvl;
+                    const roleId = guildDb.levelRoles?.[String(newLvl)];
+                    if (roleId) {
+                        try {
+                            const member = guild.members.cache.get(wId) || await guild.members.fetch(wId).catch(() => null);
+                            if (member) await member.roles.add(roleId).catch(() => { });
+                        } catch (e) { }
+                    }
+                }
+            }
+            saveDB(db);
+            autoDeliverNote = `\n⚡ **Otomatik Teslim:** Kazananların hesabına **+${xpAmount.toLocaleString('tr-TR')} XP** otomatik olarak eklendi!`;
+            dmExplain = `Hesabınıza **+${xpAmount.toLocaleString('tr-TR')} XP** otomatik olarak tanımlanmıştır. /profil veya /rank komutundan güncel seviyenizi görebilirsiniz.`;
         }
     } else {
         // 2. Otomatik Rol Ödülü Kontrolü (Ödül sunucudaki bir role aitse otomatik rol verilir)
@@ -5027,7 +5052,7 @@ client.on('interactionCreate', async interaction => {
                 const prizeInput = new TextInputBuilder()
                     .setCustomId('gw_prize')
                     .setLabel('1. Çekiliş Ödülü')
-                    .setPlaceholder('Örn: 50.000 Papel, VIP Rolü veya Discord Nitro')
+                    .setPlaceholder('Örn: 50.000 Papel, 10.000 XP, VIP Rolü veya Discord Nitro')
                     .setStyle(TextInputStyle.Short)
                     .setMaxLength(100)
                     .setRequired(true);
