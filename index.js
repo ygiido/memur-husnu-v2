@@ -3481,14 +3481,12 @@ client.once('ready', async () => {
         addLiveLog(`⚠️ [KOMUT KAYIT UYARISI]: ${e.message}`);
     }
 
-    // Komutların Discord'da 1 saat beklemeden anında (0 saniye) görünmesi için sunuculara da doğrudan kaydet:
+    // Çift komut oluşmaması için sunucuya özel komutları temizle (Yalnızca global komutlar kalır)
     for (const guild of client.guilds.cache.values()) {
         try {
-            await guild.commands.set(commands);
-            addLiveLog(`✅ [KOMUT]: ${guild.name} sunucusuna anlık slash komutları tanımlandı.`);
-        } catch (err) {
-            addLiveLog(`⚠️ [KOMUT UYARI - ${guild.name}]: ${err.message}`);
-        }
+            await guild.commands.set([]);
+            addLiveLog(`✅ [KOMUT]: ${guild.name} sunucusundaki yerel kopyalar temizlendi (çift komut önlendi).`);
+        } catch (err) { }
     }
 });
 
